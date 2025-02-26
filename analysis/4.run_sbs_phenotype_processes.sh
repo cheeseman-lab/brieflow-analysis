@@ -1,7 +1,8 @@
 #!/bin/bash
 
-# Run the SBS/phenotype process rules
+# Run the SBS/phenotype rules
 snakemake --use-conda --cores all \
     --snakefile "../workflow/Snakefile" \
     --configfile "config/config.yml" \
-    --until all_sbs_process all_phenotype_process
+    --rerun-triggers mtime \
+    --until all_sbs all_phenotype
