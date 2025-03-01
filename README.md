@@ -39,13 +39,11 @@ This repository is designed to work with Brieflow to analyze optical pooled scre
 ### Analysis Steps
 
 Follow the instructions below to configure parameters and run modules.
-All of these steps are done in the analysis folder, but parameters that need to be filled out are blank.
-These steps are equivalent to what is presented for the example analysis in [Brieflow](https://github.com/cheeseman-lab/brieflow).
-Use the following command to enter this folder: `cd analysis/`. 
+All of these steps are done in the example analysis folder.
+Use the following command to enter this folder:
+`cd analysis/`.
 
-Deposit the data from your screen into a subfolder in `analysis/`
-
-#### Step 0: Configure preprocess params
+#### Step 0: Configure preprocess parameters
 
 Follow the steps in [0.configure_preprocess_params.ipynb](analysis/0.configure_preprocess_params.ipynb) to configure preprocess params.
 
@@ -65,25 +63,72 @@ sbatch 1.run_preprocessing_slurm.sh
 It is possible to test only SBS/phenotype preprocessing in this notebook.
 See notebook instructions for more details.
 
-#### Step 2: Configure SBS process params
+#### Step 2: Configure SBS parameters
 
-Follow the steps in [2.configure_sbs_process_params.ipynb](analysis/2.configure_sbs_process_params.ipynb) to configure SBS process params.
+Follow the steps in [2.configure_sbs_params.ipynb](analysis/2.configure_sbs_params.ipynb) to configure SBS module parameters.
 
+#### Step 3: Configure phenotype parameters
 
-#### Step 3: Configure phenotype process params
+Follow the steps in [3.configure_phenotype_params.ipynb](analysis/3.configure_phenotype_params.ipynb) to configure phenotype module parameters.
 
-Follow the steps in  [3.configure_phenotype_process_params.ipynb](analysis/3.configure_phenotype_process_params.ipynb) to configure phenotype process params.
-
-#### Step 4: Run SBS/phenotype process module
+#### Step 4: Run SBS/phenotype modules
 
 **Local**:
 ```sh
 conda activate brieflow_workflows
-sh 4.run_sbs_phenotype_processes.sh
+sh 4.run_sbs_phenotype.sh
 ```
 **Slurm**:
 ```sh
-sbatch 4.run_sbs_phenotype_processes_slurm.sh
+sbatch 4.run_sbs_phenotype_slurm.sh
+```
+
+#### Step 5: Configure merge process params
+
+Follow the steps in [5.configure_merge_params.ipynb](analysis/5.configure_merge_params.ipynb) to configure merge process params.
+
+#### Step 6: Run merge process
+
+**Local**:
+```sh
+conda activate brieflow_workflows
+sh 6.run_merge.sh
+```
+**Slurm**:
+```sh
+sbatch 6.run_merge_slurm.sh
+```
+
+#### Step 7: Configure aggregate process params
+
+Follow the steps in [7.configure_aggregate_params.ipynb](analysis/7.configure_aggregate_params.ipynb) to configure aggregate process params.
+
+#### Step 8: Run aggregate process
+
+**Local**:
+```sh
+conda activate brieflow_workflows
+sh 8.run_aggregate.sh
+```
+**Slurm**:
+```sh
+sbatch 8.run_aggregate_slurm.sh
+```
+
+#### Step 9: Configure cluster process params
+
+Follow the steps in [9.configure_cluster_params.ipynb](analysis/9.configure_cluster_params.ipynb) to configure cluster process params.
+
+#### Step 10: Run cluster process
+
+**Local**:
+```sh
+conda activate brieflow_workflows
+sh 10.run_cluster.sh
+```
+**Slurm**:
+```sh
+sbatch 10.run_cluster_slurm.sh
 ```
 
 ***Note**: Use `brieflow_configuration` Conda environment for each configuration notebook.
@@ -92,7 +137,7 @@ sbatch 4.run_sbs_phenotype_processes_slurm.sh
 It is possible to restrict the SBS/phenotype processing with the following:
 1) If either of the sample dataframes defined in [0.configure_preprocess_params.ipynb](analysis/0.configure_preprocess_params.ipynb) are empty then no samples will be processed.
 See the notebook for more details.
-2) By varying the tags in the `4.run_sbs_phenotype_processing` sh files (`--until all_sbs_process` or `--until all_phenotype_process`), the analysis will only run only the analysis of interest.
+2) By varying the tags in the `4.run_sbs_phenotype` sh files (`--until all_sbs` or `--until all_phenotype`), the analysis will only run only the analysis of interest.
 
 ### Run Entire Analysis
 
