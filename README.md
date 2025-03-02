@@ -39,13 +39,15 @@ This repository is designed to work with Brieflow to analyze optical pooled scre
 ### Analysis Steps
 
 Follow the instructions below to configure parameters and run modules.
-All of these steps are done in the example analysis folder.
+All of these steps are done in the example analysis.
 Use the following command to enter this folder:
 `cd analysis/`.
 
 #### Step 0: Configure preprocess parameters
 
 Follow the steps in [0.configure_preprocess_params.ipynb](analysis/0.configure_preprocess_params.ipynb) to configure preprocess params.
+
+**Note:** This step determines where ND2 data is loaded from (can be from anywhere) and where intermediate/output data is saved (can also be anywhere).
 
 #### Step 1: Run preprocessing module
 
