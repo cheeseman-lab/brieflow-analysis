@@ -17,7 +17,7 @@ conda activate brieflow_workflows
 # Run the aggregate rules
 snakemake --executor slurm --use-conda \
     --workflow-profile "slurm/" \
-    --snakefile "../workflow/Snakefile" \
+    --snakefile "../brieflow/workflow/Snakefile" \
     --configfile "config/config.yml" \
     --latency-wait 60 \
     --rerun-triggers mtime \

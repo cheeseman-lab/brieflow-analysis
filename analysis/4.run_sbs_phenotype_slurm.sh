@@ -18,7 +18,7 @@ conda activate brieflow_workflows
 # Run the SBS/phenotype rules
 snakemake --executor slurm --use-conda \
     --workflow-profile "slurm/" \
-    --snakefile "../workflow/Snakefile" \
+    --snakefile "../brieflow/workflow/Snakefile" \
     --configfile "config/config.yml" \
     --latency-wait 30 \
     --rerun-triggers mtime \
