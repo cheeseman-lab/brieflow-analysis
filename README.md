@@ -13,6 +13,9 @@ This repository is designed to work with Brieflow to analyze optical pooled scre
    - Create a new branch for any core code modifications
    - Submit improvements back to Brieflow-main via pull requests
 
+**Note:** We use Brieflow as a git submodule in this repository.
+Please see the [Git Submodules basic explanation](https://gist.github.com/gitaarik/8735255) for information on how to best install, use, and update this submodule.
+
 2. This Repository (Analysis):
    - Create a new repo wih the "Use this template" button for each new screen analysis
 ![alt text](image.png)
