@@ -8,6 +8,13 @@ Template repository for storing configurations and outputs when analyzing optica
 This repository is designed to work with Brieflow to analyze optical pooled screens. The recommended workflow is:
 
 1. Brieflow (Core Package):
+   - Clone the Brieflow package into this repo using the following git submodule commands:
+   ```sh
+   # init git submodule
+   git submodule init
+   # clone brieflow
+   git submodule update 
+   ```
    - Set up Brieflow following [installation instructions](https://github.com/cheeseman-lab/brieflow#set-up-workflowconfiguration-conda-environments).
    We use the HPC integration for Slurm as detailed in the installation instructions.
    - Create a new branch for any core code modifications
@@ -18,7 +25,7 @@ Please see the [Git Submodules basic explanation](https://gist.github.com/gitaar
 
 2. This Repository (Analysis):
    - Create a new repo wih the "Use this template" button for each new screen analysis
-![alt text](image.png)
+![alt text](images/image.png)
    - Follow instructions below to run analysis. 
    `analysis/` contains configuration parameters and analysis outputs.
    Results are organized by analysis module (preprocess, sbs_process, phenotype_process)
