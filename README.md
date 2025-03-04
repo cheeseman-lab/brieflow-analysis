@@ -13,8 +13,9 @@ Follow these steps to get set up for a screen analysis!
 Brieflow-analysis is a template for each screen analysis.
 Create a new respository for a screen to get started.
 
-1) Create a new screen repository wih the "Use this template" button for each new screen analysis
-![alt text](images/image.png)
+1) Create a new screen repository wih the "Use this template" button for each new screen analysis.
+
+![use template](images/image.png)
 
 2) *Optional*: Add template brieflow-analysis template as an upstream reference in screen repository:
 `git remote add template https://github.com/cheeseman-lab/brieflow-analysis`
