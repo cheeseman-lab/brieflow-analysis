@@ -69,8 +69,14 @@ Follow the full instructions below to run an analysis.
 
 Follow the instructions below to configure parameters and run modules.
 All of these steps are done in the example analysis.
-Use the following command to enter this folder:
-`cd analysis/`.
+Use the following commands to enter this folder and activate the conda env:
+
+```sh
+# enter analysis directory
+cd analysis/
+# activate brieflow_main_env conda environment
+conda activate brieflow_main_env
+```
 
 ***Note**: Use `brieflow_main_env` Conda environment for each configuration notebook.
 
@@ -85,7 +91,6 @@ By default, results are output to `analysis/analysis_root`.
 
 **Local**:
 ```sh
-conda activate brieflow_main_env
 sh 1.run_preprocessing.sh
 ```
 **Slurm**:
@@ -93,7 +98,6 @@ sh 1.run_preprocessing.sh
 Change `NUM_PLATES` to the number of plates you are processing (to process each plate separately).
 
 ```sh
-conda activate brieflow_main_env
 sbatch 1.run_preprocessing_slurm.sh
 ```
 
@@ -113,7 +117,6 @@ Follow the steps in [3.configure_phenotype_params.ipynb](analysis/3.configure_ph
 
 **Local**:
 ```sh
-conda activate brieflow_main_env
 sh 4.run_sbs_phenotype.sh
 ```
 **Slurm**:
@@ -121,7 +124,6 @@ sh 4.run_sbs_phenotype.sh
 Change `NUM_PLATES` to the number of plates you are processing (to process each plate separately).
 
 ```sh
-conda activate brieflow_main_env
 sbatch 4.run_sbs_phenotype_slurm.sh
 ```
 
@@ -133,12 +135,10 @@ Follow the steps in [5.configure_merge_params.ipynb](analysis/5.configure_merge_
 
 **Local**:
 ```sh
-conda activate brieflow_main_env
 sh 6.run_merge.sh
 ```
 **Slurm**:
 ```sh
-conda activate brieflow_main_env
 sbatch 6.run_merge_slurm.sh
 ```
 
@@ -150,12 +150,10 @@ Follow the steps in [7.configure_aggregate_params.ipynb](analysis/7.configure_ag
 
 **Local**:
 ```sh
-conda activate brieflow_main_env
 sh 8.run_aggregate.sh
 ```
 **Slurm**:
 ```sh
-conda activate brieflow_main_env
 sbatch 8.run_aggregate_slurm.sh
 ```
 
@@ -167,12 +165,10 @@ Follow the steps in [9.configure_cluster_params.ipynb](analysis/9.configure_clus
 
 **Local**:
 ```sh
-conda activate brieflow_main_env
 sh 10.run_cluster.sh
 ```
 **Slurm**:
 ```sh
-conda activate brieflow_main_env
 sbatch 10.run_cluster_slurm.sh
 ```
 
@@ -187,7 +183,6 @@ See the notebook for more details.
 Run the following script to generate a rulegraph of Brieflow:
 
 ```sh
-conda activate brieflow_main_env
 sh generate_rulegraph.sh
 ```
 
