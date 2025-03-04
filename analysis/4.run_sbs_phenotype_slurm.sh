@@ -20,7 +20,7 @@ for PLATE in $(seq 1 $NUM_PLATES); do
     # Run Snakemake with plate filter for this plate
     snakemake --executor slurm --use-conda \
         --workflow-profile "slurm/" \
-        --snakefile "/lab/barcheese01/mdiberna/brieflow/workflow/Snakefile_well_plate_level" \
+        --snakefile "../brieflow/workflow/Snakefile" \
         --configfile "config/config.yml" \
         --latency-wait 60 \
         --rerun-triggers mtime \
