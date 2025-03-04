@@ -5,32 +5,42 @@ Template repository for storing configurations and outputs when analyzing optica
 
 ## Overview
 
-This repository is designed to work with Brieflow to analyze optical pooled screens. The recommended workflow is:
+This repository is designed to work with Brieflow to analyze optical pooled screens.
+Follow these steps to get set up for a screen analysis!
 
-1. Brieflow (Core Package):
-   - Clone the Brieflow package into this repo using the following git submodule commands:
-   ```sh
-   # init git submodule
-   git submodule init
-   # clone brieflow
-   git submodule update 
-   ```
-   - Set up Brieflow following [installation instructions](https://github.com/cheeseman-lab/brieflow#set-up-workflowconfiguration-conda-environments).
-   We use the HPC integration for Slurm as detailed in the installation instructions.
-   - Create a new branch for any core code modifications
-   - Submit improvements back to Brieflow-main via pull requests
+### 1. Screen Analysis Repository Setup
 
+Brieflow-analysis is a template for each screen analysis.
+Create a new respository for a screen to get started.
+
+1) Create a new screen repository wih the "Use this template" button for each new screen analysis
+![alt text](images/image.png)
+2) *Optional*: Add template brieflow-analysis template as an upstream reference in screen repository:
+`git remote add template https://github.com/cheeseman-lab/brieflow-analysis`
+
+### 2. Brielfow Setup
+
+We use [Brieflow](https://github.com/cheeseman-lab/brieflow) to process data on a very large scale from each screen.
 **Note:** We use Brieflow as a git submodule in this repository.
 Please see the [Git Submodules basic explanation](https://gist.github.com/gitaarik/8735255) for information on how to best install, use, and update this submodule.
 
-2. This Repository (Analysis):
-   - Create a new screen repository wih the "Use this template" button for each new screen analysis
-![alt text](images/image.png)
-   - Follow instructions below to run analysis. 
-   `analysis/` contains configuration parameters and analysis outputs.
-   Results are organized by analysis module (preprocess, sbs_process, phenotype_process)
-   - *Optional*: Add template brieflow-analysis template as an upstream reference in screen repository:
-   `git remote add template https://github.com/cheeseman-lab/brieflow-analysis`
+1) Clone the Brieflow package into this repo using the following git submodule commands:
+```sh
+# init git submodule
+git submodule init
+# clone brieflow
+git submodule update 
+```
+2) Set up Brieflow following [installation instructions](https://github.com/cheeseman-lab/brieflow#set-up-workflowconfiguration-conda-environments).
+We use the HPC integration for Slurm as detailed in the installation instructions.
+3) *Optional*: Track changes to computational processing in a new branch on your fork.
+Contribute these changes to the main version of Brieflow with a PR as described in the Brieflow [contribution notes](https://github.com/cheeseman-lab/brieflow?tab=readme-ov-file#contribution-notes).
+
+### 3. Start Analysis
+
+Follow the full instructions below to run an analysis.
+`analysis/` contains configuration parameters and analysis outputs.
+Results are organized by analysis module (preprocess, sbs_process, phenotype_process)
 
 
 ## Analysis Steps
