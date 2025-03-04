@@ -1,9 +1,9 @@
 # Brieflow Analysis Template
 
-Template repository for storing configurations and outputs when analyzing optical pooled screens using [Brieflow](https://github.com/cheeseman-lab/brieflow).
+Template repository for storing processing optical pooled screen data with [Brieflow](https://github.com/cheeseman-lab/brieflow).
 
 
-## Overview
+## Set Up
 
 This repository is designed to work with Brieflow to analyze optical pooled screens.
 Follow these steps to get set up for a screen analysis!
@@ -20,7 +20,7 @@ Create a new respository for a screen to get started.
 2) *Optional*: Add template brieflow-analysis template as an upstream reference in screen repository:
 `git remote add template https://github.com/cheeseman-lab/brieflow-analysis`
 
-### 2. Brielfow Setup
+### 2. Brieflow Setup
 
 We use [Brieflow](https://github.com/cheeseman-lab/brieflow) to process data on a very large scale from each screen.
 **Note:** We use Brieflow as a git submodule in this repository.
@@ -36,7 +36,7 @@ git submodule update
 ```
 
 2) Set up Brieflow following the [setup instructions](https://github.com/cheeseman-lab/brieflow#brieflow-setup).
-To set up the Brieflow Conda environment:
+To set up the Brieflow Conda environment (~20 min):
 
 ```sh
 # enter brieflow directory
@@ -59,9 +59,10 @@ Contribute these changes to the main version of Brieflow with a PR as described 
 
 ### 3. Start Analysis
 
-Follow the full instructions below to run an analysis.
 `analysis/` contains configuration notebooks used to configure processes and slurm scripts used to run full modules.
 By default, results are output to `analysis/analysis_root` and organized by analysis module (preprocess, sbs, phenotype, etc).
+
+Follow the full instructions below to run an analysis.
 
 
 ## Analysis Steps
