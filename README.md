@@ -56,6 +56,7 @@ sh 1.run_preprocessing.sh
 Change `NUM_PLATES` to the number of plates you are processing (to process each plate separately).
 
 ```sh
+conda activate brieflow_workflows
 sbatch 1.run_preprocessing_slurm.sh
 ```
 
@@ -83,6 +84,7 @@ sh 4.run_sbs_phenotype.sh
 Change `NUM_PLATES` to the number of plates you are processing (to process each plate separately).
 
 ```sh
+conda activate brieflow_workflows
 sbatch 4.run_sbs_phenotype_slurm.sh
 ```
 
@@ -99,6 +101,7 @@ sh 6.run_merge.sh
 ```
 **Slurm**:
 ```sh
+conda activate brieflow_workflows
 sbatch 6.run_merge_slurm.sh
 ```
 
@@ -115,6 +118,7 @@ sh 8.run_aggregate.sh
 ```
 **Slurm**:
 ```sh
+conda activate brieflow_workflows
 sbatch 8.run_aggregate_slurm.sh
 ```
 
@@ -131,6 +135,7 @@ sh 10.run_cluster.sh
 ```
 **Slurm**:
 ```sh
+conda activate brieflow_workflows
 sbatch 10.run_cluster_slurm.sh
 ```
 
@@ -142,18 +147,13 @@ It is possible to restrict the SBS/phenotype processing with the following:
 See the notebook for more details.
 2) By varying the tags in the `4.run_sbs_phenotype` sh files (`--until all_sbs` or `--until all_phenotype`), the analysis will only run only the analysis of interest.
 
-### Run Entire Analysis
+## Generate Rulegraph
 
-If all parameter configurations are known for the entire Brieflow pipeline, it is possible to run the entire pipeline with the following:
+Run the following script to generate a rulegraph of Brieflow:
 
-**Local**:
 ```sh
 conda activate brieflow_workflows
-sh run_entire_analysis.sh
-```
-**Slurm**:
-```sh
-sbatch run_entire_analysis_slurm.sh
+sh generate_rulegraph.sh
 ```
 
 ## Contributing

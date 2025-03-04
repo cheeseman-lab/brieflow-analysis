@@ -1,11 +1,4 @@
 #!/bin/bash
-#SBATCH --job-name=cluster              # Job name
-#SBATCH --partition=20                  # Partition name
-#SBATCH --ntasks=1                      # Run a single task
-#SBATCH --cpus-per-task=1              # Single CPU for the controller job
-#SBATCH --mem=10G                       # Memory for the controller job
-#SBATCH --time=72:00:00                # Time limit (hrs:min:sec)
-#SBATCH --output=slurm/slurm_output/main/cluster-%j.out  # Standard output log
 
 # Start timing
 start_time=$(date +%s)
