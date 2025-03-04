@@ -52,6 +52,9 @@ conda activate brieflow_workflows
 sh 1.run_preprocessing.sh
 ```
 **Slurm**:
+
+Change `NUM_PLATES` to the number of plates you are processing (to process each plate separately).
+
 ```sh
 sbatch 1.run_preprocessing_slurm.sh
 ```
@@ -76,6 +79,9 @@ conda activate brieflow_workflows
 sh 4.run_sbs_phenotype.sh
 ```
 **Slurm**:
+
+Change `NUM_PLATES` to the number of plates you are processing (to process each plate separately).
+
 ```sh
 sbatch 4.run_sbs_phenotype_slurm.sh
 ```
