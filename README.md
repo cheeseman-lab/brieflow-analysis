@@ -53,6 +53,7 @@ conda config --set channel_priority strict
 Simply change the name of the `brieflow_main_env` Conda environment and track your added packages in [brieflow/brieflow_main_env.yml](brieflow/brieflow_main_env.yml).
 
 We use the HPC integration for Slurm as detailed in the setup instructions.
+To use the Slurm integration for Brieflow configure the Slurm resources in [analysis/slurm/config.yaml](analysis/slurm/config.yaml).
 
 3) *Optional*: Track changes to computational processing in a new branch on your fork.
 Contribute these changes to the main version of Brieflow with a PR as described in the Brieflow [contribution notes](https://github.com/cheeseman-lab/brieflow?tab=readme-ov-file#contribution-notes).
@@ -95,10 +96,13 @@ sh 1.run_preprocessing.sh
 ```
 **Slurm**:
 
-Change `NUM_PLATES` to the number of plates you are processing (to process each plate separately).
+Change `NUM_PLATES` in [1.run_preprocessing_slurm.sh](1.run_preprocessing_slurm.sh) to the number of plates you are processing (to process each plate separately).
 
 ```sh
-sbatch 1.run_preprocessing_slurm.sh
+# start a tmux session: 
+tmux new-session -s preprocessing
+# in the tmux session:
+sh 1.run_preprocessing_slurm.sh
 ```
 
 ***Note**: For testing purposes, users may only have generated sbs or phenotype images.
@@ -121,10 +125,13 @@ sh 4.run_sbs_phenotype.sh
 ```
 **Slurm**:
 
-Change `NUM_PLATES` to the number of plates you are processing (to process each plate separately).
+Change `NUM_PLATES` [4.run_sbs_phenotype_slurm.sh](4.run_sbs_phenotype_slurm.sh) to the number of plates you are processing (to process each plate separately).
 
 ```sh
-sbatch 4.run_sbs_phenotype_slurm.sh
+# start a tmux session: 
+tmux new-session -s sbs_phenotype
+# in the tmux session:
+sh 4.run_sbs_phenotype_slurm.sh
 ```
 
 ### Step 5: Configure merge process params
@@ -139,7 +146,10 @@ sh 6.run_merge.sh
 ```
 **Slurm**:
 ```sh
-sbatch 6.run_merge_slurm.sh
+# start a tmux session: 
+tmux new-session -s merge
+# in the tmux session:
+sh 6.run_merge_slurm.sh
 ```
 
 ### Step 7: Configure aggregate process params
@@ -154,7 +164,10 @@ sh 8.run_aggregate.sh
 ```
 **Slurm**:
 ```sh
-sbatch 8.run_aggregate_slurm.sh
+# start a tmux session: 
+tmux new-session -s aggregate
+# in the tmux session:
+sh 8.run_aggregate_slurm.sh
 ```
 
 ### Step 9: Configure cluster process params
@@ -169,7 +182,10 @@ sh 10.run_cluster.sh
 ```
 **Slurm**:
 ```sh
-sbatch 10.run_cluster_slurm.sh
+# start a tmux session: 
+tmux new-session -s cluster
+# in the tmux session:
+sh 10.run_cluster_slurm.sh
 ```
 
 ***Note**: Many users will want to only run SBS or phenotype processing, independently.
