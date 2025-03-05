@@ -15,10 +15,13 @@ Create a new respository for a screen to get started.
 
 1) Create a new screen repository wih the "Use this template" button for each new screen analysis.
 
-![use template](images/image.png)
+![use template](images/template_button.png)
 
 2) *Optional*: Add template brieflow-analysis template as an upstream reference in screen repository:
 `git remote add template https://github.com/cheeseman-lab/brieflow-analysis`
+
+
+See the GutHub documentation for [using a template](https://docs.github.com/en/repositories/creating-and-managing-repositories/creating-a-repository-from-a-template) for more information.
 
 ### 2. Brieflow Setup
 
