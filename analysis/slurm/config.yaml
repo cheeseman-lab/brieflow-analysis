@@ -115,8 +115,6 @@ set-resources:
         mem_mb: 10000
     eval_merge:
         mem_mb: 10000
-    clean_merge:
-        mem_mb: 10000
     deduplicate_merge:
         mem_mb: 10000
         cpus_per_task: 4
