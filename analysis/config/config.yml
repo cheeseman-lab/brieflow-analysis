@@ -11,24 +11,26 @@
 
 # Parameters:
 aggregate:
-  cat_columns:
-  - gene_symbol_0
-  - sgRNA_0
-  control_prefix: nontargeting
-  feature_start: nucleus_DAPI_mean
-  filter_single_gene: false
-  group_columns:
+  agg_method: mean
+  batch_cols:
   - plate
   - well
-  index_columns:
-  - tile
-  - cell_0
-  population_feature: gene_symbol_0
-  threshold_conditions:
-    nucleus_DAPI_median:
-    - 7
-    - greater
-  transformations_fp: config/transformations.tsv
+  cell_classes:
+  - all
+  - interphase
+  - mitotic
+  classifier_path: config/naive_mitotic_classifier.pkl
+  collapse_cols:
+  - sgRNA_0
+  - gene_symbol_0
+  control_key: nontargeting
+  drop_cols_threshold: 0.1
+  filter_single_pert: false
+  first_feature: nucleus_DAPI_int
+  montage_channel: DAPI
+  pc_count: 428
+  perturbation_multi_col: mapped_single_gene
+  perturbation_name_col: gene_symbol_0
 all:
   root_fp: analysis_root/
 cluster:
@@ -72,12 +74,12 @@ merge:
     - 270
   - - 1599
     - 376
+  merge_combo_fp: config/merge_combo.tsv
   ph_metadata_channel: null
   sbs_metadata_channel: null
   sbs_metadata_cycle: 1
   score: 0.1
   threshold: 2
-  merge_combo_fp: config/merge_combo.tsv
 phenotype:
   align: false
   cell_diameter: 53.05782348918437
