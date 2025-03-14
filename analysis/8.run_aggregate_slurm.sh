@@ -1,7 +1,12 @@
 #!/bin/bash
 
-# Start timing
-start_time=$(date +%s)
+# Log all output to a log file (stdout and stderr)
+mkdir -p slurm/slurm_output/main
+start_time_formatted=$(date +%Y%m%d_%H%M%S)
+log_file="slurm/slurm_output/test/merge-${start_time_formatted}.log"
+exec > >(tee -a "$log_file") 2>&1
+
+echo "Started at: $(date)"
 
 # Activate conda environment (adjust path as needed)
 source ~/.bashrc
@@ -16,7 +21,4 @@ snakemake --executor slurm --use-conda \
     --rerun-triggers mtime \
     --until all_aggregate
 
-# End timing and calculate duration
-end_time=$(date +%s)
-duration=$((end_time - start_time))
-echo "Total runtime: $((duration / 3600))h $(((duration % 3600) / 60))m $((duration % 60))s" >> slurm/slurm_output/main/aggregate-$SLURM_JOB_ID.out
+echo "Ended at: $(date)"
