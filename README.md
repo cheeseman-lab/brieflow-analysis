@@ -135,13 +135,15 @@ sh 4.run_sbs_phenotype.sh
 ```
 **Slurm**:
 
-Change `NUM_PLATES` [4.run_sbs_phenotype_slurm.sh](4.run_sbs_phenotype_slurm.sh) to the number of plates you are processing (to process each plate separately).
+Change `NUM_PLATES` [4a.run_sbs_slurm.sh](4a.run_sbs_slurm.sh) and [4b.run_phenotype_slurm.sh](4b.run_phenotype_slurm.sh) to the number of plates you are processing (to process each plate separately).
+These two modules can be run simultaneously or separately.
 
 ```sh
 # start a tmux session: 
 tmux new-session -s sbs_phenotype
 # in the tmux session:
-bash 4.run_sbs_phenotype_slurm.sh
+bash 4a.run_sbs_slurm.sh
+bash 4b.run_phenotype_slurm.sh
 ```
 
 ### Step 5: Configure merge process params
