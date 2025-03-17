@@ -23,6 +23,7 @@ aggregate:
   collapse_cols:
   - sgRNA_0
   - gene_symbol_0
+  contamination: 0.01
   control_key: nontargeting
   drop_cols_threshold: 0.1
   filter_single_pert: false
