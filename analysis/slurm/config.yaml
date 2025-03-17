@@ -125,6 +125,12 @@ set-resources:
     split_classes:
         mem_mb: 500000
         cpus_per_task: 4
+    align_filter_aggregate:
+        mem_mb: 500000
+        cpus_per_task: 4
+    eval_aggregate:
+        mem_mb: 500000
+        cpus_per_task: 4
 
     # cluster
     generate_dataset:
