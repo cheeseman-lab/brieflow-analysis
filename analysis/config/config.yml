@@ -26,9 +26,10 @@ aggregate:
   contamination: 0.01
   control_key: nontargeting
   drop_cols_threshold: 0.1
+  drop_rows_threshold: 0.01
   filter_single_pert: false
   first_feature: nucleus_DAPI_int
-  montage_channel: DAPI
+  impute: true
   pc_count: 428
   perturbation_multi_col: mapped_single_gene
   perturbation_name_col: gene_symbol_0
