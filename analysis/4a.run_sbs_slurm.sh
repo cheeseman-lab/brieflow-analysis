@@ -30,6 +30,7 @@ for PLATE in $(seq 1 $NUM_PLATES); do
         --configfile "config/config.yml" \
         --latency-wait 60 \
         --rerun-triggers mtime \
+        --keep-going \
         --groups align_sbs=extract_sbs_info_group \
                 apply_ic_field_sbs=extract_sbs_info_group \
                 segment_sbs=extract_sbs_info_group \

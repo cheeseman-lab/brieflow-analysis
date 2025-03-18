@@ -30,6 +30,7 @@ for PLATE in $(seq 1 $NUM_PLATES); do
         --configfile "config/config.yml" \
         --latency-wait 60 \
         --rerun-triggers mtime \
+        --keep-going \
         --until all_preprocess \
         --config plate_filter=$PLATE
     

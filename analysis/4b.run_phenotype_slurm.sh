@@ -30,6 +30,7 @@ for PLATE in $(seq 1 $NUM_PLATES); do
         --configfile "config/config.yml" \
         --latency-wait 60 \
         --rerun-triggers mtime \
+        --keep-going \
         --groups apply_ic_field_phenotype=extract_phenotype_info_group \
                 align_phenotype=extract_phenotype_info_group \
                 segment_phenotype=extract_phenotype_info_group \
