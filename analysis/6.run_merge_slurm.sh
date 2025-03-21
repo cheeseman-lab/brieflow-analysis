@@ -9,10 +9,6 @@ exec > >(tee -a "$log_file") 2>&1
 # Start timing
 start_time=$(date +%s)
 
-# Activate conda environment (adjust path as needed)
-source ~/.bashrc
-conda activate brieflow_workflows
-
 # Run the merge rules
 snakemake --executor slurm --use-conda \
     --workflow-profile "slurm/" \
@@ -20,6 +16,7 @@ snakemake --executor slurm --use-conda \
     --configfile "config/config.yml" \
     --latency-wait 60 \
     --rerun-triggers mtime \
+    --keep-going \
     --until all_merge
 
 # End timing and calculate duration
