@@ -106,17 +106,17 @@ set-resources:
 
     # merge
     fast_alignment:
-        mem_mb: 10000
+        mem_mb: 20000
         cpus_per_task: 4
     merge:
-        mem_mb: 10000
+        mem_mb: 20000
         cpus_per_task: 4
     format_merge:
-        mem_mb: 10000
+        mem_mb: 20000
     eval_merge:
-        mem_mb: 10000
+        mem_mb: 20000
     deduplicate_merge:
-        mem_mb: 10000
+        mem_mb: 20000
         cpus_per_task: 4
     final_merge:
         mem_mb: 500000

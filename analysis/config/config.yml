@@ -30,11 +30,11 @@ aggregate:
   filter_single_pert: false
   first_feature: nucleus_DAPI_int
   impute: true
-  pc_count: 428
+  pc_count: 753
   perturbation_multi_col: mapped_single_gene
   perturbation_name_col: gene_symbol_0
 all:
-  root_fp: analysis_root/
+  root_fp: /lab/cheeseman_ops/brieflow-screens/denali-analysis/analysis/analysis_root/
 cluster:
   channel_combos:
   - - DAPI
