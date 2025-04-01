@@ -129,13 +129,13 @@ set-resources:
         mem_mb: 100000
         cpus_per_task: 4
     align:
-        mem_mb: 500000
+        mem_mb: 900000
         cpus_per_task: 4
     aggregate:
-        mem_mb: 500000
+        mem_mb: 900000
         cpus_per_task: 4
     eval_aggregate:
-        mem_mb: 100000
+        mem_mb: 900000
         cpus_per_task: 4
 
     # cluster
