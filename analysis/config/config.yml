@@ -27,11 +27,10 @@ aggregate:
   control_key: nontargeting
   drop_cols_threshold: 0.1
   drop_rows_threshold: 0.01
-  filter_single_pert: false
+  filter_queries: null
   first_feature: nucleus_DAPI_int
   impute: true
   pc_count: 753
-  perturbation_multi_col: mapped_single_gene
   perturbation_name_col: gene_symbol_0
 all:
   root_fp: /lab/cheeseman_ops/brieflow-screens/denali-analysis/analysis/analysis_root/

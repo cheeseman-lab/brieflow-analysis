@@ -124,18 +124,16 @@ set-resources:
     # aggregate
     split_classes:
         mem_mb: 100000
-        cpus_per_task: 4
     filter:
         mem_mb: 100000
-        cpus_per_task: 4
     align:
         mem_mb: 980000
-        cpus_per_task: 8
+        cpus_per_task: 4
     aggregate:
         mem_mb: 980000
         cpus_per_task: 4
     eval_aggregate:
-        mem_mb: 900000
+        mem_mb: 800000
         cpus_per_task: 4
 
     # cluster
