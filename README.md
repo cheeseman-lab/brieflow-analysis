@@ -42,7 +42,7 @@ Please see the [Git Submodules basic explanation](https://gist.github.com/gitaar
 # init git submodule
 git submodule init
 # clone brieflow
-git submodule update 
+git submodule update
 ```
 
 2) Set up Brieflow following the [setup instructions](https://github.com/cheeseman-lab/brieflow#brieflow-setup).
@@ -89,7 +89,15 @@ cd analysis/
 conda activate brieflow_main_env
 ```
 
-***Note**: Use `brieflow_main_env` Conda environment for each configuration notebook.
+***Notes**: 
+
+- Use `brieflow_main_env` Conda environment for each configuration notebook.
+- How you use `brieflow` should depend on your workload.
+    - Runs that can be done with local compute can be run with the `.sh` scripts, which are set up to run all rules for a module.
+    Note that these scripts are currently set up to do a dry run with the `-n` parameter, which will need to be removed for a local run`.
+    - Runs that need HPC compute should be run with the `_slurm.sh` scripts.
+    Right now, these are set up to log run information and break the larger steps (preprocessing, sbs, phenotype) into plate-level runs.
+    The local `.sh` scripts can still be used to do a dry run preview with `-n` (already set up).
 
 ### Step 0: Configure preprocess parameters
 
@@ -104,6 +112,7 @@ By default, results are output to `analysis/analysis_root`.
 ```sh
 sh 1.run_preprocessing.sh
 ```
+
 **Slurm**:
 
 Change `NUM_PLATES` in [1.run_preprocessing_slurm.sh](1.run_preprocessing_slurm.sh) to the number of plates you are processing (to process each plate separately).
