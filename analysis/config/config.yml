@@ -16,10 +16,6 @@ aggregate:
   batch_cols:
   - plate
   - well
-  cell_classes:
-  - all
-  - interphase
-  - mitotic
   classifier_path: config/naive_mitotic_classifier.pkl
   collapse_cols:
   - sgRNA_0
