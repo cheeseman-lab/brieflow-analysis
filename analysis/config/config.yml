@@ -11,7 +11,8 @@
 
 # Parameters:
 aggregate:
-  agg_method: mean
+  agg_method: median
+  aggregate_combo_fp: config/aggregate_combo.tsv
   batch_cols:
   - plate
   - well
@@ -31,12 +32,16 @@ aggregate:
   first_feature: nucleus_DAPI_int
   impute: true
   pc_count: 753
+  perturbation_id_col: sgRNA_0
   perturbation_name_col: gene_symbol_0
 all:
   root_fp: /lab/cheeseman_ops/brieflow-screens/denali-analysis/analysis/analysis_root/
 cluster:
   corum_group_benchmark: config/benchmark_clusters/corum_group_benchmark.tsv
-  leiden_resolution: 5
+  leiden_resolutions:
+  - 2
+  - 5
+  - 10
   min_cell_cutoffs:
     all: 3
     interphase: 3
