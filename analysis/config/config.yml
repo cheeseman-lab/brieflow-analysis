@@ -11,7 +11,7 @@
 
 # Parameters:
 aggregate:
-  agg_method: mean
+  agg_method: median
   aggregate_combo_fp: config/aggregate_combo.tsv
   batch_cols:
   - plate
@@ -27,9 +27,9 @@ aggregate:
   filter_queries: null
   impute: true
   metadata_cols_fp: config/cell_data_metadata_cols.tsv
-  pc_count: 753
   perturbation_id_col: sgRNA_0
   perturbation_name_col: gene_symbol_0
+  variance_or_ncomp: 0.99
 all:
   root_fp: /lab/cheeseman_ops/brieflow-screens/denali-analysis/analysis/analysis_root/
 cluster:
