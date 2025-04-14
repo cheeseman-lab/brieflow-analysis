@@ -11,7 +11,7 @@
 
 # Parameters:
 aggregate:
-  agg_method: median
+  agg_method: mean
   aggregate_combo_fp: config/aggregate_combo.tsv
   batch_cols:
   - plate
@@ -25,8 +25,8 @@ aggregate:
   drop_cols_threshold: 0.1
   drop_rows_threshold: 0.01
   filter_queries: null
-  first_feature: nucleus_DAPI_int
   impute: true
+  metadata_cols_fp: config/cell_data_metadata_cols.tsv
   pc_count: 753
   perturbation_id_col: sgRNA_0
   perturbation_name_col: gene_symbol_0
