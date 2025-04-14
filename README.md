@@ -55,8 +55,6 @@ cd brieflow/
 conda env create --file=brieflow_main_env.yml
 # activate brieflow_main_env conda environment
 conda activate brieflow_main_env
-# set conda installation to use strict channel priorities
-conda config --set channel_priority strict
 ```
 
 **Note:** We recommend making a custom Brieflow environment if you need other packages for Brieflow modifications.
@@ -68,7 +66,33 @@ To use the Slurm integration for Brieflow configure the Slurm resources in [anal
 3) *Optional*: Track changes to computational processing in a new branch on your fork.
 Contribute these changes to the main version of Brieflow with a PR as described in the Brieflow [contribution notes](https://github.com/cheeseman-lab/brieflow?tab=readme-ov-file#contribution-notes).
 
-### 3. Start Analysis
+### 3. Brieflow Test
+
+Run the following commands to ensure your Brieflow is set up correctly:
+
+```sh
+# activate brieflow env
+conda activate brieflow_main_env
+# enter test dir
+cd brieflow/tests/
+# set up small test analysis
+python small_test_analysis_setup.py
+# enter small test anaylsis dir
+cd small_test_analysis
+# run snakemake
+snakemake \
+    --cores all \
+    --use-conda \
+    --snakefile "../../workflow/Snakefile" \
+    --configfile "config/config.yml" \
+    --until all_preprocess
+# return to brieflow dir
+cd ../../
+# run tests
+pytest
+```
+
+### 4. Start Analysis
 
 `analysis/` contains configuration notebooks used to configure processes and slurm scripts used to run full modules.
 By default, results are output to `analysis/analysis_root` and organized by analysis module (preprocess, sbs, phenotype, etc).
