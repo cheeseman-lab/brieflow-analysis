@@ -16,6 +16,7 @@ aggregate:
   batch_cols:
   - plate
   - well
+  classifier_path: config/binary_xgb_robust_model.dill
   collapse_cols:
   - sgRNA_0
   - gene_symbol_0
