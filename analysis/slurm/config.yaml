@@ -123,9 +123,9 @@ set-resources:
 
     # aggregate
     split_datasets:
-        mem_mb: 150000
+        mem_mb: 200000
     filter:
-        mem_mb: 150000
+        mem_mb: 100000
     align:
         mem_mb: 980000
         cpus_per_task: 4
