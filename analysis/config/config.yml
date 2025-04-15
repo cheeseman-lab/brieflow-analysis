@@ -16,7 +16,6 @@ aggregate:
   batch_cols:
   - plate
   - well
-  classifier_path: config/naive_mitotic_classifier.pkl
   collapse_cols:
   - sgRNA_0
   - gene_symbol_0
