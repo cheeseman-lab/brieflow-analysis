@@ -137,7 +137,7 @@ set-resources:
         cpus_per_task: 4
 
     # cluster
-    generate_dataset:
+    clean_aggregate:
         mem_mb: 2000
     phate_leiden_clustering:
         mem_mb: 10000

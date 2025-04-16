@@ -1,11 +1,13 @@
 #!/bin/bash
 
+# Log all output to a log file (stdout and stderr)
+mkdir -p slurm/slurm_output/main
+start_time_formatted=$(date +%Y%m%d_%H%M%S)
+log_file="slurm/slurm_output/main/cluster-${start_time_formatted}.log"
+exec > >(tee -a "$log_file") 2>&1
+
 # Start timing
 start_time=$(date +%s)
-
-# Activate conda environment (adjust path as needed)
-source ~/.bashrc
-conda activate brieflow_workflows
 
 # Run the cluster rules
 snakemake --executor slurm --use-conda \
@@ -14,6 +16,7 @@ snakemake --executor slurm --use-conda \
     --configfile "config/config.yml" \
     --latency-wait 60 \
     --rerun-triggers mtime \
+    --keep-going \
     --until all_cluster
 
 # End timing and calculate duration
