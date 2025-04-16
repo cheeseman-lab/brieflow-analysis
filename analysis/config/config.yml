@@ -33,15 +33,18 @@ aggregate:
 all:
   root_fp: /lab/cheeseman_ops/brieflow-screens/denali-analysis/analysis/analysis_root/
 cluster:
+  cluster_combo_fp: config/cluster_combo.tsv
   corum_group_benchmark: config/benchmark_clusters/corum_group_benchmark.tsv
+  kegg_group_benchmark: config/benchmark_clusters/kegg_group_benchmark.tsv
   leiden_resolutions:
-  - 2
-  - 5
+  - 8
   - 10
+  - 12
   min_cell_cutoffs:
     all: 3
     interphase: 3
     mitotic: 0
+  phate_distance_metric: cosine
   string_pair_benchmark: config/benchmark_clusters/string_pair_benchmark.tsv
 merge:
   det_range:
