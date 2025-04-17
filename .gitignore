@@ -1,6 +1,4 @@
 # ignore files generated during run
 analysis/.snakemake/
 analysis/slurm/slurm_output/
-
 analysis_root/
-analysis_root_OLD_DATA/
