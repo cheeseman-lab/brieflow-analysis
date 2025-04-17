@@ -22,4 +22,4 @@ snakemake --executor slurm --use-conda \
 # End timing and calculate duration
 end_time=$(date +%s)
 duration=$((end_time - start_time))
-echo "Total runtime: $((duration / 3600))h $(((duration % 3600) / 60))m $((duration % 60))s" >> slurm/slurm_output/main/aggregate-$SLURM_JOB_ID.out
+echo "Total runtime: $((duration / 3600))h $(((duration % 3600) / 60))m $((duration % 60))s"
