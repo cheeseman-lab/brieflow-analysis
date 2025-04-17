@@ -6,4 +6,4 @@ snakemake --use-conda --cores all \
     --configfile "config/config.yml" \
     --rerun-triggers mtime \
     --keep-going \
-    --until all_aggregate -n
+    --until all_aggregate -n -n

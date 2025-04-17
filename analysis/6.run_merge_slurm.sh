@@ -6,6 +6,12 @@ start_time_formatted=$(date +%Y%m%d_%H%M%S)
 log_file="slurm/slurm_output/main/merge-${start_time_formatted}.log"
 exec > >(tee -a "$log_file") 2>&1
 
+# Log all output to a log file (stdout and stderr)
+mkdir -p slurm/slurm_output/main
+start_time_formatted=$(date +%Y%m%d_%H%M%S)
+log_file="slurm/slurm_output/main/merge-${start_time_formatted}.log"
+exec > >(tee -a "$log_file") 2>&1
+
 # Start timing
 start_time=$(date +%s)
 

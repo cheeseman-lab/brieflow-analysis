@@ -3,7 +3,7 @@
 # Log all output to a log file (stdout and stderr)
 mkdir -p slurm/slurm_output/main
 start_time_formatted=$(date +%Y%m%d_%H%M%S)
-log_file="slurm/slurm_output/main/preprocessing-${start_time_formatted}.log"
+log_file="slurm/slurm_output/main/sbs-${start_time_formatted}.log"
 exec > >(tee -a "$log_file") 2>&1
 
 # Start timing
@@ -31,7 +31,18 @@ for PLATE in $(seq 1 $NUM_PLATES); do
         --latency-wait 60 \
         --rerun-triggers mtime \
         --keep-going \
-        --until all_preprocess \
+        --groups align_sbs=extract_sbs_info_group \
+                apply_ic_field_sbs=extract_sbs_info_group \
+                segment_sbs=extract_sbs_info_group \
+                extract_sbs_info=extract_sbs_info_group \
+                log_filter=max_filter_group \
+                max_filter=max_filter_group \
+                compute_standard_deviation=find_peaks_group \
+                find_peaks=find_peaks_group \
+                extract_bases=call_cells_group \
+                call_reads=call_cells_group \
+                call_cells=call_cells_group \
+        --until all_sbs \
         --config plate_filter=$PLATE
     
     # Check if Snakemake was successful
