@@ -97,7 +97,7 @@ pytest
 **Note:** Before beginning analysis, it is strongly recommended that you fill out the `screen.yaml` file to track all of your experimental metadata.
 
 `analysis/` contains configuration notebooks used to configure processes and slurm scripts used to run full modules.
-By default, results are output to `analysis/analysis_root` and organized by analysis module (preprocess, sbs, phenotype, etc).
+By default, results are output to `analysis/brieflow_output` and organized by analysis module (preprocess, sbs, phenotype, etc).
 
 Follow the full instructions below to run an analysis.
 
@@ -130,7 +130,7 @@ conda activate brieflow_main_env
 Follow the steps in [0.configure_preprocess_params.ipynb](analysis/0.configure_preprocess_params.ipynb) to configure preprocess params.
 
 **Note:** This step determines where ND2 data is loaded from (can be from anywhere) and where intermediate/output data is saved (can also be anywhere).
-By default, results are output to `analysis/analysis_root`.
+By default, results are output to `analysis/brieflow_output`.
 
 ### Step 1: Run preprocessing module
 
