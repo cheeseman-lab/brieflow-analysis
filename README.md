@@ -225,7 +225,7 @@ Follow the steps in [9.configure_cluster_params.ipynb](analysis/9.configure_clus
 
 **Local**:
 ```sh
-bash 10.run_cluster.sh
+sh 10.run_cluster.sh
 ```
 **Slurm**:
 ```sh
@@ -233,6 +233,19 @@ bash 10.run_cluster.sh
 tmux new-session -s cluster
 # in the tmux session:
 bash 10.run_cluster_slurm.sh
+```
+
+### Step 11: Notebook analysis
+
+Run the [11.analyze.ipynb](analysis/11.analyze.ipynb) notebook to perform more specific cluster analysis.
+
+### Step 12: Brieflow Visualization
+
+Brieflow includes a native visualizer for a screen's experimental overview, analysis overview, quality control, and cluster analysis.
+Run the following command to start this visualization:
+
+```sh
+sh 12.run_visualization.sh
 ```
 
 ***Note**: Many users will want to only run SBS or phenotype processing, independently.
