@@ -237,7 +237,7 @@ bash 10.run_cluster_slurm.sh
 
 ### Step 11: Notebook analysis
 
-Run the [11.analyze.ipynb](analysis/11.analyze.ipynb) notebook to perform more specific cluster analysis.
+Run the [11.analyze.ipynb](analysis/11.analyze.ipynb) notebook to evaluate the biological relevance of your clusters using a [LLM wrapper](https://github.com/cheeseman-lab/mozzarellm) and to generate simple plots of your features.
 
 ### Step 12: Brieflow Visualization
 
