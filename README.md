@@ -20,32 +20,31 @@ Create a new respository for a screen to get started.
 2) Clone the newly created repository to your local machine:
 
 ```sh
-git clone https://github.com/your-username/your-screen-repository.git
-cd your-screen-repository
+git clone https://github.com/YOUR-USERNAME/YOUR-SCREEN-REPO.git
+cd YOUR-SCREEN-REPO
 ```
-
-3) *Optional*: Add template brieflow-analysis template as an upstream reference in screen repository:
-`git remote add template https://github.com/cheeseman-lab/brieflow-analysis`
-
 
 See the GitHub documentation for [using a template](https://docs.github.com/en/repositories/creating-and-managing-repositories/creating-a-repository-from-a-template) for more information.
 
 ### 2. Brieflow Setup
 
 We use [Brieflow](https://github.com/cheeseman-lab/brieflow) to process data on a very large scale from each screen.
-**Note:** We use Brieflow as a git submodule in this repository.
+We use Brieflow as a git submodule in this repository.
 Please see the [Git Submodules basic explanation](https://gist.github.com/gitaarik/8735255) for information on how to best install, use, and update this submodule.
+We recommend using a forked version of brieflow and provide instructions for doing this below.
 
-1) Clone the Brieflow package into this repo using the following git submodule commands:
+1) Create a fork of brieflow-analysis as described [here](https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/working-with-forks/fork-a-repo).
+
+2) Clone the Brieflow package into this repo using the following git submodule commands:
 
 ```sh
-# init git submodule
-git submodule init
-# clone brieflow
-git submodule update
+# set url to forked brieflow
+git submodule set-url brieflow https://github.com/YOUR-USERNAME/brieflow.git
+# init submodule
+git submodule update --init --recursive
 ```
 
-2) Set up Brieflow following the [setup instructions](https://github.com/cheeseman-lab/brieflow#brieflow-setup).
+3) Set up Brieflow following the [setup instructions](https://github.com/cheeseman-lab/brieflow#brieflow-setup).
 To set up the Brieflow Conda environment (~20 min):
 
 ```sh
@@ -63,8 +62,11 @@ Simply change the name of the `brieflow_main_env` Conda environment and track yo
 We use the HPC integration for Slurm as detailed in the setup instructions.
 To use the Slurm integration for Brieflow configure the Slurm resources in [analysis/slurm/config.yaml](analysis/slurm/config.yaml).
 
-3) *Optional*: Track changes to computational processing in a new branch on your fork.
-Contribute these changes to the main version of Brieflow with a PR as described in the Brieflow [contribution notes](https://github.com/cheeseman-lab/brieflow?tab=readme-ov-file#contribution-notes).
+4) *Optional*: Contribute back to brieflow:
+
+Track changes to computational processing in a new branch on your fork.
+Contribute these changes to the main version of Brieflow with a pull request.
+See GitHub's documentation for [contributing to a project](https://docs.github.com/en/get-started/exploring-projects-on-github/contributing-to-a-project) and brieflow's [contribution notes](https://github.com/cheeseman-lab/brieflow?tab=readme-ov-file#contribution-notes) for more info.
 
 ### 3. Brieflow Test
 
@@ -74,21 +76,11 @@ Run the following commands to ensure your Brieflow is set up correctly:
 # activate brieflow env
 conda activate brieflow_main_env
 # enter test dir
-cd brieflow/tests/
-# set up small test analysis
-python small_test_analysis_setup.py
-# enter small test anaylsis dir
-cd small_test_analysis
-# run snakemake
-snakemake \
-    --cores all \
-    --use-conda \
-    --snakefile "../../workflow/Snakefile" \
-    --configfile "config/config.yml" \
-    --until all_preprocess
-# return to brieflow dir
-cd ../../
+cd brieflow/tests/small_test_analysis
+# run brieflow
+sh run_brieflow.sh
 # run tests
+cd ../../
 pytest
 ```
 
