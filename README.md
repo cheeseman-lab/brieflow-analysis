@@ -75,8 +75,9 @@ Run the following commands to ensure your Brieflow is set up correctly:
 ```sh
 # activate brieflow env
 conda activate brieflow_main_env
-# enter test dir
+# set up small test analysis
 cd brieflow/tests/small_test_analysis
+python small_test_analysis_setup.py
 # run brieflow
 sh run_brieflow.sh
 # run tests
