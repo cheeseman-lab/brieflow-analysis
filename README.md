@@ -45,19 +45,28 @@ git submodule update --init --recursive
 ```
 
 3) Set up Brieflow following the [setup instructions](https://github.com/cheeseman-lab/brieflow#brieflow-setup).
-To set up the Brieflow Conda environment (~20 min):
+Use the following commands to set up the brieflow Conda environment (~10 min):
 
 ```sh
-# enter brieflow directory
+# enter brieflow
 cd brieflow/
-# create brieflow_main_env conda environment
-conda env create --file=brieflow_main_env.yml
-# activate brieflow_main_env conda environment
-conda activate brieflow_main_env
+# create and activate brieflow_SCREEN_CONTEXT conda environment
+# NOTE: replace SCREEN_CONTEXT with the name of your screen context to ensure a context-specific installation
+# using this context-specific installation will refer to library code in ./brieflow/workflow/lib
+conda create -n brieflow_SCREEN_CONTEXT -c conda-forge python=3.11 uv pip -y
+conda activate brieflow_SCREEN_CONTEXT
+# install external packages
+uv pip install -r pyproject.toml
+# install editable version of brieflow
+uv pip install -e .
+# install conda-only packages
+conda install -c conda-forge micro_sam -y
 ```
 
-**Note:** We recommend making a custom Brieflow environment if you need other packages for Brieflow modifications.
-Simply change the name of the `brieflow_main_env` Conda environment and track your added packages in [brieflow/brieflow_main_env.yml](brieflow/brieflow_main_env.yml).
+**Notes:**
+- We recommend a SCREEN_CONTEXT-specific installation because changes to this particular `./brieflow/workflow/lib` code will live within this specific installation of brieflow, and an explicit name helps keep track of different brieflow installations.
+One could also install one version of brieflow that is used across brieflow-analysis repositories.
+- For a rule-specific package consider creating a separate conda environment file and using it for the particular rule as described in the [Snakemake integrated package management notes](https://snakemake.readthedocs.io/en/stable/snakefiles/deployment.html#integrated-package-management).
 
 We use the HPC integration for Slurm as detailed in the setup instructions.
 To use the Slurm integration for Brieflow configure the Slurm resources in [analysis/slurm/config.yaml](analysis/slurm/config.yaml).
