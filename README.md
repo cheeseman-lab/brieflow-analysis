@@ -4,7 +4,7 @@ Template repository for storing processing optical pooled screen data with [Brie
 
 **Notes**: 
 - Read [brieflow.readthedocs.io](https://brieflow.readthedocs.io/) before starting to get a good grasp of brieflow and brieflow-analysis!
-- As this is only a template repository for notebooks/commands that use Brieflow, most brieflow information, issues, etc live in the [brieflow](https://github.com/cheeseman-lab/brieflow) repository.
+- We aim to keep brieflow-related issues in the main brieflow repository ([here](https://github.com/cheeseman-lab/brieflow/issues)).
 - Join the brieflow [Discord](https://discord.gg/yrEh6GP8JJ) to ask questions, share ideas, and get help from other users and developers.
 
 
