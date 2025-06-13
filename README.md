@@ -2,6 +2,10 @@
 
 Template repository for storing processing optical pooled screen data with [Brieflow](https://github.com/cheeseman-lab/brieflow).
 
+**Notes**: 
+- Read [brieflow.readthedocs.io](https://brieflow.readthedocs.io/) before starting to get a good grasp of brieflow and brieflow-analysis!
+- As this is only a template repository for notebooks/commands that use Brieflow, most brieflow information, issues, etc live in the [brieflow](https://github.com/cheeseman-lab/brieflow) repository.
+
 
 ## Set Up
 
@@ -83,7 +87,7 @@ Run the following commands to ensure your Brieflow is set up correctly:
 
 ```sh
 # activate brieflow env
-conda activate brieflow_main_env
+conda activate brieflow_SCREEN_CONTEXT
 # set up small test analysis
 cd brieflow/tests/small_test_analysis
 python small_test_analysis_setup.py
