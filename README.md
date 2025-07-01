@@ -33,14 +33,20 @@ See the GitHub documentation for [using a template](https://docs.github.com/en/r
 
 ### 2. Brieflow Setup
 
-We use [Brieflow](https://github.com/cheeseman-lab/brieflow) to process data on a very large scale from each screen.
-We use Brieflow as a git submodule in this repository.
+We use [brieflow](https://github.com/cheeseman-lab/brieflow) to process data on a very large scale from each screen.
+We use brieflow as a git submodule in this repository.
 Please see the [Git Submodules basic explanation](https://gist.github.com/gitaarik/8735255) for information on how to best install, use, and update this submodule.
 We recommend using a forked version of brieflow and provide instructions for doing this below.
+We **highly recommend** reading the GitHub documentation for explanation of forks to understand how your fork of brieflow syncs with the `cheeseman-lab` brieflow.
+From the documentation:
+
+> A fork is a new repository that shares code and visibility settings with the original “upstream” repository. Forks are often used to iterate on ideas or changes before they are proposed back to the upstream repository, such as in open source projects or when a user does not have write access to the upstream repository. For more information, see [Working with forks](https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/working-with-forks).
+
+To get started:
 
 1) Create a fork of brieflow-analysis as described [here](https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/working-with-forks/fork-a-repo).
 
-2) Clone the Brieflow package into this repo using the following git submodule commands:
+2) Clone the brieflow package into this repo using the following git submodule commands:
 
 ```sh
 # set url to forked brieflow
@@ -49,7 +55,23 @@ git submodule set-url brieflow https://github.com/YOUR-USERNAME/brieflow.git
 git submodule update --init --recursive
 ```
 
-3) Set up Brieflow following the [setup instructions](https://github.com/cheeseman-lab/brieflow#brieflow-setup).
+3) Configure the remote repository for your fork (more info [here](https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/working-with-forks/configuring-a-remote-repository-for-a-fork)).
+
+```sh
+# set remote upstream repo
+git remote add upstream https://github.com/cheeseman-lab/brieflow.git
+
+# check origin and upstream repos
+git remote -v
+> origin    https://github.com/YOUR-USERNAME/brieflow.git (fetch)
+> origin    https://github.com/YOUR-USERNAME/brieflowgit (push)
+> upstream  https://github.com/cheeseman-lab/brieflow.git (fetch)
+> upstream  https://github.com/cheeseman-lab/brieflow.git (push)
+```
+
+Follow the [GitHub documentation](https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/working-with-forks/syncing-a-fork) to to sync changes between your fork and `cheeseman-lab/brieflow` (ex, to pull a new branch).
+
+4) Set up brieflow following the [setup instructions](https://github.com/cheeseman-lab/brieflow#brieflow-setup).
 
 Use the following commands to set up the brieflow Conda environment (~10 min):
 
@@ -75,10 +97,10 @@ One could also install one version of brieflow that is used across brieflow-anal
 We use the HPC integration for Slurm as detailed in the setup instructions.
 To use the Slurm integration for Brieflow configure the Slurm resources in [analysis/slurm/config.yaml](analysis/slurm/config.yaml).
 
-4) *Optional*: Contribute back to brieflow:
+5) *Optional*: Contribute back to brieflow:
 
 Track changes to computational processing in a new branch on your fork.
-Contribute these changes to the main version of Brieflow with a pull request.
+Contribute these changes to `cheeseman-lab/brieflow` with a pull request.
 See GitHub's documentation for [contributing to a project](https://docs.github.com/en/get-started/exploring-projects-on-github/contributing-to-a-project) and brieflow's [contribution notes](https://github.com/cheeseman-lab/brieflow?tab=readme-ov-file#contribution-notes) for more info.
 
 ### 3. Brieflow Test
