@@ -63,6 +63,7 @@ git remote add upstream https://github.com/cheeseman-lab/brieflow.git
 
 # check origin and upstream repos
 git remote -v
+# Confirm you see the below output
 > origin    https://github.com/YOUR-USERNAME/brieflow.git (fetch)
 > origin    https://github.com/YOUR-USERNAME/brieflowgit (push)
 > upstream  https://github.com/cheeseman-lab/brieflow.git (fetch)
@@ -106,7 +107,7 @@ See GitHub's documentation for [contributing to a project](https://docs.github.c
 ### 3. Brieflow Test
 
 Run the following commands to ensure your Brieflow is set up correctly:
-
+This will test Brieflow on a small limited subset of example data that we provide, and functions only with the main branch of Brieflow. This is **not** the optimal location for analyzing your data.
 ```sh
 # activate brieflow env
 conda activate brieflow_SCREEN_NAME
