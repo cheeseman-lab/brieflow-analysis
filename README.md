@@ -107,7 +107,7 @@ See GitHub's documentation for [contributing to a project](https://docs.github.c
 ### 3. Brieflow Test
 
 Run the following commands to ensure your Brieflow is set up correctly:
-
+This will test Brieflow on a small limited subset of example data that we provide, and functions only with the main branch of Brieflow. This is **not** the optimal location for analyzing your data.
 ```sh
 # activate brieflow env
 conda activate brieflow_SCREEN_NAME
