@@ -50,16 +50,15 @@ git submodule update --init --recursive
 ```
 
 3) Set up Brieflow following the [setup instructions](https://github.com/cheeseman-lab/brieflow#brieflow-setup).
+
 Use the following commands to set up the brieflow Conda environment (~10 min):
 
 ```sh
-# enter brieflow
-cd brieflow/
-# create and activate brieflow_SCREEN_CONTEXT conda environment
-# NOTE: replace SCREEN_CONTEXT with the name of your screen context to ensure a context-specific installation
-# using this context-specific installation will refer to library code in ./brieflow/workflow/lib
-conda create -n brieflow_SCREEN_CONTEXT -c conda-forge python=3.11 uv pip -y
-conda activate brieflow_SCREEN_CONTEXT
+# create and activate brieflow_SCREEN_NAME conda environment
+# NOTE: replace brieflow_SCREEN_NAME with the name of your screen to ensure a screen-specific installation
+# using this screen-specific installation will refer to library code in ./brieflow/workflow/lib
+conda create -n brieflow_SCREEN_NAME -c conda-forge python=3.11 uv pip -y
+conda activate brieflow_SCREEN_NAME
 # install external packages
 uv pip install -r pyproject.toml
 # install editable version of brieflow
@@ -69,7 +68,7 @@ conda install -c conda-forge micro_sam -y # skip if not using micro-sam for segm
 ```
 
 **Notes:**
-- We recommend a SCREEN_CONTEXT-specific installation because changes to this particular `./brieflow/workflow/lib` code will live within this specific installation of brieflow, and an explicit name helps keep track of different brieflow installations.
+- We recommend a screen-specific installation because changes to this particular `./brieflow/workflow/lib` code will live within this specific installation of brieflow, and an explicit name helps keep track of different brieflow installations.
 One could also install one version of brieflow that is used across brieflow-analysis repositories.
 - For a rule-specific package consider creating a separate conda environment file and using it for the particular rule as described in the [Snakemake integrated package management notes](https://snakemake.readthedocs.io/en/stable/snakefiles/deployment.html#integrated-package-management).
 
@@ -88,7 +87,7 @@ Run the following commands to ensure your Brieflow is set up correctly:
 
 ```sh
 # activate brieflow env
-conda activate brieflow_SCREEN_CONTEXT
+conda activate brieflow_SCREEN_NAME
 # set up small test analysis
 cd brieflow/tests/small_test_analysis
 python small_test_analysis_setup.py
@@ -119,12 +118,12 @@ Use the following commands to enter this folder and activate the conda env:
 # enter analysis directory
 cd analysis/
 # activate brieflow_main_env conda environment
-conda activate brieflow_main_env
+conda activate brieflow_SCREEN_NAME
 ```
 
 ***Notes**: 
 
-- Use `brieflow_main_env` Conda environment for each configuration notebook.
+- Use `brieflow_SCREEN_NAME` Conda environment for each configuration notebook.
 - How you use `brieflow` should depend on your workload.
     - Runs that can be done with local compute can be run with the `.sh` scripts, which are set up to run all rules for a module.
     Note that these scripts are currently set up to do a dry run with the `-n` parameter, which will need to be removed for a local run`.
