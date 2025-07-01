@@ -63,6 +63,7 @@ git remote add upstream https://github.com/cheeseman-lab/brieflow.git
 
 # check origin and upstream repos
 git remote -v
+# Confirm you see the below output
 > origin    https://github.com/YOUR-USERNAME/brieflow.git (fetch)
 > origin    https://github.com/YOUR-USERNAME/brieflowgit (push)
 > upstream  https://github.com/cheeseman-lab/brieflow.git (fetch)
