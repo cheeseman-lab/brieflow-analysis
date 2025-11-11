@@ -31,17 +31,17 @@ for PLATE in $(seq 1 $NUM_PLATES); do
         --latency-wait 60 \
         --rerun-triggers mtime \
         --keep-going \
-        --groups align_sbs=extract_sbs_info_group \
-                apply_ic_field_sbs=extract_sbs_info_group \
-                segment_sbs=extract_sbs_info_group \
-                extract_sbs_info=extract_sbs_info_group \
-                log_filter=max_filter_group \
-                max_filter=max_filter_group \
-                compute_standard_deviation=find_peaks_group \
-                find_peaks=find_peaks_group \
-                extract_bases=call_cells_group \
-                call_reads=call_cells_group \
-                call_cells=call_cells_group \
+        --groups align_sbs=sbs_tile_group \
+                log_filter=sbs_tile_group \
+                max_filter=sbs_tile_group \
+                compute_standard_deviation=sbs_tile_group \
+                find_peaks=sbs_tile_group \
+                apply_ic_field_sbs=sbs_tile_group \
+                segment_sbs=sbs_tile_group \
+                extract_sbs_info=sbs_tile_group \
+                extract_bases=sbs_tile_group \
+                call_reads=sbs_tile_group \
+                call_cells=sbs_tile_group \
         --until all_sbs \
         --config plate_filter=$PLATE
     
