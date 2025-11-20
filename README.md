@@ -10,7 +10,7 @@
 
 ![Brieflow pipeline](https://brieflow.readthedocs.io/en/latest/_images/brieflow_brieflow_analysis.png)
 
-GitHub template for running an optical pooled screen with [Brieflow](https://github.com/cheeseman-lab/brieflow).
+GitHub template for analyzing an optical pooled screen with [Brieflow](https://github.com/cheeseman-lab/brieflow).
 
 Click **"Use this template"** → create your screen repository → configure notebooks → run.
 
