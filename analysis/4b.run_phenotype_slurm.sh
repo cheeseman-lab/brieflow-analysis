@@ -31,12 +31,12 @@ for PLATE in $(seq 1 $NUM_PLATES); do
         --latency-wait 60 \
         --rerun-triggers mtime \
         --keep-going \
-        --groups apply_ic_field_phenotype=extract_phenotype_info_group \
-                align_phenotype=extract_phenotype_info_group \
-                segment_phenotype=extract_phenotype_info_group \
-                extract_phenotype_info=extract_phenotype_info_group \
-                identify_cytoplasm=extract_phenotype_cp_group \
-                extract_phenotype_cp=extract_phenotype_cp_group \
+        --groups apply_ic_field_phenotype=phenotype_tile_group \
+                align_phenotype=phenotype_tile_group \
+                segment_phenotype=phenotype_tile_group \
+                extract_phenotype_info=phenotype_tile_group \
+                identify_cytoplasm=phenotype_tile_group \
+                extract_phenotype_cp=phenotype_tile_group \
         --until all_phenotype \
         --config plate_filter=$PLATE
     
