@@ -12,8 +12,6 @@
 
 GitHub template for analyzing an optical pooled screen with [Brieflow](https://github.com/cheeseman-lab/brieflow).
 
-Click **"Use this template"** → create your screen repository → configure notebooks → run.
-
 ## Example Screen Repositories
 
 | Screen      | Repository                                             | Description                                      | Brieflow Version |
