@@ -28,7 +28,7 @@ for PLATE in $(seq 1 $NUM_PLATES); do
         --workflow-profile "slurm/" \
         --snakefile "../brieflow/workflow/Snakefile" \
         --configfile "config/config.yml" \
-        --latency-wait 60 \
+        --latency-wait 10 \
         --rerun-triggers mtime \
         --keep-going \
         --until all_preprocess \
