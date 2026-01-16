@@ -14,7 +14,7 @@ snakemake --executor slurm --use-conda \
     --workflow-profile "slurm/" \
     --snakefile "../brieflow/workflow/Snakefile" \
     --configfile "config/config.yml" \
-    --latency-wait 60 \
+    --latency-wait 10 \
     --rerun-triggers mtime \
     --keep-going \
     --until all_cluster
