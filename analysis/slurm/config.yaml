@@ -3,7 +3,7 @@
 # BrieFlow cluster configuration file
 
 default-resources:
-    slurm_partition: 20
+    slurm_partition: u20
     slurm_account: wibrusers
     mem_mb: 3000
     tasks: 1
@@ -85,9 +85,9 @@ set-resources:
         mem_mb: 1000
     combine_phenotype_info:
         mem_mb: 20000
-    extract_phenotype_cp:
+    extract_phenotype:
         mem_mb: 3000
-    merge_phenotype_cp:
+    merge_phenotype:
         mem_mb: 300000
     eval_segmentation_phenotype:
         mem_mb: 50000

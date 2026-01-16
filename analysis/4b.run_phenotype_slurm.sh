@@ -28,7 +28,7 @@ for PLATE in $(seq 1 $NUM_PLATES); do
         --workflow-profile "slurm/" \
         --snakefile "../brieflow/workflow/Snakefile" \
         --configfile "config/config.yml" \
-        --latency-wait 60 \
+        --latency-wait 10 \
         --rerun-triggers mtime \
         --keep-going \
         --groups apply_ic_field_phenotype=phenotype_tile_group \
@@ -36,7 +36,7 @@ for PLATE in $(seq 1 $NUM_PLATES); do
                 segment_phenotype=phenotype_tile_group \
                 extract_phenotype_info=phenotype_tile_group \
                 identify_cytoplasm=phenotype_tile_group \
-                extract_phenotype_cp=phenotype_tile_group \
+                extract_phenotype=phenotype_tile_group \
         --until all_phenotype \
         --config plate_filter=$PLATE
     
