@@ -3,7 +3,7 @@
 # BrieFlow cluster configuration file
 
 default-resources:
-    slurm_partition: 20
+    slurm_partition: u20
     slurm_account: wibrusers
     mem_mb: 3000
     tasks: 1
@@ -29,7 +29,7 @@ set-resources:
     calculate_ic_sbs:
         mem_mb: 50000
     calculate_ic_phenotype:
-        mem_mb: 500000
+        mem_mb: 900000
 
     # sbs
     align_sbs:
@@ -46,7 +46,7 @@ set-resources:
         mem_mb: 2500
     segment_sbs:
         # slurm_partition: "'nvidia-2080ti-20'"
-        mem_mb: 3500
+        mem_mb: 8000
         cpus_per_task: 4
         # slurm_extra: "'--gres=gpu:1'"
     extract_bases:
@@ -66,7 +66,7 @@ set-resources:
     eval_segmentation_sbs:
         mem_mb: 50000
     eval_mapping:
-        mem_mb: 50000
+        mem_mb: 200000
         cpus_per_task: 12
 
     # phenotype
@@ -76,7 +76,7 @@ set-resources:
         mem_mb: 2000
     segment_phenotype:
         # slurm_partition: "'nvidia-2080ti-20'"
-        mem_mb: 3000
+        mem_mb: 16000
         cpus_per_task: 4
         # slurm_extra: "'--gres=gpu:1'"
     identify_cytoplasm:
@@ -85,9 +85,18 @@ set-resources:
         mem_mb: 1000
     combine_phenotype_info:
         mem_mb: 20000
-    extract_phenotype_cp:
+    identify_second_objs:
+        mem_mb: 8000
+        cpus_per_task: 4
+    extract_phenotype_second_objs:
+        mem_mb: 2000
+    merge_phenotype_second_objs:
+        mem_mb: 20000
+    merge_second_objs_phenotype_cp:
+        mem_mb: 2000
+    extract_phenotype:
         mem_mb: 3000
-    merge_phenotype_cp:
+    merge_phenotype:
         mem_mb: 300000
     eval_segmentation_phenotype:
         mem_mb: 50000
