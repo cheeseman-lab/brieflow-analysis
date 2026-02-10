@@ -1,10 +1,20 @@
 # Screen Information
+#
+# This file captures experiment-level metadata for OPS screens.
+# Required fields are documented inline; optional fields for future
+# CellxState platform integration are marked with [FUTURE].
+
 experiment:
   id: ""  # Experiment identifier
   notebook_entries: ""  # Links or references to lab notebook entries
-  dates: 
+  dates:
     start: ""
     end: ""
+
+# [FUTURE] Identifiers - to be finalized with CellxState schema (March 2026)
+# identifiers:
+#   acquisition_uid: ""  # Global unique ID (hierarchical: acq_container_cell format)
+#   container_uid: ""    # Unique container/plate identifier
 
 # Cellular Conditions
 cellular:
@@ -16,6 +26,34 @@ cellular:
   plates: ""  # Number of plates
   wells_per_plate: ""  # Number of wells per plate
 
+  # [FUTURE] Ontology references - standard IDs for interoperability
+  # ontologies:
+  #   cell_type_ontology: ""     # Cell Ontology ID (e.g., CL:0000057)
+  #   tissue_ontology: ""        # UBERON ID if applicable
+  #   organism_ontology: ""      # NCBITaxon ID (e.g., NCBITaxon:9606 for human)
+  #   disease_ontology: ""       # MONDO/DOID ID if disease model
+
+  # [FUTURE] Cell sourcing - for reproducibility
+  # sourcing:
+  #   donor_id: ""               # Donor identifier
+  #   cell_product_lot_id: ""    # Commercial lot ID if applicable
+  #   parent_lineage: ""         # iPSC parent line if derived
+
+  # [FUTURE] Genetic engineering
+  # engineering:
+  #   crispr_type: ""            # CRISPRn, CRISPRi, CRISPRa, or none
+  #   cas_variant: ""            # Cas9, dCas9, Cas12a, etc.
+
+  # [FUTURE] Media and treatment conditions (per-well if varies)
+  # media:
+  #   base_media: ""             # e.g., DMEM, RPMI
+  #   supplements: []            # List of supplements
+  # compounds:
+  #   - compound_id: ""          # Compound identifier
+  #     smiles: ""               # SMILES string
+  #     concentration: ""        # e.g., "10 uM"
+  #     wells: []                # Wells receiving this treatment
+
 # Sequencing by Synthesis (SBS)
 sbs:
   cycles: ""  # Number of cycles
@@ -26,11 +64,19 @@ sbs:
     guides_per_gene: ""
     other_information: ""
 
+  # [FUTURE] Structured guide library - replaces free-text "other_information"
+  # guide_library:
+  #   - gene_id: ""              # Entrez Gene ID
+  #     gene_symbol: ""          # HGNC symbol
+  #     spacer_sequence: ""      # Guide spacer sequence
+  #     barcode_sequence: ""     # SBS barcode
+  #     guide_type: ""           # targeting, non-targeting, positive-control
+
 # Phenotype (PH) Steps
 phenotype:
   background_channel_cell: ""  # For cell segmentation
   background_channel_body: ""  # For body (e.g. parasite) segmentation
-  
+
   # Rounds of staining/imaging (in order they were stained for each round)
   # Add more rounds as needed
   rounds:
@@ -39,10 +85,13 @@ phenotype:
         - name: "DAPI"  # Name of stain/antibody
           marker_of: "Nuclei"  # What it marks
           channel: "DAPI"  # Channel used (e.g., DAPI, CY3)
+          # [FUTURE] Extended channel mapping
+          # optical_channel: ""    # Wavelength/filter (e.g., "405nm", "DAPI")
+          # biological_readout: "" # What's being measured (e.g., "DNA content")
         - name: "ConA"
           marker_of: "Cytoplasm"
           channel: "AF750"
-    
+
     - round_number: 2
       stains:
         - name: ""  # Name of stain/antibody
@@ -54,7 +103,34 @@ phenotype:
 
 # Data Generated
 data:
-  storage_format: ""  # e.g., .nd2, .tiff
+  storage_format: ""  # e.g., .nd2, .tiff, .zarr
   location: "/lab/.."  # Base path for data storage
-  
+
   notes: ""  # Any additional notes about the data or file naming conventions
+
+# [FUTURE] Imaging metadata - links to microscope configuration
+# imaging:
+#   live_or_fixed: ""          # "live" or "fixed"
+#   days_in_vitro: ""          # DIV or timepoint
+#   microscope_id: ""          # Instrument identifier
+#   settings_uid: ""           # Link to microscope settings JSON/config
+#   pixel_size_um: ""          # Pixel size in micrometers
+#   z_spacing_um: ""           # Z-stack spacing if 3D
+
+# [FUTURE] Visualization settings - contrast/intensity for viewers
+# visualization:
+#   channels:
+#     - name: ""
+#       contrast_min: 0
+#       contrast_max: 65535
+#       colormap: ""           # e.g., "gray", "green", "magenta"
+
+# =============================================================================
+# METADATA SCHEMA VERSION
+# =============================================================================
+# This template follows brieflow screen.yaml v1.0 (pre-CellxState alignment).
+# [FUTURE] sections will be uncommented and required after CellxState metadata
+# schema finalization (target: March 2026 workshop).
+#
+# See zarr3_metadata_alignment.md for full metadata alignment strategy.
+# =============================================================================
