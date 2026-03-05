@@ -309,6 +309,48 @@ sbs/
     └── segmentation/1/
         ├── cell_density_heatmap.{png,tsv}
         └── segmentation_overview.tsv
+
+
+
+sbs/
+├── aligned_1.zarr/                              # HCS plate: primary image
+│   └── A/
+│       ├── 1/                                 # well A1
+│       │   ├── {0,2,32}/                      # tiles
+│       │   │   ├── zarr.json                  # multiscales + omero
+│       │   │   ├── 0/, 1/, 2/, ...
+│       │   │   └── labels/
+│       │   │       ├── nuclei.zarr/
+│       │   │       └── cells.zarr/
+│       └── 2/                                 # well A2
+│           └── (same structure)
+├── illumination_corrected_1.zarr/               # HCS plate: derived image
+│   └── A/1/{0,2,32}/ ...
+├── log_filtered_1.zarr/
+│   └── A/1/{0,2,32}/ ...
+├── max_filtered_1.zarr/
+│   └── A/1/{0,2,32}/ ...
+├── peaks_1.zarr/
+│   └── A/1/{0,2,32}/ ...
+├── standard_deviation_1.zarr/
+│   └── A/1/{0,2,32}/ ...
+├── parquets/
+│   └── 1/A/{1,2}/                             # plate/row/col/
+│       ├── cells.parquet
+│       ├── reads.parquet
+│       └── sbs_info.parquet
+├── tsvs/
+│   └── 1/A/{1,2}/{0,2,32}/                    # plate/row/col/tile/
+│       └── segmentation_stats.tsv
+└── eval/
+    ├── mapping/1/                             # plate/
+    │   ├── mapping_overview.tsv
+    │   └── *.png (heatmaps, histograms)
+    └── segmentation/1/
+        ├── cell_density_heatmap.{png,tsv}
+        └── segmentation_overview.tsv
+
+
 ```
 
 #### Zarr: Phenotype Module (`brieflow_output_zarr/phenotype/`)
@@ -337,6 +379,37 @@ phenotype/
 └── eval/
     ├── features/1/cell_{DAPI,COXIV,CENPA,WGA}_min_heatmap.{png,tsv}
     └── segmentation/1/{cell_density_heatmap,segmentation_overview}.*
+
+
+
+phenotype/
+├── aligned_1.zarr/                              # HCS plate: primary image
+│   └── A/
+│       ├── 1/                                 # well A1
+│       │   ├── {2,5,141}/                     # tiles
+│       │   │   ├── zarr.json                  # multiscales + omero
+│       │   │   ├── 0/, 1/, 2/, ...
+│       │   │   └── labels/
+│       │   │       ├── cells.zarr/
+│       │   │       ├── nuclei.zarr/
+│       │   │       └── identified_cytoplasms.zarr/   # phenotype-only
+│       └── 2/                                 # well A2
+│           └── (same structure)
+├── illumination_corrected_1.zarr/               # HCS plate: derived image
+│   └── A/1/{2,5,141}/ ...
+│
+├── parquets/
+│   └── 1/A/{1,2}/
+│       ├── phenotype_cp.parquet
+│       ├── phenotype_cp_min.parquet
+│       └── phenotype_info.parquet
+├── tsvs/
+│   └── 1/A/{1,2}/{2,5,141}/segmentation_stats.tsv
+└── eval/
+    ├── features/1/cell_{DAPI,COXIV,CENPA,WGA}_min_heatmap.{png,tsv}
+    └── segmentation/1/{cell_density_heatmap,segmentation_overview}.*
+
+
 ```
 
 #### Zarr: Preprocess Module (`brieflow_output_zarr/preprocess/`)
