@@ -3,12 +3,12 @@
 # =============================================================================
 #
 # This file captures all experiment-level metadata for an OPS screen.
-# It serves as the single source of truth that the finalize_submission rule
-# reshapes into the spec-compliant experimental_metadata.yaml.
+# It serves as the single source of truth that prep_cellxstate.sh reshapes
+# into the spec-compliant experimental_metadata.yaml + collection_metadata.yaml.
 #
 # Fields marked [REQUIRED] MUST be filled in by the submitter.
 # Fields marked [OPTIONAL] SHOULD be filled in when available.
-# Fields marked [AUTO] are injected by the pipeline at finalize time.
+# Fields marked [AUTO] are injected by the pipeline at submission prep time.
 #
 # Ontology lookups:
 #   Organism:  https://www.ebi.ac.uk/ols4/ontologies/ncbitaxon
@@ -34,11 +34,6 @@ collection:
 # ---------------------------------------------------------------------------
 experiment:
   screen_title: ""             # [REQUIRED] Free-text title describing the screen
-  id: ""                       # Internal identifier (not in spec, used by brieflow)
-  notebook_entries: ""         # [OPTIONAL] Links to lab notebook entries
-  dates:
-    start: ""                  # [OPTIONAL] Experiment start date
-    end: ""                    # [OPTIONAL] Experiment end date
 
   # Ontology identifiers
   organism_ontology_term_id: ""        # [REQUIRED] e.g., "NCBITaxon:9606" (Homo sapiens)
@@ -62,19 +57,13 @@ experiment:
 # Cellular Conditions
 # ---------------------------------------------------------------------------
 cellular:
-  cell_line: ""                # [REQUIRED] e.g., "HeLa-TetR-Cas9 (A7)"
   growth_conditions: ""        # [REQUIRED] Free-text: media, supplements, culture conditions
                                # SHOULD include catalog numbers and concentrations
   plate_type: ""               # [REQUIRED] e.g., "6-well glass-bottom (Cellvis P06-1.5H-N)"
-  plates: ""                   # [OPTIONAL] Number of plates
-  wells_per_plate: ""          # [OPTIONAL] Number of wells per plate
   seeding:
     density_cells_cm2: null    # [OPTIONAL] Integer, cells per cm2
-    time_before_fixation: ""   # [OPTIONAL] e.g., "48 hours"
   induction:
     duration: ""               # [OPTIONAL] e.g., "78 hours"
-    inducer: ""                # [OPTIONAL] e.g., "Doxycycline"
-    concentration: ""          # [OPTIONAL] e.g., "2 ug/mL"
 
 # ---------------------------------------------------------------------------
 # CRISPR Library
@@ -82,26 +71,20 @@ cellular:
 library:
   vector: ""                   # [REQUIRED] e.g., "CROPseq-puro-v2 (Addgene #127458)"
   gene_selection: ""           # [OPTIONAL] Rationale for gene selection
-  number_of_genes: null        # [OPTIONAL] Integer
-  guides_per_gene: null        # [OPTIONAL] Integer
-  total_guides: null           # [OPTIONAL] Integer
-  nontargeting_controls: null  # [OPTIONAL] Integer
   positive_controls: []        # [OPTIONAL] List of positive control genes/perturbations
   negative_controls: []        # [OPTIONAL] List of negative control descriptions
-  barcode_length: null         # [OPTIONAL] Integer
 
 # ---------------------------------------------------------------------------
-# Sequencing by Synthesis (SBS / ISS)
+# In Situ Sequencing (ISS / SBS)
 # ---------------------------------------------------------------------------
-sbs:
+iss:
   cycles: null                 # [REQUIRED] Integer, number of sequencing cycles
-  objective: ""                # [OPTIONAL] Microscope objective for SBS imaging
+  objective: ""                # [OPTIONAL] Microscope objective for ISS imaging
   chemistry: ""                # [OPTIONAL] e.g., "four color"
-  channels:                    # [OPTIONAL] List of SBS imaging channels
-    - name: "DAPI"
+  channels:                    # [OPTIONAL] List of ISS imaging channels
+    - name: ""
       laser_wavelength_nm: null        # Integer
       exposure_time_ms: null           # Integer
-    # Add more channels as needed
 
 # ---------------------------------------------------------------------------
 # Phenotype (PH) Imaging
@@ -110,46 +93,16 @@ phenotype:
   objective: ""                # [REQUIRED] e.g., "20X 0.75 NA CFI Plan Apo Lambda"
   exposure_time_ms: []         # [REQUIRED] Per-channel exposure times in ms
                                # Length MUST match channels_metadata in config
-  channels:                    # Phenotype imaging channels (detailed)
-    - name: "DAPI"
-      marker_of: ""            # What it marks, e.g., "Nuclei (DNA)"
-      channel: ""              # Filter/channel name
-      antibody: ""             # [OPTIONAL] Antibody details
-      reagent: ""              # [OPTIONAL] Reagent details (for non-antibody stains)
-    # Add more channels as needed
 
 # ---------------------------------------------------------------------------
 # Microscope Hardware
 # ---------------------------------------------------------------------------
 microscope:
   system: ""                   # [REQUIRED] e.g., "Nikon Ti-2 inverted epifluorescence"
-  camera: ""                   # [OPTIONAL]
-  light_engine: ""             # [OPTIONAL]
-  control_software: ""         # [OPTIONAL]
 
 # ---------------------------------------------------------------------------
-# Fixation and In Situ Protocol
+# Data Processing
 # ---------------------------------------------------------------------------
-protocol:
-  fixation: ""                 # [OPTIONAL] e.g., "4% PFA in PBS, 30 min"
-  permeabilization: ""         # [OPTIONAL]
-  notes: ""                    # [OPTIONAL] Additional protocol notes
-
-# ---------------------------------------------------------------------------
-# Data Provenance
-# ---------------------------------------------------------------------------
-data:
-  storage_format: ""           # [OPTIONAL] e.g., "nd2", "tiff", "zarr"
-  location: ""                 # [OPTIONAL] Base path for raw data
-
 pipeline:
   github: "cheeseman-lab/brieflow"     # [AUTO] Hardcoded
   version: null                        # [AUTO] Injected from brieflow pyproject.toml
-
-# =============================================================================
-# SCHEMA VERSION
-# =============================================================================
-# This template aligns with OPS Data Standard v0.1.0.
-# The finalize_submission rule reshapes this into experimental_metadata.yaml
-# and injects channel names + pipeline version from the brieflow config.
-# =============================================================================
