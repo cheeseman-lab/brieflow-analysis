@@ -302,22 +302,13 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# 5. Cell data (parquet)
+# 5. Cell data (parquet) — IN DEVELOPMENT
 # ---------------------------------------------------------------------------
 echo "[5/7] Cell data..."
-CELL_DATA=$(find "${OUTPUT_ROOT}/merge" -name "*final_merge*" -name "*.parquet" 2>/dev/null | head -1)
-if [ -z "$CELL_DATA" ]; then
-    CELL_DATA=$(find "${OUTPUT_ROOT}/merge" -name "*.parquet" 2>/dev/null | head -1)
-fi
-if [ -n "$CELL_DATA" ]; then
-    cp "$CELL_DATA" "${SCREEN_DIR}/cell_data.parquet"
-    echo "  -> cell_data.parquet (TODO: column reshaping for spec compliance)"
-else
-    echo "  SKIP: no merge parquet found"
-fi
+echo "  SKIP: cell_data.parquet (in development)"
 
 # ---------------------------------------------------------------------------
-# 6. Zarr images (copy/symlink the plate zarr stores)
+# 6. Zarr images (symlink the plate zarr stores)
 # ---------------------------------------------------------------------------
 echo "[6/7] Zarr image stores..."
 ZARR_FOUND=false
@@ -334,17 +325,11 @@ if [ "$ZARR_FOUND" = false ]; then
 fi
 
 # ---------------------------------------------------------------------------
-# 7. Aggregated data + example images
+# 7. Aggregated data + example images — IN DEVELOPMENT
 # ---------------------------------------------------------------------------
 echo "[7/7] Aggregated data and example images..."
-AGG_DATA=$(find "${OUTPUT_ROOT}/aggregate" -name "*.h5ad" 2>/dev/null | head -1)
-if [ -n "$AGG_DATA" ]; then
-    cp "$AGG_DATA" "${SCREEN_DIR}/visualizations/default/aggregated_data.h5ad"
-    echo "  -> visualizations/default/aggregated_data.h5ad (TODO: reshape for spec)"
-else
-    echo "  SKIP: no aggregated_data.h5ad found"
-fi
-echo "  SKIP: examples.zarr (TODO: generate from crop pipeline)"
+echo "  SKIP: aggregated_data.h5ad (in development)"
+echo "  SKIP: examples.zarr (in development)"
 
 # ---------------------------------------------------------------------------
 # Summary
@@ -355,20 +340,18 @@ echo ""
 find "${SUBMISSION_DIR}" -type f -o -type l | sort | sed "s|${SUBMISSION_DIR}/||"
 echo ""
 
-# Count what's done vs TODO
-DONE=0
-TODO=0
-[ -f "${SUBMISSION_DIR}/collection_metadata.yaml" ] && DONE=$((DONE+1)) || TODO=$((TODO+1))
-[ -f "${SCREEN_DIR}/metadata/experimental_metadata.yaml" ] && DONE=$((DONE+1)) || TODO=$((TODO+1))
-[ -f "${SCREEN_DIR}/metadata/perturbation_library.csv" ] && DONE=$((DONE+1)) || TODO=$((TODO+1))
-[ -f "${SCREEN_DIR}/metadata/feature_definitions.csv" ] && DONE=$((DONE+1)) || TODO=$((TODO+1))
-[ -f "${SCREEN_DIR}/cell_data.parquet" ] && DONE=$((DONE+1)) || TODO=$((TODO+1))
-[ -L "${SCREEN_DIR}/"*.zarr 2>/dev/null ] && DONE=$((DONE+1)) || TODO=$((TODO+1))
-[ -f "${SCREEN_DIR}/visualizations/default/aggregated_data.h5ad" ] && DONE=$((DONE+1)) || TODO=$((TODO+1))
-
-echo "Artifacts: ${DONE} present, remaining work:"
-echo "  - [ ] Fill in all [REQUIRED] fields in screen.yaml"
-echo "  - [ ] Reshape cell_data.parquet columns to spec"
-echo "  - [ ] Reshape aggregated_data.h5ad to spec"
-echo "  - [ ] Generate examples.zarr from crop pipeline"
-echo "  - [ ] Run ops-validate on the submission directory"
+echo "Done:"
+echo "  [x] collection_metadata.yaml"
+echo "  [x] experimental_metadata.yaml"
+echo "  [x] perturbation_library.csv"
+echo "  [x] feature_definitions.csv"
+echo "  [x] zarr images (symlinked)"
+echo ""
+echo "In development:"
+echo "  [ ] cell_data.parquet (column reshaping)"
+echo "  [ ] aggregated_data.h5ad (AnnData structure)"
+echo "  [ ] examples.zarr (single-cell crops)"
+echo ""
+echo "Before submission:"
+echo "  [ ] Fill in all [REQUIRED] fields in screen.yaml"
+echo "  [ ] Run ops-validate on the submission directory"
