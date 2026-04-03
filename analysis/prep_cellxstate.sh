@@ -6,25 +6,27 @@
 # Reshapes brieflow pipeline outputs into the CellxState/OPS submission
 # directory structure:
 #
-#   {collection_root}/
+#   {submission_dir}/
 #   ├── collection_metadata.yaml
 #   └── {screen_name}/
 #       ├── metadata/
 #       │   ├── experimental_metadata.yaml
 #       │   ├── perturbation_library.csv
 #       │   └── feature_definitions.csv        (OPTIONAL)
-#       ├── cell_data.parquet
+#       ├── cell_data.parquet                  (TODO)
 #       ├── visualizations/
 #       │   └── {visualization_id}/
-#       │       ├── aggregated_data.h5ad
-#       │       └── examples.zarr
+#       │       ├── aggregated_data.h5ad       (TODO)
+#       │       └── examples.zarr              (TODO)
 #       └── {screen_name}.zarr
 #
 # Usage:
-#   bash prep_cellxstate.sh
+#   bash prep_cellxstate.sh [--test]
+#
+#   --test    Use small_test_analysis paths (for development/testing)
 #
 # Prerequisites:
-#   - Pipeline must have completed (all_sbs, all_phenotype, all_merge, all_aggregate)
+#   - Pipeline must have completed (all_sbs, all_phenotype, all_merge, etc.)
 #   - analysis/screen.yaml must be filled in
 #   - conda env with brieflow installed
 #
@@ -33,29 +35,34 @@
 set -euo pipefail
 
 # ---------------------------------------------------------------------------
-# Configuration — edit these for your screen
+# Configuration
 # ---------------------------------------------------------------------------
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(dirname "$SCRIPT_DIR")"
 
-# Source paths (brieflow pipeline outputs)
+# Default paths (production)
 SCREEN_YAML="${SCRIPT_DIR}/screen.yaml"
-CONFIG_YAML="${SCRIPT_DIR}/config/screen.yml"  # brieflow pipeline config
+CONFIG_YAML="${SCRIPT_DIR}/config/screen.yml"
+BARCODE_LIBRARY_FP=""  # auto-detect from config
 
-# Read screen name from screen.yaml
+# Test mode overrides
+if [[ "${1:-}" == "--test" ]]; then
+    echo "*** TEST MODE: using small_test_analysis ***"
+    TEST_DIR="${REPO_ROOT}/brieflow/tests/small_test_analysis"
+    CONFIG_YAML="${TEST_DIR}/config/config_omezarr.yml"
+    BARCODE_LIBRARY_FP="${TEST_DIR}/config/barcode_library.tsv"
+fi
+
+# Read config values
 SCREEN_NAME=$(python3 -c "
 import yaml
 with open('${SCREEN_YAML}') as f:
     cfg = yaml.safe_load(f)
-print(cfg['experiment']['id'])
+title = cfg.get('experiment', {}).get('screen_title', '')
+# Use screen_title or fall back to a slug
+print(title.lower().replace(' ', '_') if title else 'unnamed_screen')
 ")
 
-if [ -z "$SCREEN_NAME" ]; then
-    echo "ERROR: experiment.id is empty in screen.yaml"
-    exit 1
-fi
-
-# Pipeline output root (from brieflow config)
 OUTPUT_ROOT=$(python3 -c "
 import yaml
 with open('${CONFIG_YAML}') as f:
@@ -63,12 +70,32 @@ with open('${CONFIG_YAML}') as f:
 print(cfg['all']['root_fp'])
 ")
 
+# If running in test mode, resolve OUTPUT_ROOT relative to test dir
+if [[ "${1:-}" == "--test" ]]; then
+    OUTPUT_ROOT="${TEST_DIR}/${OUTPUT_ROOT}"
+fi
+
+# Auto-detect barcode library from config if not set
+if [ -z "$BARCODE_LIBRARY_FP" ]; then
+    BARCODE_LIBRARY_FP=$(python3 -c "
+import yaml
+with open('${CONFIG_YAML}') as f:
+    cfg = yaml.safe_load(f)
+print(cfg.get('sbs', {}).get('df_barcode_library_fp', ''))
+")
+    # Resolve relative to config dir
+    if [ -n "$BARCODE_LIBRARY_FP" ] && [ ! -f "$BARCODE_LIBRARY_FP" ]; then
+        BARCODE_LIBRARY_FP="$(dirname "${CONFIG_YAML}")/../${BARCODE_LIBRARY_FP}"
+    fi
+fi
+
 # Submission output directory
 SUBMISSION_DIR="${SCRIPT_DIR}/cellxstate_submission"
 
 echo "=== OPS Data Standard Submission Prep ==="
 echo "Screen:     ${SCREEN_NAME}"
 echo "Output:     ${OUTPUT_ROOT}"
+echo "Barcode:    ${BARCODE_LIBRARY_FP}"
 echo "Submission: ${SUBMISSION_DIR}"
 echo ""
 
@@ -76,11 +103,12 @@ echo ""
 # Create submission directory structure
 # ---------------------------------------------------------------------------
 SCREEN_DIR="${SUBMISSION_DIR}/${SCREEN_NAME}"
+rm -rf "${SUBMISSION_DIR}"
 mkdir -p "${SCREEN_DIR}/metadata"
 mkdir -p "${SCREEN_DIR}/visualizations/default"
 
 # ---------------------------------------------------------------------------
-# 1. Collection metadata (from screen.yaml → collection_metadata.yaml)
+# 1. Collection metadata
 # ---------------------------------------------------------------------------
 echo "[1/7] Generating collection_metadata.yaml..."
 python3 -c "
@@ -102,8 +130,7 @@ with open('${SUBMISSION_DIR}/collection_metadata.yaml', 'w') as f:
 echo "  -> collection_metadata.yaml"
 
 # ---------------------------------------------------------------------------
-# 2. Experimental metadata (from screen.yaml → experimental_metadata.yaml)
-#    Injects channel names from config + brieflow version
+# 2. Experimental metadata
 # ---------------------------------------------------------------------------
 echo "[2/7] Generating experimental_metadata.yaml..."
 python3 -c "
@@ -113,7 +140,7 @@ from pathlib import Path
 with open('${SCREEN_YAML}') as f:
     screen = yaml.safe_load(f)
 
-# Read brieflow version from pyproject.toml
+# Read brieflow version
 version = 'unknown'
 pyproject = Path('${REPO_ROOT}/brieflow/pyproject.toml')
 if pyproject.exists():
@@ -132,7 +159,6 @@ try:
 except Exception:
     pass
 
-# Build spec-compliant experimental_metadata
 meta = {
     'experiment': {
         'screen_title': screen.get('experiment', {}).get('screen_title', ''),
@@ -149,19 +175,9 @@ meta = {
         'assay': screen.get('experiment', {}).get('assay', 'optical pooled screening'),
         'pseudobulk': screen.get('experiment', {}).get('pseudobulk', []),
     },
-    'cellular': {
-        'growth_conditions': screen.get('cellular', {}).get('growth_conditions', ''),
-        'plate_type': screen.get('cellular', {}).get('plate_type', ''),
-        'seeding': screen.get('cellular', {}).get('seeding', {}),
-        'induction': screen.get('cellular', {}).get('induction', {}),
-    },
+    'cellular': screen.get('cellular', {}),
     'library': screen.get('library', {}),
-    'iss': {
-        'cycles': screen.get('sbs', {}).get('cycles'),
-        'objective': screen.get('sbs', {}).get('objective', ''),
-        'chemistry': screen.get('sbs', {}).get('chemistry', ''),
-        'channels': screen.get('sbs', {}).get('channels', []),
-    },
+    'iss': screen.get('iss', {}),
     'phenotype': {
         'objective': screen.get('phenotype', {}).get('objective', ''),
         'exposure_time_ms': screen.get('phenotype', {}).get('exposure_time_ms', []),
@@ -180,9 +196,44 @@ with open('${SCREEN_DIR}/metadata/experimental_metadata.yaml', 'w') as f:
 echo "  -> metadata/experimental_metadata.yaml"
 
 # ---------------------------------------------------------------------------
-# 3. Feature definitions (expand template with channel/compartment names)
+# 3. Perturbation library (reshape barcode_library.tsv → spec CSV)
 # ---------------------------------------------------------------------------
-echo "[3/7] Generating feature_definitions.csv..."
+echo "[3/7] Generating perturbation_library.csv..."
+if [ -n "$BARCODE_LIBRARY_FP" ] && [ -f "$BARCODE_LIBRARY_FP" ]; then
+    python3 -c "
+import pandas as pd
+
+df = pd.read_csv('${BARCODE_LIBRARY_FP}', sep='\t')
+
+# Build spec-compliant perturbation_library.csv
+out = pd.DataFrame()
+out['perturbation_id'] = df['gene_symbol']
+out['gene_id'] = df.get('gene_id', '')
+out['gene_symbol'] = df['gene_symbol']
+out['barcode'] = df['prefix']
+out['role'] = df.get('role', 'targeting')
+out['control_type'] = df.get('control_type', '')
+out['protospacer_sequence'] = df.get('protospacer_sequence', '')
+out['protospacer_adjacent_motif'] = df.get('protospacer_adjacent_motif', \"3' NGG\")
+
+# Optional columns
+if 'sgrna_target_locus' in df.columns:
+    out['sgrna_target_locus'] = df['sgrna_target_locus']
+
+# Drop empty control_type for targeting guides (spec requires absent, not empty)
+out.loc[out['role'] == 'targeting', 'control_type'] = ''
+
+out.to_csv('${SCREEN_DIR}/metadata/perturbation_library.csv', index=False)
+print(f'  -> metadata/perturbation_library.csv ({len(out)} rows)')
+"
+else
+    echo "  SKIP: barcode library not found at ${BARCODE_LIBRARY_FP}"
+fi
+
+# ---------------------------------------------------------------------------
+# 4. Feature definitions (expand template with channel/compartment names)
+# ---------------------------------------------------------------------------
+echo "[4/7] Generating feature_definitions.csv..."
 FEATURE_TEMPLATE="${REPO_ROOT}/brieflow/workflow/lib/external/feature_definitions.csv"
 if [ -f "$FEATURE_TEMPLATE" ]; then
     python3 -c "
@@ -191,13 +242,11 @@ import yaml
 from itertools import combinations
 from pathlib import Path
 
-# Read channel names from config
 with open('${CONFIG_YAML}') as f:
     cfg = yaml.safe_load(f)
 channels = [ch['name'] for ch in cfg.get('preprocess', {}).get('phenotype_channels_metadata', [])]
 compartments = ['nucleus', 'cell', 'cytoplasm']
 
-# Read brieflow version
 version = 'unknown'
 pyproject = Path('${REPO_ROOT}/brieflow/pyproject.toml')
 if pyproject.exists():
@@ -206,27 +255,21 @@ if pyproject.exists():
             version = line.split('=')[1].strip().strip('\"')
             break
 
-# Read template
 with open('${FEATURE_TEMPLATE}') as f:
     reader = csv.DictReader(f)
     templates = list(reader)
 
-# Expand
 rows = []
 for t in templates:
     fid = t['feature_id']
     fname = t['feature_name']
-
-    # Determine what placeholders are present
     has_compartment = '{compartment}' in fid
     has_channel = '{channel}' in fid
     has_two_channels = fid.count('{channel}') == 2
-
     comps = compartments if has_compartment else ['']
 
     for comp in comps:
         if has_two_channels:
-            # Channel pair features (correlation, colocalization)
             for ch1, ch2 in combinations(channels, 2):
                 row = dict(t)
                 row['feature_id'] = fid.replace('{compartment}', comp).replace('{channel}', ch1, 1).replace('{channel}', ch2, 1)
@@ -259,71 +302,73 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# 4. Perturbation library
-# ---------------------------------------------------------------------------
-echo "[4/7] Copying perturbation_library.csv..."
-# TODO: reshape brieflow gene library to spec format
-# For now, look for existing file
-PERT_LIB=$(find "${OUTPUT_ROOT}" -name "perturbation_library.csv" -o -name "gene_library.csv" 2>/dev/null | head -1)
-if [ -n "$PERT_LIB" ]; then
-    cp "$PERT_LIB" "${SCREEN_DIR}/metadata/perturbation_library.csv"
-    echo "  -> metadata/perturbation_library.csv"
-else
-    echo "  SKIP: no perturbation library found (TODO: reshape from brieflow input)"
-fi
-
-# ---------------------------------------------------------------------------
 # 5. Cell data (parquet)
 # ---------------------------------------------------------------------------
-echo "[5/7] Copying cell_data.parquet..."
-# TODO: reshape brieflow merge output to spec column names
-CELL_DATA=$(find "${OUTPUT_ROOT}/merge" -name "*.parquet" -path "*/combined*" 2>/dev/null | head -1)
+echo "[5/7] Cell data..."
+CELL_DATA=$(find "${OUTPUT_ROOT}/merge" -name "*final_merge*" -name "*.parquet" 2>/dev/null | head -1)
+if [ -z "$CELL_DATA" ]; then
+    CELL_DATA=$(find "${OUTPUT_ROOT}/merge" -name "*.parquet" 2>/dev/null | head -1)
+fi
 if [ -n "$CELL_DATA" ]; then
     cp "$CELL_DATA" "${SCREEN_DIR}/cell_data.parquet"
-    echo "  -> cell_data.parquet"
+    echo "  -> cell_data.parquet (TODO: column reshaping for spec compliance)"
 else
-    echo "  SKIP: no merged cell data found"
+    echo "  SKIP: no merge parquet found"
 fi
 
 # ---------------------------------------------------------------------------
-# 6. Zarr images (copy/link the plate zarr stores)
+# 6. Zarr images (copy/symlink the plate zarr stores)
 # ---------------------------------------------------------------------------
-echo "[6/7] Copying zarr image stores..."
-# Copy phenotype zarr stores (the primary image data)
-for zarr_store in "${OUTPUT_ROOT}"/phenotype/*.zarr; do
+echo "[6/7] Zarr image stores..."
+ZARR_FOUND=false
+for zarr_store in "${OUTPUT_ROOT}"/phenotype/aligned_*.zarr; do
     if [ -d "$zarr_store" ]; then
         store_name=$(basename "$zarr_store")
-        echo "  Copying ${store_name}..."
-        cp -r "$zarr_store" "${SCREEN_DIR}/${store_name}"
+        echo "  Linking ${store_name}..."
+        ln -sfn "$(realpath "$zarr_store")" "${SCREEN_DIR}/${store_name}"
+        ZARR_FOUND=true
     fi
 done
-echo "  -> zarr stores copied"
+if [ "$ZARR_FOUND" = false ]; then
+    echo "  SKIP: no phenotype zarr stores found"
+fi
 
 # ---------------------------------------------------------------------------
-# 7. Aggregated data + example images (placeholders)
+# 7. Aggregated data + example images
 # ---------------------------------------------------------------------------
 echo "[7/7] Aggregated data and example images..."
 AGG_DATA=$(find "${OUTPUT_ROOT}/aggregate" -name "*.h5ad" 2>/dev/null | head -1)
 if [ -n "$AGG_DATA" ]; then
     cp "$AGG_DATA" "${SCREEN_DIR}/visualizations/default/aggregated_data.h5ad"
-    echo "  -> visualizations/default/aggregated_data.h5ad"
+    echo "  -> visualizations/default/aggregated_data.h5ad (TODO: reshape for spec)"
 else
-    echo "  SKIP: no aggregated_data.h5ad found (TODO: reshape from brieflow aggregate output)"
+    echo "  SKIP: no aggregated_data.h5ad found"
 fi
-echo "  SKIP: examples.zarr (TODO: generate from montage/crop pipeline)"
+echo "  SKIP: examples.zarr (TODO: generate from crop pipeline)"
 
 # ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------
 echo ""
-echo "=== Submission directory ready ==="
+echo "=== Submission directory ==="
 echo ""
-find "${SUBMISSION_DIR}" -type f | sort | sed "s|${SUBMISSION_DIR}/||"
+find "${SUBMISSION_DIR}" -type f -o -type l | sort | sed "s|${SUBMISSION_DIR}/||"
 echo ""
-echo "Remaining TODOs:"
+
+# Count what's done vs TODO
+DONE=0
+TODO=0
+[ -f "${SUBMISSION_DIR}/collection_metadata.yaml" ] && DONE=$((DONE+1)) || TODO=$((TODO+1))
+[ -f "${SCREEN_DIR}/metadata/experimental_metadata.yaml" ] && DONE=$((DONE+1)) || TODO=$((TODO+1))
+[ -f "${SCREEN_DIR}/metadata/perturbation_library.csv" ] && DONE=$((DONE+1)) || TODO=$((TODO+1))
+[ -f "${SCREEN_DIR}/metadata/feature_definitions.csv" ] && DONE=$((DONE+1)) || TODO=$((TODO+1))
+[ -f "${SCREEN_DIR}/cell_data.parquet" ] && DONE=$((DONE+1)) || TODO=$((TODO+1))
+[ -L "${SCREEN_DIR}/"*.zarr 2>/dev/null ] && DONE=$((DONE+1)) || TODO=$((TODO+1))
+[ -f "${SCREEN_DIR}/visualizations/default/aggregated_data.h5ad" ] && DONE=$((DONE+1)) || TODO=$((TODO+1))
+
+echo "Artifacts: ${DONE} present, remaining work:"
 echo "  - [ ] Fill in all [REQUIRED] fields in screen.yaml"
-echo "  - [ ] Reshape perturbation_library.csv to spec format"
-echo "  - [ ] Reshape cell_data.parquet columns to spec format"
-echo "  - [ ] Reshape aggregated_data.h5ad to spec format"
-echo "  - [ ] Generate examples.zarr from image crops"
+echo "  - [ ] Reshape cell_data.parquet columns to spec"
+echo "  - [ ] Reshape aggregated_data.h5ad to spec"
+echo "  - [ ] Generate examples.zarr from crop pipeline"
 echo "  - [ ] Run ops-validate on the submission directory"
