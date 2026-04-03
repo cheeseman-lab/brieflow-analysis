@@ -302,15 +302,21 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# 5. Cell data (parquet) — IN DEVELOPMENT
+# 5. Cell data (singlecell h5ad from aggregate)
 # ---------------------------------------------------------------------------
-echo "[5/7] Cell data..."
-echo "  SKIP: cell_data.parquet (in development)"
+echo "[5/8] Cell data (AnnData)..."
+CELL_H5AD=$(find "${OUTPUT_ROOT}/aggregate/anndata" -name "*.h5ad" 2>/dev/null | head -1)
+if [ -n "$CELL_H5AD" ]; then
+    cp "$CELL_H5AD" "${SCREEN_DIR}/cell_data.h5ad"
+    echo "  -> cell_data.h5ad (TODO: spec says .parquet — may need format discussion)"
+else
+    echo "  SKIP: no singlecell.h5ad found in aggregate/anndata/"
+fi
 
 # ---------------------------------------------------------------------------
 # 6. Zarr images (symlink the plate zarr stores)
 # ---------------------------------------------------------------------------
-echo "[6/7] Zarr image stores..."
+echo "[6/8] Zarr image stores..."
 ZARR_FOUND=false
 for zarr_store in "${OUTPUT_ROOT}"/phenotype/aligned_*.zarr; do
     if [ -d "$zarr_store" ]; then
@@ -325,11 +331,23 @@ if [ "$ZARR_FOUND" = false ]; then
 fi
 
 # ---------------------------------------------------------------------------
-# 7. Aggregated data + example images — IN DEVELOPMENT
+# 7. Example images (examples.zarr from montage pipeline)
 # ---------------------------------------------------------------------------
-echo "[7/7] Aggregated data and example images..."
-echo "  SKIP: aggregated_data.h5ad (in development)"
-echo "  SKIP: examples.zarr (in development)"
+echo "[7/8] Example images..."
+EXAMPLES_ZARR=$(find "${OUTPUT_ROOT}/aggregate/montages" -name "*__examples.zarr" -type d 2>/dev/null | head -1)
+if [ -n "$EXAMPLES_ZARR" ]; then
+    ln -sfn "$(realpath "$EXAMPLES_ZARR")" "${SCREEN_DIR}/visualizations/default/examples.zarr"
+    NUM_GENES=$(ls "$EXAMPLES_ZARR" 2>/dev/null | wc -l)
+    echo "  -> visualizations/default/examples.zarr (${NUM_GENES} perturbations)"
+else
+    echo "  SKIP: no examples.zarr found in aggregate/montages/"
+fi
+
+# ---------------------------------------------------------------------------
+# 8. Aggregated data (h5ad — placeholder for visualization-level summary)
+# ---------------------------------------------------------------------------
+echo "[8/8] Aggregated data..."
+echo "  SKIP: aggregated_data.h5ad (visualization-level summary, in development)"
 
 # ---------------------------------------------------------------------------
 # Summary
@@ -346,11 +364,12 @@ echo "  [x] experimental_metadata.yaml"
 echo "  [x] perturbation_library.csv"
 echo "  [x] feature_definitions.csv"
 echo "  [x] zarr images (symlinked)"
+echo "  [x] cell_data.h5ad (single-cell AnnData)"
+echo "  [x] examples.zarr (single-cell crops)"
 echo ""
 echo "In development:"
-echo "  [ ] cell_data.parquet (column reshaping)"
-echo "  [ ] aggregated_data.h5ad (AnnData structure)"
-echo "  [ ] examples.zarr (single-cell crops)"
+echo "  [ ] aggregated_data.h5ad (visualization-level perturbation summary)"
+echo "  [ ] Spec discussion: cell_data format (parquet vs h5ad)"
 echo ""
 echo "Before submission:"
 echo "  [ ] Fill in all [REQUIRED] fields in screen.yaml"
