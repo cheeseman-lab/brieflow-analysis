@@ -314,15 +314,15 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# 6. Zarr images (symlink the plate zarr stores)
+# 6. Zarr images (copy the plate zarr stores)
 # ---------------------------------------------------------------------------
 echo "[6/8] Zarr image stores..."
 ZARR_FOUND=false
 for zarr_store in "${OUTPUT_ROOT}"/phenotype/aligned_*.zarr; do
     if [ -d "$zarr_store" ]; then
         store_name=$(basename "$zarr_store")
-        echo "  Linking ${store_name}..."
-        ln -sfn "$(realpath "$zarr_store")" "${SCREEN_DIR}/${store_name}"
+        echo "  Copying ${store_name}..."
+        cp -r "$zarr_store" "${SCREEN_DIR}/${store_name}"
         ZARR_FOUND=true
     fi
 done
@@ -336,7 +336,7 @@ fi
 echo "[7/8] Example images..."
 EXAMPLES_ZARR=$(find "${OUTPUT_ROOT}/aggregate/montages" -name "*__examples.zarr" -type d 2>/dev/null | head -1)
 if [ -n "$EXAMPLES_ZARR" ]; then
-    ln -sfn "$(realpath "$EXAMPLES_ZARR")" "${SCREEN_DIR}/visualizations/default/examples.zarr"
+    cp -r "$EXAMPLES_ZARR" "${SCREEN_DIR}/visualizations/default/examples.zarr"
     NUM_GENES=$(ls "$EXAMPLES_ZARR" 2>/dev/null | wc -l)
     echo "  -> visualizations/default/examples.zarr (${NUM_GENES} perturbations)"
 else
@@ -355,7 +355,7 @@ echo "  SKIP: aggregated_data.h5ad (visualization-level summary, in development)
 echo ""
 echo "=== Submission directory ==="
 echo ""
-find "${SUBMISSION_DIR}" -type f -o -type l | sort | sed "s|${SUBMISSION_DIR}/||"
+find "${SUBMISSION_DIR}" -type f | sort | sed "s|${SUBMISSION_DIR}/||"
 echo ""
 
 echo "Done:"
@@ -363,7 +363,7 @@ echo "  [x] collection_metadata.yaml"
 echo "  [x] experimental_metadata.yaml"
 echo "  [x] perturbation_library.csv"
 echo "  [x] feature_definitions.csv"
-echo "  [x] zarr images (symlinked)"
+echo "  [x] zarr images"
 echo "  [x] cell_data.h5ad (single-cell AnnData)"
 echo "  [x] examples.zarr (single-cell crops)"
 echo ""
@@ -374,3 +374,13 @@ echo ""
 echo "Before submission:"
 echo "  [ ] Fill in all [REQUIRED] fields in screen.yaml"
 echo "  [ ] Run ops-validate on the submission directory"
+
+# ---------------------------------------------------------------------------
+# Zip submission
+# ---------------------------------------------------------------------------
+ZIP_FILE="${SUBMISSION_DIR}.zip"
+echo ""
+echo "Creating ${ZIP_FILE}..."
+cd "$(dirname "${SUBMISSION_DIR}")"
+zip -r "$(basename "${ZIP_FILE}")" "$(basename "${SUBMISSION_DIR}")" -q
+echo "  -> $(du -sh "${ZIP_FILE}" | cut -f1) compressed"
