@@ -347,10 +347,16 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# 8. Aggregated data (h5ad — placeholder for visualization-level summary)
+# 8. Aggregated data (cluster-level h5ad with embeddings + features)
 # ---------------------------------------------------------------------------
 echo "[8/8] Aggregated data..."
-echo "  SKIP: aggregated_data.h5ad (visualization-level summary, in development)"
+AGG_H5AD=$(find "${OUTPUT_ROOT}/cluster" -name "*aggregated_data.h5ad" 2>/dev/null | head -1)
+if [ -n "$AGG_H5AD" ]; then
+    cp "$AGG_H5AD" "${SCREEN_DIR}/visualizations/default/aggregated_data.h5ad"
+    echo "  -> visualizations/default/aggregated_data.h5ad"
+else
+    echo "  SKIP: no aggregated_data.h5ad found in cluster/"
+fi
 
 # ---------------------------------------------------------------------------
 # Summary
@@ -370,9 +376,7 @@ echo "  [x] zarr images"
 echo "  [x] cell_data.h5ad (single-cell AnnData)"
 echo "  [x] examples.zarr (single-cell crops)"
 echo ""
-echo "In development:"
-echo "  [ ] aggregated_data.h5ad (visualization-level perturbation summary)"
-echo "  [ ] Spec discussion: cell_data format (parquet vs h5ad)"
+echo "  [x] aggregated_data.h5ad (perturbation-level with PHATE embedding)"
 echo ""
 echo "Before submission:"
 echo "  [ ] Fill in all [REQUIRED] fields in screen.yaml"
