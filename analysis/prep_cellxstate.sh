@@ -268,30 +268,33 @@ for t in templates:
     has_two_channels = fid.count('{channel}') == 2
     comps = compartments if has_compartment else ['']
 
+    def expand_row(row, comp, ch=None, ch2=None):
+        r = dict(row)
+        r['feature_id'] = r['feature_id'].replace('{compartment}', comp)
+        r['feature_name'] = r['feature_name'].replace('{Compartment}', comp.capitalize())
+        r['compartment'] = r.get('compartment', '').replace('{compartment}', comp)
+        if ch:
+            r['feature_id'] = r['feature_id'].replace('{channel}', ch, 1)
+            r['feature_name'] = r['feature_name'].replace('{Channel}', ch, 1)
+            r['channel'] = ch
+        if ch2:
+            r['feature_id'] = r['feature_id'].replace('{channel}', ch2, 1)
+            r['feature_name'] = r['feature_name'].replace('{Channel}', ch2, 1)
+        r['version'] = version
+        return r
+
     for comp in comps:
         if has_two_channels:
             for ch1, ch2 in combinations(channels, 2):
-                row = dict(t)
-                row['feature_id'] = fid.replace('{compartment}', comp).replace('{channel}', ch1, 1).replace('{channel}', ch2, 1)
-                row['feature_name'] = fname.replace('{Compartment}', comp.capitalize()).replace('{Channel}', ch1, 1).replace('{Channel}', ch2, 1)
-                row['version'] = version
-                rows.append(row)
+                rows.append(expand_row(t, comp, ch1, ch2))
         elif has_channel:
             for ch in channels:
-                row = dict(t)
-                row['feature_id'] = fid.replace('{compartment}', comp).replace('{channel}', ch)
-                row['feature_name'] = fname.replace('{Compartment}', comp.capitalize()).replace('{Channel}', ch)
-                row['version'] = version
-                rows.append(row)
+                rows.append(expand_row(t, comp, ch))
         else:
-            row = dict(t)
-            row['feature_id'] = fid.replace('{compartment}', comp)
-            row['feature_name'] = fname.replace('{Compartment}', comp.capitalize())
-            row['version'] = version
-            rows.append(row)
+            rows.append(expand_row(t, comp))
 
 with open('${SCREEN_DIR}/metadata/feature_definitions.csv', 'w', newline='') as f:
-    writer = csv.DictWriter(f, fieldnames=['feature_id', 'feature_name', 'feature_type', 'unit', 'software', 'version'])
+    writer = csv.DictWriter(f, fieldnames=['feature_id', 'feature_name', 'feature_type', 'compartment', 'channel', 'unit', 'software', 'version'])
     writer.writeheader()
     writer.writerows(rows)
 
