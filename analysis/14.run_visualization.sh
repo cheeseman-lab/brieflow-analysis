@@ -5,4 +5,4 @@ export CONFIG_PATH="config/config.yml"
 export SCREEN_PATH="screen.yaml"
 
 # Start Streamlit server, force bind to 0.0.0.0
-exec streamlit run ../brieflow/visualization/Experimental_Overview.py --server.address=0.0.0.0 "$@"
+exec streamlit run ../brieflow/visualization/Cluster_Analysis.py --server.address=0.0.0.0 "$@"
