@@ -311,7 +311,7 @@ echo "[5/8] Cell data (AnnData)..."
 CELL_H5AD=$(find "${OUTPUT_ROOT}/aggregate/anndata" -name "*.h5ad" 2>/dev/null | head -1)
 if [ -n "$CELL_H5AD" ]; then
     cp "$CELL_H5AD" "${SCREEN_DIR}/cell_data.h5ad"
-    echo "  -> cell_data.h5ad (TODO: spec says .parquet — may need format discussion)"
+    echo "  -> cell_data.h5ad (single-cell AnnData)"
 else
     echo "  SKIP: no singlecell.h5ad found in aggregate/anndata/"
 fi
@@ -350,12 +350,12 @@ fi
 # 8. Aggregated data (cluster-level h5ad with embeddings + features)
 # ---------------------------------------------------------------------------
 echo "[8/8] Aggregated data..."
-AGG_H5AD=$(find "${OUTPUT_ROOT}/cluster" -name "*aggregated_data.h5ad" 2>/dev/null | head -1)
+AGG_H5AD=$(find "${OUTPUT_ROOT}/cluster" -name "*cluster.h5ad" 2>/dev/null | head -1)
 if [ -n "$AGG_H5AD" ]; then
     cp "$AGG_H5AD" "${SCREEN_DIR}/visualizations/default/aggregated_data.h5ad"
-    echo "  -> visualizations/default/aggregated_data.h5ad"
+    echo "  -> visualizations/default/aggregated_data.h5ad (from cluster.h5ad)"
 else
-    echo "  SKIP: no aggregated_data.h5ad found in cluster/"
+    echo "  SKIP: no cluster.h5ad found in cluster/"
 fi
 
 # ---------------------------------------------------------------------------
