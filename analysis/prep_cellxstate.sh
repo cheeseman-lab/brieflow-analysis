@@ -350,10 +350,84 @@ fi
 # 8. Aggregated data (cluster-level h5ad with embeddings + features)
 # ---------------------------------------------------------------------------
 echo "[8/8] Aggregated data..."
-AGG_H5AD=$(find "${OUTPUT_ROOT}/cluster" -name "*cluster.h5ad" 2>/dev/null | head -1)
+AGG_H5AD=$(find "${OUTPUT_ROOT}/cluster" -path "*/h5ad/*cluster.h5ad" 2>/dev/null | head -1)
 if [ -n "$AGG_H5AD" ]; then
-    cp "$AGG_H5AD" "${SCREEN_DIR}/visualizations/default/aggregated_data.h5ad"
-    echo "  -> visualizations/default/aggregated_data.h5ad (from cluster.h5ad)"
+    python3 -c "
+import anndata as ad
+import numpy as np
+import yaml
+from itertools import combinations
+
+adata = ad.read_h5ad('${AGG_H5AD}')
+print(f'Input: {adata}')
+
+# Read channel names from config
+with open('${CONFIG_YAML}') as f:
+    cfg = yaml.safe_load(f)
+channel_names = [ch['name'] for ch in cfg.get('preprocess', {}).get('phenotype_channels_metadata', [])]
+
+# Build standardized feature set
+compartments = ['nucleus', 'cell']
+shape_measurements = ['area', 'eccentricity', 'form_factor', 'solidity']
+intensity_measurements = [
+    'integrated', 'mean', 'mass_displacement',
+    'mean_edge', 'std_edge', 'mean_frac_0', 'mean_frac_3',
+]
+standardized = set()
+for comp in compartments:
+    for meas in shape_measurements:
+        standardized.add(f'{comp}_{meas}')
+    for ch in channel_names:
+        for meas in intensity_measurements:
+            standardized.add(f'{comp}_{ch}_{meas}')
+
+# Match correlation features from actual data (pair ordering varies)
+for f in adata.var_names:
+    parts = f.split('_')
+    if len(parts) >= 3 and parts[0] in compartments and parts[1] == 'correlation':
+        standardized.add(f)
+
+matched = [f for f in adata.var_names if f in standardized]
+print(f'Standardized features: {len(matched)} of {len(adata.var_names)}')
+
+adata = adata[:, matched].copy()
+
+# Keep only spec-required layers
+spec_layers = ['p_values', 'neg_log10_fdr']
+for layer in list(adata.layers.keys()):
+    if layer not in spec_layers:
+        del adata.layers[layer]
+
+# Keep only one cluster_group column (first available)
+cluster_cols = [c for c in adata.obs.columns if c.startswith('cluster_group_')]
+if len(cluster_cols) > 1:
+    keep = cluster_cols[0]
+    for c in cluster_cols[1:]:
+        adata.obs = adata.obs.drop(columns=[c])
+    print(f'Kept cluster column: {keep}')
+
+# Keep only spec obs columns
+spec_obs = {'cell_cycle_phase'} | {c for c in adata.obs.columns if c.startswith('cluster_group_')}
+extra_obs = [c for c in adata.obs.columns if c not in spec_obs]
+if extra_obs:
+    adata.obs = adata.obs.drop(columns=extra_obs)
+
+# Keep only spec var columns
+spec_var = {'feature_name', 'feature_type', 'compartment'}
+extra_var = [c for c in adata.var.columns if c not in spec_var]
+if extra_var:
+    adata.var = adata.var.drop(columns=extra_var)
+
+# Keep only spec uns
+spec_uns = {'schema_version', 'default_embedding', 'title'}
+for k in list(adata.uns.keys()):
+    if k not in spec_uns:
+        del adata.uns[k]
+
+print(f'Output: {adata}')
+adata.write_h5ad('${SCREEN_DIR}/visualizations/default/aggregated_data.h5ad')
+"
+    echo "  -> visualizations/default/aggregated_data.h5ad (reformatted from cluster.h5ad)"
 else
     echo "  SKIP: no cluster.h5ad found in cluster/"
 fi
