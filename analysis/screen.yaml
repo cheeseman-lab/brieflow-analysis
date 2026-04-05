@@ -1,60 +1,56 @@
 # Screen Information
 experiment:
-  id: ""  # Experiment identifier
-  notebook_entries: ""  # Links or references to lab notebook entries
+  id: "baker"  # Experiment identifier
+  notebook_entries: "MISSING"  # Links or references to lab notebook entries
   dates: 
-    start: ""
-    end: ""
+    start: "MISSING"
+    end: "MISSING"
 
 # Cellular Conditions
 cellular:
-  cell_line: ""  # e.g., HeLa, HEK293, etc.
-  imaging_timepoint: ""  # When imaging occurred after treatment
+  cell_line: "HeLa"
+  imaging_timepoint: "MISSING"
   treatment:
-    summary: ""  # Brief description of treatment
-    details: ""  # Detailed protocol or conditions
-  plates: ""  # Number of plates
-  wells_per_plate: ""  # Number of wells per plate
+    summary: "400 pilot genes"
+    details: "MISSING"  # Detailed protocol or conditions
+  plates: "1"  # Number of plates
+  wells_per_plate: "6"  # Number of wells per plate
 
 # Sequencing by Synthesis (SBS)
 sbs:
-  cycles: ""  # Number of cycles
-  cycle_order: ""  # Order of cycles
-  background_channel: ""  # Suggested background channel
+  cycles: "9"  # Number of cycles
+  cycle_order: "GTAC"  # Order of cycles
+  background_channel: "C, cycle 9"  # Suggested background channel
   library_details:
-    number_of_genes: ""
-    guides_per_gene: ""
-    other_information: ""
+    number_of_genes: "400"
+    guides_per_gene: "MISSING"
+    other_information: "Part of 400 pilot genes screening library"
 
 # Phenotype (PH) Steps
 phenotype:
-  background_channel_cell: ""  # For cell segmentation
-  background_channel_body: ""  # For body (e.g. parasite) segmentation
+  background_channel_cell: "WGA"  # For cell segmentation
+  background_channel_body: "MISSING"  # For body (e.g. parasite) segmentation
   
-  # Rounds of staining/imaging (in order they were stained for each round)
-  # Add more rounds as needed
+  # Rounds of staining/imaging (all stains in one round)
   rounds:
     - round_number: 1
       stains:
-        - name: "DAPI"  # Name of stain/antibody
-          marker_of: "Nuclei"  # What it marks
-          channel: "DAPI"  # Channel used (e.g., DAPI, CY3)
-        - name: "ConA"
-          marker_of: "Cytoplasm"
-          channel: "AF750"
-    
-    - round_number: 2
-      stains:
-        - name: ""  # Name of stain/antibody
-          marker_of: ""  # What it marks
-          channel: ""  # Channel used (e.g., DAPI, CY3)
-        - name: ""
-          marker_of: ""
-          channel: ""
+        - name: "DAPI"
+          marker_of: "Nuclei"
+          channel: "DAPI"
+        - name: "CENPA antibody"
+          marker_of: "Centromeric protein"
+          channel: "CENPA"
+        - name: "COXIV antibody"
+          marker_of: "Mitochondrial marker"
+          channel: "COXIV"
+        - name: "WGA"
+          marker_of: "Cell membrane/boundary"
+          channel: "WGA"
 
 # Data Generated
 data:
-  storage_format: ""  # e.g., .nd2, .tiff
-  location: "/lab/.."  # Base path for data storage
+  storage_format: "MISSING"  # e.g., .nd2, .tiff
+  location: "/archive/cheeseman/brieflow_screens/baker"  # Base path for data storage
   
-  notes: ""  # Any additional notes about the data or file naming conventions
+  notes: "Part of 400 pilot genes screening library"

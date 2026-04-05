@@ -1,0 +1,37 @@
+
+# ~BrieFlow analysis configuration file~
+
+# All paths are resolved relative to the directory the workflow is run from.
+
+# Parameters:
+all:
+  root_fp: brieflow_output_tile/
+preprocess:
+  sbs_samples_fp: config/sbs_samples_tile.tsv
+  sbs_combo_fp: config/sbs_combo_tile.tsv
+  phenotype_samples_fp: config/phenotype_samples_tile.tsv
+  phenotype_combo_fp: config/phenotype_combo_tile.tsv
+  sbs_data_format: nd2
+  sbs_data_organization: well
+  sbs_channel_order:
+  - Dapi_1p-CY3_30p_545-A594_30p-CY5_30p-CY7_30p
+  - CY3_30p_545
+  - A594_30p
+  - CY5_30p
+  - CY7_30p
+  sbs_channel_order_flip: false
+  sbs_n_z_planes: null
+  sbs_metadata_samples_df_fp: null
+  phenotype_data_format: nd2
+  phenotype_data_organization: well
+  phenotype_channel_order:
+  - DAPI_1x1
+  - GFP_1x1
+  - A594_1x1
+  - A750_1x1
+  phenotype_channel_order_flip: false
+  phenotype_round_order:
+  - 1
+  phenotype_n_z_planes: null
+  phenotype_metadata_samples_df_fp: null
+  sample_fraction: 0.5

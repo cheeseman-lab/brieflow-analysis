@@ -9,8 +9,7 @@ default-resources:
     tasks: 1
     cpus_per_task: 1
     runtime: 400
-    slurm_extra: "'--output=slurm/slurm_output/rule/%j.out'"
-jobs: 150
+jobs: 600
 
 set-resources:
    # preprocessing
@@ -45,10 +44,8 @@ set-resources:
     apply_ic_field_sbs:
         mem_mb: 2500
     segment_sbs:
-        # slurm_partition: "'nvidia-2080ti-20'"
         mem_mb: 3500
-        cpus_per_task: 4
-        # slurm_extra: "'--gres=gpu:1'"
+        cpus_per_task: 1
     extract_bases:
         mem_mb: 2000
     call_reads:
@@ -66,7 +63,7 @@ set-resources:
     eval_segmentation_sbs:
         mem_mb: 50000
     eval_mapping:
-        mem_mb: 50000
+        mem_mb: 200000
         cpus_per_task: 12
 
     # phenotype
@@ -75,19 +72,17 @@ set-resources:
     align_phenotype:
         mem_mb: 2000
     segment_phenotype:
-        # slurm_partition: "'nvidia-2080ti-20'"
-        mem_mb: 3000
-        cpus_per_task: 4
-        # slurm_extra: "'--gres=gpu:1'"
+        mem_mb: 6000
+        cpus_per_task: 1
     identify_cytoplasm:
         mem_mb: 1000
     extract_phenotype_info:
         mem_mb: 1000
     combine_phenotype_info:
         mem_mb: 20000
-    extract_phenotype:
+    extract_phenotype_cp:
         mem_mb: 3000
-    merge_phenotype:
+    merge_phenotype_cp:
         mem_mb: 300000
     eval_segmentation_phenotype:
         mem_mb: 50000

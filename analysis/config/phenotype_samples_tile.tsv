@@ -1,0 +1,5 @@
+sample_fp	plate	well	round	channel
+/archive/cheeseman/ops_data/baker/input_ph/plate_1/round_1/WellA1_ChannelA594_1x1_LF_Seq0001.nd2	1	A1	1	A594_1x1
+/archive/cheeseman/ops_data/baker/input_ph/plate_1/round_1/WellA1_ChannelA750_1x1_LF_Seq0000.nd2	1	A1	1	A750_1x1
+/archive/cheeseman/ops_data/baker/input_ph/plate_1/round_1/WellA1_ChannelDAPI_1x1_LF_Seq0003.nd2	1	A1	1	DAPI_1x1
+/archive/cheeseman/ops_data/baker/input_ph/plate_1/round_1/WellA1_ChannelGFP_1x1_LF_Seq0002.nd2	1	A1	1	GFP_1x1
