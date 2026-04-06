@@ -49,6 +49,7 @@ BARCODE_LIBRARY_FP=""  # auto-detect from config
 if [[ "${1:-}" == "--test" ]]; then
     echo "*** TEST MODE: using small_test_analysis ***"
     TEST_DIR="${REPO_ROOT}/brieflow/tests/small_test_analysis"
+    SCREEN_YAML="${TEST_DIR}/screen.yaml"
     CONFIG_YAML="${TEST_DIR}/config/config_omezarr.yml"
     BARCODE_LIBRARY_FP="${TEST_DIR}/config/barcode_library.tsv"
 fi
@@ -307,11 +308,41 @@ fi
 # ---------------------------------------------------------------------------
 # 5. Cell data (singlecell h5ad from aggregate)
 # ---------------------------------------------------------------------------
-echo "[5/8] Cell data (AnnData)..."
+echo "[5/8] Cell data..."
 CELL_H5AD=$(find "${OUTPUT_ROOT}/aggregate/anndata" -name "*.h5ad" 2>/dev/null | head -1)
 if [ -n "$CELL_H5AD" ]; then
-    cp "$CELL_H5AD" "${SCREEN_DIR}/cell_data.h5ad"
-    echo "  -> cell_data.h5ad (single-cell AnnData)"
+    python3 -c "
+import anndata as ad
+import pandas as pd
+
+adata = ad.read_h5ad('${CELL_H5AD}')
+print(f'Input: {adata.shape}')
+
+# Combine obs + X into a single DataFrame
+df = adata.obs.copy().reset_index(drop=True)
+features = pd.DataFrame(adata.X, columns=adata.var_names)
+df = pd.concat([df, features], axis=1)
+
+# Rename columns to spec where possible
+rename = {}
+if 'row' in df.columns:
+    rename['row'] = 'well_row'
+if 'col' in df.columns:
+    rename['col'] = 'well_col'
+if 'cell_barcode_0' in df.columns:
+    rename['cell_barcode_0'] = 'barcode'
+if 'gene_symbol_0' in df.columns:
+    rename['gene_symbol_0'] = 'perturbation_id'
+for src, dst in [('cell_j', 'x'), ('cell_i', 'y'), ('nucleus_j', 'x'), ('nucleus_i', 'y')]:
+    if src in df.columns and dst not in rename.values():
+        rename[src] = dst
+
+df = df.rename(columns=rename)
+
+df.to_parquet('${SCREEN_DIR}/cell_data.parquet', index=False)
+print(f'Exported {df.shape} to cell_data.parquet')
+"
+    echo "  -> cell_data.parquet (from singlecell.h5ad)"
 else
     echo "  SKIP: no singlecell.h5ad found in aggregate/anndata/"
 fi
@@ -323,9 +354,12 @@ echo "[6/8] Zarr image stores..."
 ZARR_FOUND=false
 for zarr_store in "${OUTPUT_ROOT}"/phenotype/aligned_*.zarr; do
     if [ -d "$zarr_store" ]; then
-        store_name=$(basename "$zarr_store")
-        echo "  Copying ${store_name}..."
-        cp -r "$zarr_store" "${SCREEN_DIR}/${store_name}"
+        # Rename aligned_{plate}.zarr → {screen_name}_{plate}.zarr
+        old_name=$(basename "$zarr_store")
+        plate_num="${old_name#aligned_}"  # e.g. "1.zarr"
+        new_name="${SCREEN_NAME}_${plate_num}"
+        echo "  Copying ${old_name} -> ${new_name}..."
+        cp -r "$zarr_store" "${SCREEN_DIR}/${new_name}"
         ZARR_FOUND=true
     fi
 done
@@ -337,12 +371,29 @@ fi
 # 7. Example images (examples.zarr from montage pipeline)
 # ---------------------------------------------------------------------------
 echo "[7/8] Example images..."
-EXAMPLES_ZARR=$(find "${OUTPUT_ROOT}/aggregate/montages" -name "*__examples.zarr" -type d 2>/dev/null | head -1)
-if [ -n "$EXAMPLES_ZARR" ]; then
-    cp -r "$EXAMPLES_ZARR" "${SCREEN_DIR}/visualizations/default/examples.zarr"
-    NUM_GENES=$(ls "$EXAMPLES_ZARR" 2>/dev/null | wc -l)
-    echo "  -> visualizations/default/examples.zarr (${NUM_GENES} perturbations)"
-else
+EXAMPLES_DEST="${SCREEN_DIR}/visualizations/default/examples.zarr"
+mkdir -p "$EXAMPLES_DEST"
+EXAMPLES_FOUND=false
+for examples_src in "${OUTPUT_ROOT}"/aggregate/montages/*__examples.zarr; do
+    if [ -d "$examples_src" ]; then
+        # Extract channel_combo from dirname: Interphase__examples.zarr → get from config
+        # The combo is encoded in the parent montage structure
+        CHANNEL_COMBO=$(python3 -c "
+import yaml
+with open('${CONFIG_YAML}') as f:
+    cfg = yaml.safe_load(f)
+channels = [ch['name'] for ch in cfg.get('preprocess', {}).get('phenotype_channels_metadata', [])]
+print('_'.join(channels))
+")
+        echo "  Copying examples for ${CHANNEL_COMBO}..."
+        mkdir -p "${EXAMPLES_DEST}/${CHANNEL_COMBO}"
+        cp -r "$examples_src"/* "${EXAMPLES_DEST}/${CHANNEL_COMBO}/"
+        NUM_GENES=$(ls "${EXAMPLES_DEST}/${CHANNEL_COMBO}" 2>/dev/null | wc -l)
+        echo "  -> examples.zarr/${CHANNEL_COMBO}/ (${NUM_GENES} perturbations)"
+        EXAMPLES_FOUND=true
+    fi
+done
+if [ "$EXAMPLES_FOUND" = false ]; then
     echo "  SKIP: no examples.zarr found in aggregate/montages/"
 fi
 
@@ -447,7 +498,7 @@ echo "  [x] experimental_metadata.yaml"
 echo "  [x] perturbation_library.csv"
 echo "  [x] feature_definitions.csv"
 echo "  [x] zarr images"
-echo "  [x] cell_data.h5ad (single-cell AnnData)"
+echo "  [x] cell_data.parquet (single-cell features)"
 echo "  [x] examples.zarr (single-cell crops)"
 echo ""
 echo "  [x] aggregated_data.h5ad (perturbation-level with PHATE embedding)"
