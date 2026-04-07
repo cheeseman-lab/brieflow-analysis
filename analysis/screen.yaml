@@ -1,136 +1,108 @@
-# Screen Information
+# =============================================================================
+# Screen Metadata — OPS Data Standard v0.1.0
+# =============================================================================
 #
-# This file captures experiment-level metadata for OPS screens.
-# Required fields are documented inline; optional fields for future
-# CellxState platform integration are marked with [FUTURE].
+# This file captures all experiment-level metadata for an OPS screen.
+# It serves as the single source of truth that prep_cellxstate.sh reshapes
+# into the spec-compliant experimental_metadata.yaml + collection_metadata.yaml.
+#
+# Fields marked [REQUIRED] MUST be filled in by the submitter.
+# Fields marked [OPTIONAL] SHOULD be filled in when available.
+# Fields marked [AUTO] are injected by the pipeline at submission prep time.
+#
+# Ontology lookups:
+#   Organism:  https://www.ebi.ac.uk/ols4/ontologies/ncbitaxon
+#   Cell line: https://www.cellosaurus.org  (use CVCL_XXXXX format)
+#   Disease:   https://www.ebi.ac.uk/ols4/ontologies/mondo
+#              Use "PATO:0000461" for normal/healthy
+#   Assay:     https://www.ebi.ac.uk/ols4/ontologies/efo
+#              OPS = "EFO:0022605"
+#   Dev stage: https://www.ebi.ac.uk/ols4/ontologies/hsapdv (human)
+#              Use "na" for cell lines
+# =============================================================================
 
+# ---------------------------------------------------------------------------
+# Collection (shared across all experiments in a submission)
+# ---------------------------------------------------------------------------
+collection:
+  title: ""                    # [REQUIRED] Free-text title for the collection
+  publication_doi: null        # [REQUIRED] DOI URI, or null if unpublished
+                               # e.g., "https://doi.org/10.1016/j.cell.2022.12.009"
+
+# ---------------------------------------------------------------------------
+# Experiment
+# ---------------------------------------------------------------------------
 experiment:
-  id: ""  # Experiment identifier
-  notebook_entries: ""  # Links or references to lab notebook entries
-  dates:
-    start: ""
-    end: ""
+  screen_title: ""             # [REQUIRED] Free-text title describing the screen
 
-# [FUTURE] Identifiers - to be finalized with CellxState schema (March 2026)
-# identifiers:
-#   acquisition_uid: ""  # Global unique ID (hierarchical: acq_container_cell format)
-#   container_uid: ""    # Unique container/plate identifier
+  # Ontology identifiers
+  organism_ontology_term_id: ""        # [REQUIRED] e.g., "NCBITaxon:9606" (Homo sapiens)
+  organism: ""                         # [AUTO] Human-readable name from ontology
+  tissue_ontology_term_id: ""          # [REQUIRED] Cellosaurus ID for cell lines
+                                       # e.g., "CVCL_0030" (HeLa)
+  tissue: ""                           # [AUTO] Human-readable name from ontology
+  tissue_type: "cell line"             # [REQUIRED] One of: "tissue", "organoid",
+                                       # "cell culture", "cell line"
+  disease_ontology_term_id: ""         # [REQUIRED] "PATO:0000461" for normal/healthy,
+                                       # or MONDO term for disease
+  disease: ""                          # [AUTO] Human-readable name from ontology
+  development_stage_ontology_term_id: "na"  # [REQUIRED] "na" for cell lines
+  development_stage: "na"                   # [AUTO] "na" for cell lines
+  assay_ontology_term_id: "EFO:0022605"     # [REQUIRED] Hardcoded for OPS
+  assay: "optical pooled screening"         # [AUTO] Human-readable name for EFO:0022605
+  pseudobulk: []               # [OPTIONAL] Cell state labels for pseudobulk groupings
+                               # e.g., ["interphase", "mitotic"]
 
+# ---------------------------------------------------------------------------
 # Cellular Conditions
+# ---------------------------------------------------------------------------
 cellular:
-  cell_line: ""  # e.g., HeLa, HEK293, etc.
-  imaging_timepoint: ""  # When imaging occurred after treatment
-  treatment:
-    summary: ""  # Brief description of treatment
-    details: ""  # Detailed protocol or conditions
-  plates: ""  # Number of plates
-  wells_per_plate: ""  # Number of wells per plate
+  growth_conditions: ""        # [REQUIRED] Free-text: media, supplements, culture conditions
+                               # SHOULD include catalog numbers and concentrations
+  plate_type: ""               # [REQUIRED] e.g., "6-well glass-bottom (Cellvis P06-1.5H-N)"
+  seeding:
+    density_cells_cm2: null    # [OPTIONAL] Integer, cells per cm2
+  induction:
+    duration: ""               # [OPTIONAL] e.g., "78 hours"
 
-  # [FUTURE] Ontology references - standard IDs for interoperability
-  # ontologies:
-  #   cell_type_ontology: ""     # Cell Ontology ID (e.g., CL:0000057)
-  #   tissue_ontology: ""        # UBERON ID if applicable
-  #   organism_ontology: ""      # NCBITaxon ID (e.g., NCBITaxon:9606 for human)
-  #   disease_ontology: ""       # MONDO/DOID ID if disease model
+# ---------------------------------------------------------------------------
+# CRISPR Library
+# ---------------------------------------------------------------------------
+library:
+  vector: ""                   # [REQUIRED] e.g., "CROPseq-puro-v2 (Addgene #127458)"
+  gene_selection: ""           # [OPTIONAL] Rationale for gene selection
+  positive_controls: []        # [OPTIONAL] List of positive control genes/perturbations
+  negative_controls: []        # [OPTIONAL] List of negative control descriptions
 
-  # [FUTURE] Cell sourcing - for reproducibility
-  # sourcing:
-  #   donor_id: ""               # Donor identifier
-  #   cell_product_lot_id: ""    # Commercial lot ID if applicable
-  #   parent_lineage: ""         # iPSC parent line if derived
+# ---------------------------------------------------------------------------
+# In Situ Sequencing (ISS / SBS)
+# ---------------------------------------------------------------------------
+iss:
+  cycles: null                 # [REQUIRED] Integer, number of sequencing cycles
+  objective: ""                # [OPTIONAL] Microscope objective for ISS imaging
+  chemistry: ""                # [OPTIONAL] e.g., "four color"
+  channels:                    # [OPTIONAL] List of ISS imaging channels
+    - name: ""
+      laser_wavelength_nm: null        # Integer
+      exposure_time_ms: null           # Integer
 
-  # [FUTURE] Genetic engineering
-  # engineering:
-  #   crispr_type: ""            # CRISPRn, CRISPRi, CRISPRa, or none
-  #   cas_variant: ""            # Cas9, dCas9, Cas12a, etc.
-
-  # [FUTURE] Media and treatment conditions (per-well if varies)
-  # media:
-  #   base_media: ""             # e.g., DMEM, RPMI
-  #   supplements: []            # List of supplements
-  # compounds:
-  #   - compound_id: ""          # Compound identifier
-  #     smiles: ""               # SMILES string
-  #     concentration: ""        # e.g., "10 uM"
-  #     wells: []                # Wells receiving this treatment
-
-# Sequencing by Synthesis (SBS)
-sbs:
-  cycles: ""  # Number of cycles
-  cycle_order: ""  # Order of cycles
-  background_channel: ""  # Suggested background channel
-  library_details:
-    number_of_genes: ""
-    guides_per_gene: ""
-    other_information: ""
-
-  # [FUTURE] Structured guide library - replaces free-text "other_information"
-  # guide_library:
-  #   - gene_id: ""              # Entrez Gene ID
-  #     gene_symbol: ""          # HGNC symbol
-  #     spacer_sequence: ""      # Guide spacer sequence
-  #     barcode_sequence: ""     # SBS barcode
-  #     guide_type: ""           # targeting, non-targeting, positive-control
-
-# Phenotype (PH) Steps
+# ---------------------------------------------------------------------------
+# Phenotype (PH) Imaging
+# ---------------------------------------------------------------------------
 phenotype:
-  background_channel_cell: ""  # For cell segmentation
-  background_channel_body: ""  # For body (e.g. parasite) segmentation
+  objective: ""                # [REQUIRED] e.g., "20X 0.75 NA CFI Plan Apo Lambda"
+  exposure_time_ms: []         # [REQUIRED] Per-channel exposure times in ms
+                               # Length MUST match channels_metadata in config
 
-  # Rounds of staining/imaging (in order they were stained for each round)
-  # Add more rounds as needed
-  rounds:
-    - round_number: 1
-      stains:
-        - name: "DAPI"  # Name of stain/antibody
-          marker_of: "Nuclei"  # What it marks
-          channel: "DAPI"  # Channel used (e.g., DAPI, CY3)
-          # [FUTURE] Extended channel mapping
-          # optical_channel: ""    # Wavelength/filter (e.g., "405nm", "DAPI")
-          # biological_readout: "" # What's being measured (e.g., "DNA content")
-        - name: "ConA"
-          marker_of: "Cytoplasm"
-          channel: "AF750"
+# ---------------------------------------------------------------------------
+# Microscope Hardware
+# ---------------------------------------------------------------------------
+microscope:
+  system: ""                   # [REQUIRED] e.g., "Nikon Ti-2 inverted epifluorescence"
 
-    - round_number: 2
-      stains:
-        - name: ""  # Name of stain/antibody
-          marker_of: ""  # What it marks
-          channel: ""  # Channel used (e.g., DAPI, CY3)
-        - name: ""
-          marker_of: ""
-          channel: ""
-
-# Data Generated
-data:
-  storage_format: ""  # e.g., .nd2, .tiff, .zarr
-  location: "/lab/.."  # Base path for data storage
-
-  notes: ""  # Any additional notes about the data or file naming conventions
-
-# [FUTURE] Imaging metadata - links to microscope configuration
-# imaging:
-#   live_or_fixed: ""          # "live" or "fixed"
-#   days_in_vitro: ""          # DIV or timepoint
-#   microscope_id: ""          # Instrument identifier
-#   settings_uid: ""           # Link to microscope settings JSON/config
-#   pixel_size_um: ""          # Pixel size in micrometers
-#   z_spacing_um: ""           # Z-stack spacing if 3D
-
-# [FUTURE] Visualization settings - contrast/intensity for viewers
-# visualization:
-#   channels:
-#     - name: ""
-#       contrast_min: 0
-#       contrast_max: 65535
-#       colormap: ""           # e.g., "gray", "green", "magenta"
-
-# =============================================================================
-# METADATA SCHEMA VERSION
-# =============================================================================
-# This template follows brieflow screen.yaml v1.0 (pre-CellxState alignment).
-# [FUTURE] sections will be uncommented and required after CellxState metadata
-# schema finalization (target: March 2026 workshop).
-#
-# See zarr3_metadata_alignment.md for full metadata alignment strategy.
-# =============================================================================
+# ---------------------------------------------------------------------------
+# Data Processing
+# ---------------------------------------------------------------------------
+pipeline:
+  github: "cheeseman-lab/brieflow"     # [AUTO] Hardcoded
+  version: null                        # [AUTO] Injected from brieflow pyproject.toml
