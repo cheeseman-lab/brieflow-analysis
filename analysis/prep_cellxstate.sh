@@ -319,9 +319,14 @@ adata = ad.read_h5ad('${CELL_H5AD}')
 print(f'Input: {adata.shape}')
 
 # Combine obs + X into a single DataFrame
-df = adata.obs.copy().reset_index(drop=True)
+# Preserve cell_uid from index (added by format_singlecell_anndata)
+df = adata.obs.copy().reset_index()
 features = pd.DataFrame(adata.X, columns=adata.var_names)
 df = pd.concat([df, features], axis=1)
+
+# Clean cell_uid format (remove float artifacts: 1.0_A1_5.0_507.0 -> 1_A1_5_507)
+if 'cell_uid' in df.columns:
+    df['cell_uid'] = df['cell_uid'].str.replace(r'\.0', '', regex=True)
 
 # Rename columns to spec where possible
 rename = {}
