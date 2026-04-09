@@ -1,0 +1,19 @@
+{
+  "tile_dag_overhead_mb": 183.2890625,
+  "per_1k_jobs_mb": 0.0,
+  "anchor_rules": {
+    "extract_metadata_sbs": {
+      "tile_rss_mb": 179.77734375,
+      "well_rss_mb": 179.77734375,
+      "dag_delta_mb": 0.0,
+      "per_1k_jobs_mb": 0.0
+    },
+    "extract_metadata_phenotype": {
+      "tile_rss_mb": 186.80078125,
+      "well_rss_mb": 186.80078125,
+      "dag_delta_mb": 0.0,
+      "per_1k_jobs_mb": 0.0
+    }
+  },
+  "full_baker_dag_overhead_mb": 183.2890625
+}

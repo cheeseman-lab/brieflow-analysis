@@ -53,44 +53,50 @@ tail -f logs/preprocess-*.log
 Located at `harness/harness.py`. Runs entirely on the tile tier.
 Calibrates memory per rule from actual MaxRSS, then grid searches concurrency params.
 
-### Full autonomous workflow:
+### Phase 1 — Speed search (~hours, runs overnight):
 ```bash
 cd analysis/
 
-# Step 1: Measure per-tile rule memory + timing (~15-30 min)
+# Step 1: Calibrate tile rules — MaxRSS/elapsed per rule (~15-30 min)
 python harness/harness.py calibrate
 
-# Step 2: Measure well-scaling rules: calculate_ic, combine_* (~1-2 hr)
-python harness/harness.py calibrate_well
-
-# Step 3: Compute DAG memory overhead from anchor rules
-python harness/harness.py dag_overhead
-
-# Step 4: Print memory breakdown + generate recommendations
-python harness/harness.py mem_report
-
-# Step 5: Grid search overnight (27 trials: 3 cpus × 3 jobs × 3 array_limit)
+# Step 2: Run all SEARCH_TRIALS, measure wall time per config (~8-12 hr)
 python harness/harness.py search
 
-# Step 6: See ranked results
+# Step 3: See ranked results
 python harness/harness.py report
+```
+
+### Phase 2 — Memory + scale (run after Phase 1):
+```bash
+# Step 4: Calibrate well-scaling rules on well tier (~1-2 hr)
+python harness/harness.py calibrate_well
+
+# Step 5: Compute DAG memory overhead
+python harness/harness.py dag_overhead
+
+# Step 6: Generate memory recommendations
+python harness/harness.py mem_report
+
+# Step 7: Run well tier with best Phase 1 config
+python harness/harness.py scale_test
 ```
 
 Results saved to `harness/results/`:
 - `calibration_tile.json` — per-rule MaxRSS/elapsed on tile tier
+- `trials.jsonl` — one line per search trial with wall time + params
 - `calibration_well.json` — per-rule MaxRSS/elapsed on well tier
 - `dag_overhead.json` — estimated DAG memory overhead per 1000 jobs
 - `mem_recommendations.json` — final mem_mb per rule with breakdown
-- `trials.jsonl` — one line per search trial with wall time + params
+- `scale_test_well.json` — tile vs well wall time comparison
 
-### Search space (defined in harness.py)
-```python
-SEARCH_SPACE = {
-    "cpus_per_task": [1, 2, 4],
-    "jobs": [200, 400, 600],
-    "slurm_array_limit": [5, 10, 20],
-}
-```
+### Search trials (defined in SEARCH_TRIALS list in harness.py)
+13 trials covering:
+- Local backend (all cores)
+- Slurm without array jobs (jobs: 200, 400, 600)
+- Slurm with array jobs (jobs × array_limit × cpus_per_task variants)
+
+search resumes automatically if interrupted (skips completed trials).
 
 ### Key findings so far (from Apr 4 efficiency report)
 | Rule | MaxRSS | Requested | Waste |

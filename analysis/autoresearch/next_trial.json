@@ -1,0 +1,11 @@
+{
+  "tag": "slurm_arr_j400_al10_lat5_nomem",
+  "notes": "Reduce latency-wait from 10 to 5 — biggest untested lever. Sequential chain overhead = N_steps x latency_wait.",
+  "backend": "slurm",
+  "use_arrays": true,
+  "jobs": 400,
+  "array_limit": 10,
+  "cpus_per_task": 1,
+  "latency_wait": 5,
+  "use_mem_recommendations": false
+}

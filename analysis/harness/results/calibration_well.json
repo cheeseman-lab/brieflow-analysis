@@ -1,0 +1,62 @@
+{
+  "wall_time_s": 13467.193032503128,
+  "tier": "well",
+  "rules": {
+    "convert_phenotype": {
+      "max_rss_mb": 686.453125,
+      "max_elapsed_s": 11.0,
+      "count": 8,
+      "mean_cpu_eff": 43.68886363636364,
+      "mean_mem_eff": 22.39
+    },
+    "extract_metadata_sbs": {
+      "max_rss_mb": 179.77734375,
+      "max_elapsed_s": 8.0,
+      "count": 29,
+      "mean_cpu_eff": 49.03651477832513,
+      "mean_mem_eff": 8.950344827586205
+    },
+    "convert_sbs": {
+      "max_rss_mb": 267.55078125,
+      "max_elapsed_s": 10.0,
+      "count": 80,
+      "mean_cpu_eff": 46.08415029761904,
+      "mean_mem_eff": 12.47825
+    },
+    "extract_metadata_phenotype": {
+      "max_rss_mb": 186.80078125,
+      "max_elapsed_s": 10.0,
+      "count": 3,
+      "mean_cpu_eff": 43.49166666666667,
+      "mean_mem_eff": 9.253333333333334
+    },
+    "calculate_ic_sbs": {
+      "max_rss_mb": 944.64453125,
+      "max_elapsed_s": 63.0,
+      "count": 8,
+      "mean_cpu_eff": 86.55639953691002,
+      "mean_mem_eff": 1.5962500000000002
+    },
+    "combine_metadata_sbs": {
+      "max_rss_mb": 217.640625,
+      "max_elapsed_s": 6.0,
+      "count": 1,
+      "mean_cpu_eff": 51.56666666666666,
+      "mean_mem_eff": 8.71
+    },
+    "calculate_ic_phenotype": {
+      "max_rss_mb": 2503.42578125,
+      "max_elapsed_s": 206.0,
+      "count": 1,
+      "mean_cpu_eff": 94.76456310679612,
+      "mean_mem_eff": 0.5
+    },
+    "combine_metadata_phenotype": {
+      "max_rss_mb": 212.42578125,
+      "max_elapsed_s": 6.0,
+      "count": 1,
+      "mean_cpu_eff": 50.23333333333333,
+      "mean_mem_eff": 8.5
+    }
+  }
+}

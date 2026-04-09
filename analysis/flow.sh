@@ -41,6 +41,8 @@ CONFIGFILE="config/config.yml"
 LOG_DIR="logs"
 SLURM_PROFILE="slurm/"
 SLURM_ARRAY_LIMIT=10
+LATENCY_WAIT=10
+MAX_STATUS_CHECKS=""
 
 # Rule groups per module (for slurm batching)
 SBS_GROUPS=(
@@ -79,6 +81,7 @@ PLATE_COUNT=""
 FORCE_UNLOCK=false
 CORES="all"
 PROFILE_MODE=false
+NO_ARRAYS=false
 MODULES=()
 EXTRA_CONFIG=""
 
@@ -114,6 +117,12 @@ while [[ $# -gt 0 ]]; do
             SLURM_PROFILE="$2"; shift 2 ;;
         --slurm-array-limit)
             SLURM_ARRAY_LIMIT="$2"; shift 2 ;;
+        --no-arrays)
+            NO_ARRAYS=true; shift ;;
+        --latency-wait)
+            LATENCY_WAIT="$2"; shift 2 ;;
+        --max-status-checks)
+            MAX_STATUS_CHECKS="$2"; shift 2 ;;
         --help|-h)
             show_help ;;
         -*)
@@ -194,11 +203,16 @@ build_snakemake_cmd() {
     if [[ "$BACKEND" == "slurm" ]]; then
         cmd+=" --executor slurm"
         cmd+=" --workflow-profile ${SLURM_PROFILE}"
-        cmd+=" --slurm-array-jobs=all"
-        cmd+=" --slurm-array-limit=${SLURM_ARRAY_LIMIT}"
+        if [[ "$NO_ARRAYS" != true ]]; then
+            cmd+=" --slurm-array-jobs=all"
+            cmd+=" --slurm-array-limit=${SLURM_ARRAY_LIMIT}"
+        fi
         cmd+=" --slurm-jobname-prefix=brieflow"
         cmd+=" --slurm-logdir=slurm/slurm_output/rule"
-        cmd+=" --latency-wait 10"
+        cmd+=" --latency-wait ${LATENCY_WAIT}"
+        if [[ -n "$MAX_STATUS_CHECKS" ]]; then
+            cmd+=" --max-status-checks-per-second ${MAX_STATUS_CHECKS}"
+        fi
         cmd+=" --keep-going"
 
         # Profile mode: retain all logs + efficiency report
