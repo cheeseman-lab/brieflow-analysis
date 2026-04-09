@@ -48,12 +48,17 @@ BASE_PROFILE = ANALYSIS_DIR / "slurm" / "config.yaml"
 TILE_CONFIG = "config/config_tile.yml"
 WELL_CONFIG = "config/config_well.yml"
 TILE_OUTPUT_DIR = ANALYSIS_DIR / "brieflow_output_tile"
+WELL_OUTPUT_DIR = ANALYSIS_DIR / "brieflow_output_well"
 
 RESULTS_DIR.mkdir(exist_ok=True)
 
 AUTORESEARCH_DIR = HARNESS_DIR.parent / "autoresearch"
 AUTORESEARCH_RESULTS = AUTORESEARCH_DIR / "results.tsv"
 AUTORESEARCH_TRIAL = AUTORESEARCH_DIR / "next_trial.json"
+WELL_RESULTS = AUTORESEARCH_DIR / "well_results.tsv"
+WELL_RESULTS_HEADER = (
+    "tag\tbackend\tlatency_wait\tarray_limit\tuse_tile_mem\tuse_well_mem\twall_time_min\tnotes\n"
+)
 
 # ---------------------------------------------------------------------------
 # Search trials
@@ -131,6 +136,16 @@ RULE_MEMORY_PROFILE: dict[str, dict] = {
     "extract_phenotype_info":       {"scales_with": "tile", "dag_sensitive": False},
     # phenotype aggregation
     "combine_phenotype_info":       {"scales_with": "well", "dag_sensitive": True},
+}
+
+# Conservative memory for well-scaling rules at full baker scale.
+# Based on well-tier calibration × 4x margin (scales with tiles/well).
+# Tile-scaling rules use mem_recommendations.json values instead.
+WELL_MEM_CONSERVATIVE: dict[str, int] = {
+    "calculate_ic_sbs":           4_000,
+    "calculate_ic_phenotype":    10_000,
+    "combine_metadata_sbs":       1_500,
+    "combine_metadata_phenotype": 1_500,
 }
 
 DAG_ANCHOR_RULES = ["extract_metadata_sbs", "extract_metadata_phenotype"]
@@ -568,6 +583,121 @@ def cmd_autoresearch_report(args):
         print(f"\nBest: {best['tag']} — {best['wall_time_min']} min")
 
 
+def cmd_run_well_trial(args):
+    """
+    Run a single well-tier trial defined in a JSON file.
+    Schema same as run_one_trial plus two extra boolean fields:
+      use_tile_mem: apply mem_recommendations for tile-scaling rules
+      use_well_mem: apply WELL_MEM_CONSERVATIVE for well-scaling rules
+    Appends to autoresearch/well_results.tsv.
+    """
+    trial_json = Path(getattr(args, "trial_json", None) or AUTORESEARCH_TRIAL)
+    if not trial_json.exists():
+        print(f"[harness] ERROR: {trial_json} not found.")
+        sys.exit(1)
+
+    with open(trial_json) as f:
+        trial = json.load(f)
+
+    tag = trial.get("tag", "unnamed")
+
+    if WELL_RESULTS.exists():
+        with open(WELL_RESULTS) as f:
+            for line in f:
+                if line.startswith(tag + "\t"):
+                    print(f"[harness] {tag} already in well_results — skipping.")
+                    return
+
+    print(f"\n[harness] === well trial: {tag} ===")
+    _print_trial_params(trial)
+
+    # Build mem_recs from tile and/or well sources.
+    mem_recs: dict = {}
+    if trial.get("use_tile_mem"):
+        rec_path = RESULTS_DIR / "mem_recommendations.json"
+        if rec_path.exists():
+            with open(rec_path) as f:
+                all_recs = json.load(f)
+            mem_recs = {r: v for r, v in all_recs.items()
+                        if RULE_MEMORY_PROFILE.get(r, {}).get("scales_with") == "tile"}
+            print(f"[harness] Applying tile mem_recs for: {list(mem_recs)}")
+        else:
+            print("[harness] WARNING: use_tile_mem=true but mem_recommendations.json not found.")
+
+    if trial.get("use_well_mem"):
+        for rule, mb in WELL_MEM_CONSERVATIVE.items():
+            mem_recs[rule] = {"mem_mb_recommended": mb, "runtime_recommended": 30}
+        print(f"[harness] Applying conservative well mem for: {list(WELL_MEM_CONSERVATIVE)}")
+
+    # Wipe well output for a clean run.
+    if WELL_OUTPUT_DIR.exists():
+        print(f"[harness] Deleting {WELL_OUTPUT_DIR}...")
+        shutil.rmtree(WELL_OUTPUT_DIR)
+    unlock_snakemake(WELL_CONFIG)
+
+    trial_dir = RESULTS_DIR / f"well_trial_{tag}"
+    trial_dir.mkdir(exist_ok=True)
+
+    log_path, wall_time = run_flow(
+        ["preprocess", "sbs", "phenotype"],
+        config=WELL_CONFIG,
+        trial=trial,
+        trial_dir=trial_dir,
+        mem_recs=mem_recs or None,
+    )
+
+    if wall_time < 120:
+        print(f"[harness] ERROR: {tag} finished in {wall_time:.1f}s — not recording (likely failed).")
+        sys.exit(1)
+
+    backend = trial.get("backend", "slurm")
+    lw = str(trial.get("latency_wait", 10)) if backend == "slurm" else "N/A"
+    al = str(trial.get("array_limit", 10)) if backend == "slurm" else "N/A"
+    row = "\t".join([
+        tag, backend, lw, al,
+        str(trial.get("use_tile_mem", False)),
+        str(trial.get("use_well_mem", False)),
+        f"{wall_time/60:.1f}",
+        trial.get("notes", ""),
+    ]) + "\n"
+
+    if not WELL_RESULTS.exists():
+        WELL_RESULTS.parent.mkdir(parents=True, exist_ok=True)
+        with open(WELL_RESULTS, "w") as f:
+            f.write(WELL_RESULTS_HEADER)
+    with open(WELL_RESULTS, "a") as f:
+        f.write(row)
+
+    print(f"[harness] {tag}: {wall_time/60:.1f} min — recorded to {WELL_RESULTS}")
+
+
+def cmd_well_report(args):
+    """Print well-tier results sorted by wall time."""
+    if not WELL_RESULTS.exists():
+        print("[harness] No well results yet. Run run_well_trial first.")
+        return
+
+    import csv as _csv
+    rows = []
+    with open(WELL_RESULTS) as f:
+        for row in _csv.DictReader(f, delimiter="\t"):
+            try:
+                row["_min"] = float(row["wall_time_min"])
+                rows.append(row)
+            except (ValueError, KeyError):
+                pass
+
+    rows.sort(key=lambda r: r["_min"])
+    print(f"\n{'#':<3} {'Tag':<35} {'LW':>4} {'AL':>4} {'TileMem':>8} {'WellMem':>8} {'Min':>6}")
+    print("-" * 75)
+    for i, r in enumerate(rows, 1):
+        print(f"{i:<3} {r['tag']:<35} {r['latency_wait']:>4} {r['array_limit']:>4} "
+              f"{r['use_tile_mem']:>8} {r['use_well_mem']:>8} {r['wall_time_min']:>6}")
+
+    if rows:
+        print(f"\nBest: {rows[0]['tag']} — {rows[0]['wall_time_min']} min")
+
+
 # ---------------------------------------------------------------------------
 # Phase 2 commands
 # ---------------------------------------------------------------------------
@@ -815,6 +945,11 @@ def main():
     ar.add_argument("--trial-json", default=None, help="Path to trial JSON (default: autoresearch/next_trial.json)")
     sub.add_parser("ar_report", help="[Autoresearch] Ranked autoresearch results")
 
+    # Well-tier validation
+    wt = sub.add_parser("run_well_trial", help="[Well] Run a trial JSON on well tier, append to well_results.tsv")
+    wt.add_argument("--trial-json", default=None, help="Path to trial JSON")
+    sub.add_parser("well_report", help="[Well] Ranked well-tier results")
+
     args = parser.parse_args()
     dispatch = {
         "calibrate":      cmd_calibrate,
@@ -826,6 +961,8 @@ def main():
         "scale_test":     cmd_scale_test,
         "run_one_trial":  cmd_run_one_trial,
         "ar_report":      cmd_autoresearch_report,
+        "run_well_trial": cmd_run_well_trial,
+        "well_report":    cmd_well_report,
     }
 
     if args.command in dispatch:

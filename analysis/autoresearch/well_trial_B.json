@@ -1,0 +1,12 @@
+{
+  "tag": "well_tile_mem_al20",
+  "notes": "Tighten only tile-scaling rules (convert/extract_metadata). al=20 from autoresearch. Isolates tile mem effect.",
+  "backend": "slurm",
+  "use_arrays": true,
+  "jobs": 400,
+  "array_limit": 20,
+  "cpus_per_task": 1,
+  "latency_wait": 10,
+  "use_tile_mem": true,
+  "use_well_mem": false
+}
