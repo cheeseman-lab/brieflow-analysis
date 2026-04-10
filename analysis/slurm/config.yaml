@@ -123,6 +123,8 @@ set-resources:
         mem_mb: 500000
 
     # aggregate
+    aggregate_cells_second_objs:
+        mem_mb: 200000
     split_datasets:
         mem_mb: 200000
     filter:
