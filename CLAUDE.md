@@ -25,7 +25,8 @@ snakemake --unlock --snakefile ../brieflow/workflow/Snakefile --configfile confi
 ```
 
 ## Must Run On
-**cheesegrater only** — slurm jobs hang when launched from cheeserind.
+**Tile runs**: cheesegrater only — slurm jobs hang when launched from cheeserind.
+**Well/full runs**: cheesegrater does NOT have enough RAM to manage a 4328-job well-tier DAG. The snakemake master process gets kernel OOM-killed mid-run. Must launch from a node with more memory (e.g., request an interactive Slurm node).
 
 ## Dataset Tiers
 | Tier | Config | Jobs | Use |
@@ -108,7 +109,8 @@ search resumes automatically if interrupted (skips completed trials).
 
 ## Known Issues
 - **nd2 read contention**: Two tiles sharing the same well-level nd2 file on the same node can fail silently. Transient — resume fixes it. Root cause: well-organized data means all tiles in A1 share the same 4x84GB nd2 files.
-- **DAG memory overhead**: Snakemake's internal DAG uses RAM proportional to workflow size. Full baker (~26K jobs) adds significant overhead vs tile run (~150 jobs). The `dag_overhead` command quantifies this.
+- **DAG memory overhead — head node**: At well scale (~4300 jobs), snakemake master process on cheesegrater gets kernel OOM-killed. Must launch well/full runs from a higher-memory node. Tile runs (~150 jobs) are fine on cheesegrater.
+- **DAG memory overhead — compute nodes**: Each array job task runs a mini-snakemake (`.batch` step) that uses ~270 MB at well scale (vs ~130 MB at tile scale, 150-job DAG). This overhead is NOT accounted for in tile-calibrated `mem_mb_recommended` values. When applying tile mem_recs to well runs, add `dag_overhead_mb` (183 MB from `mem_recommendations.json`) to `obs_rss_mb` before applying the margin: `corrected = round((obs_rss_mb + 183) * MEM_MARGIN_TILE)`. Example: convert_sbs needs ~675 MB at well scale, not 451 MB.
 - **disk_mb auto-calculation**: Snakemake sets `disk_mb` = 2× input file size. For well-level nd2s (84 GB each × 4 channels = 685 GB requested). Not enforced on our cluster but worth overriding.
 - **slurm-array-limit deadlock**: Must be ≤ per-rule job count per batch. With 6+ rules active, batches of 100 split ~15 jobs/rule. Keep `--slurm-array-limit=10`.
 

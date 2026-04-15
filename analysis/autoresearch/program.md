@@ -12,12 +12,20 @@ Metric: total wall time in minutes on the tile tier (~150 jobs). Lower is better
 - Results are recorded to `autoresearch/results.tsv`
 - Existing baseline results are in `harness/results/trials.jsonl` — read these first
 
-## What We Already Know (from trials.jsonl baseline)
-- Local (all cores): **4.1 min** — best known result
-- Slurm + arrays (j400, al10, c1, latency_wait=10): **5.3 min** — best known Slurm
-- Slurm without arrays: **10.9–11.8 min** — arrays are essential
-- cpus_per_task=2 does NOT help (jobs are I/O bound, single-threaded)
-- jobs=200/400/600 all equivalent at tile scale (only 150 jobs exist)
+## Status
+**Tile autoresearch: COMPLETE (30 trials).** Best tile config: `slurm_arr_j400_al20_lat5_mem`
+at ~3.4 min. Results in `autoresearch/results.tsv`.
+
+**Well autoresearch: NOT YET RUN.** Well runs are ~30-40 min each. Use this program
+to run the well-tier autoresearch loop — adapt the schema below to include `use_tile_mem`
+and `use_well_mem` fields (see `harness.py cmd_run_well_trial`).
+
+## What We Know (from 30 tile trials)
+- Local (all cores): **4.1 min** — fastest at tile scale, not usable at well/full scale
+- Best Slurm: **~3.4 min** — `array_limit=20`, `latency_wait=5`, `use_mem_recommendations=True`
+- Arrays essential: non-array SLURM is 2× slower (10.9–11.8 min)
+- `cpus_per_task=2` does NOT help (I/O bound jobs)
+- `jobs=400` optimal; 200 too few, 600 no benefit at tile scale
 
 ## The Experiment Loop
 
@@ -118,7 +126,7 @@ SPEED so we can apply that understanding to well/full scale runs.
 
 ## Environment Notes
 - Must run from `analysis/` directory (harness uses relative paths)
-- Must be on cheesegrater (Slurm jobs hang on cheeserind)
+- Must run from cheeserind login node (has enough RAM for well-scale DAG)
 - Check active processes before starting: `ps aux | grep snakemake | grep mdiberna | grep -v grep`
 - If snakemake is running: `kill -9 <PID>` then unlock before starting
 - Unlock command: `snakemake --unlock --snakefile ../brieflow/workflow/Snakefile --configfile config/config_tile.yml`

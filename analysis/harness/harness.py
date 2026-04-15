@@ -618,9 +618,16 @@ def cmd_run_well_trial(args):
         if rec_path.exists():
             with open(rec_path) as f:
                 all_recs = json.load(f)
-            mem_recs = {r: v for r, v in all_recs.items()
-                        if RULE_MEMORY_PROFILE.get(r, {}).get("scales_with") == "tile"}
-            print(f"[harness] Applying tile mem_recs for: {list(mem_recs)}")
+            well_dag_overhead = next(
+                v["dag_overhead_mb"] for v in all_recs.values()
+                if v.get("tier") == "well" and v.get("dag_overhead_mb", 0) > 0
+            )
+            mem_recs = {}
+            for r, v in all_recs.items():
+                if RULE_MEMORY_PROFILE.get(r, {}).get("scales_with") == "tile":
+                    corrected_mb = round((v["obs_rss_mb"] + well_dag_overhead) * MEM_MARGIN_TILE)
+                    mem_recs[r] = {**v, "mem_mb_recommended": corrected_mb}
+            print(f"[harness] Applying well-corrected tile mem_recs (dag_overhead={well_dag_overhead:.0f}MB): {list(mem_recs)}")
         else:
             print("[harness] WARNING: use_tile_mem=true but mem_recommendations.json not found.")
 

@@ -1,0 +1,154 @@
+default-resources:
+  cpus_per_task: 1
+  mem_mb: 3000
+  runtime: 400
+  slurm_account: wibrusers
+  slurm_partition: u20
+  tasks: 1
+jobs: 600
+set-resources:
+  aggregate:
+    cpus_per_task: 4
+    mem_mb: 980000
+  align:
+    cpus_per_task: 4
+    mem_mb: 980000
+  align_phenotype:
+    cpus_per_task: 1
+    mem_mb: 2000
+  align_sbs:
+    cpus_per_task: 1
+    mem_mb: 2500
+  apply_ic_field_phenotype:
+    cpus_per_task: 1
+    mem_mb: 2000
+  apply_ic_field_sbs:
+    cpus_per_task: 1
+    mem_mb: 2500
+  benchmark_clusters:
+    mem_mb: 10000
+  calculate_ic_phenotype:
+    mem_mb: 3749
+    runtime: 8
+  calculate_ic_sbs:
+    mem_mb: 1411
+    runtime: 5
+  call_cells:
+    cpus_per_task: 1
+    mem_mb: 1500
+  call_reads:
+    cpus_per_task: 1
+    mem_mb: 1500
+  clean_aggregate:
+    mem_mb: 2000
+  clean_merge:
+    mem_mb: 20000
+  combine_cells:
+    mem_mb: 20000
+  combine_metadata_phenotype:
+    mem_mb: 428
+    runtime: 5
+  combine_metadata_sbs:
+    mem_mb: 432
+    runtime: 5
+  combine_phenotype_info:
+    mem_mb: 20000
+  combine_reads:
+    mem_mb: 20000
+  combine_sbs_info:
+    mem_mb: 20000
+  compute_standard_deviation:
+    cpus_per_task: 1
+    mem_mb: 2500
+  convert_ph:
+    mem_mb: 2000
+  convert_phenotype:
+    cpus_per_task: 1
+    mem_mb: 1079
+    runtime: 5
+  convert_sbs:
+    cpus_per_task: 1
+    mem_mb: 451
+    runtime: 5
+  deduplicate_merge:
+    cpus_per_task: 4
+    mem_mb: 20000
+  eval_aggregate:
+    cpus_per_task: 4
+    mem_mb: 980000
+  eval_features:
+    mem_mb: 4000
+  eval_mapping:
+    cpus_per_task: 12
+    mem_mb: 200000
+  eval_merge:
+    mem_mb: 20000
+  eval_segmentation_phenotype:
+    mem_mb: 50000
+  eval_segmentation_sbs:
+    mem_mb: 50000
+  extract_bases:
+    cpus_per_task: 1
+    mem_mb: 2000
+  extract_metadata_phenotype:
+    cpus_per_task: 1
+    mem_mb: 409
+    runtime: 5
+  extract_metadata_sbs:
+    cpus_per_task: 1
+    mem_mb: 403
+    runtime: 5
+  extract_phenotype_cp:
+    mem_mb: 3000
+  extract_phenotype_info:
+    cpus_per_task: 1
+    mem_mb: 1000
+  extract_sbs_info:
+    cpus_per_task: 1
+    mem_mb: 2000
+  fast_alignment:
+    cpus_per_task: 4
+    mem_mb: 20000
+  filter:
+    mem_mb: 100000
+  final_merge:
+    mem_mb: 500000
+  find_peaks:
+    cpus_per_task: 1
+    mem_mb: 2000
+  format_merge:
+    mem_mb: 20000
+  generate_feature_table:
+    cpus_per_task: 4
+    mem_mb: 980000
+  generate_montage:
+    mem_mb: 10000
+  identify_cytoplasm:
+    cpus_per_task: 1
+    mem_mb: 1000
+  initiate_montage:
+    mem_mb: 1000
+  log_filter:
+    cpus_per_task: 1
+    mem_mb: 2500
+  max_filter:
+    cpus_per_task: 1
+    mem_mb: 2000
+  merge:
+    cpus_per_task: 4
+    mem_mb: 20000
+  merge_phenotype_cp:
+    mem_mb: 300000
+  phate_leiden_clustering:
+    mem_mb: 10000
+  prepare_montage_data:
+    cpus_per_task: 8
+    mem_mb: 100000
+  segment_phenotype:
+    cpus_per_task: 1
+    mem_mb: 6000
+  segment_sbs:
+    cpus_per_task: 1
+    mem_mb: 3500
+  split_datasets:
+    mem_mb: 200000

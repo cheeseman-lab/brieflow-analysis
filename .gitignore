@@ -2,3 +2,7 @@
 analysis/.snakemake/
 analysis/slurm/slurm_output/
 analysis/brieflow_output/
+analysis/brieflow_output_tile/
+analysis/brieflow_output_well/
+analysis/logs/
+analysis/autoresearch/*.log
