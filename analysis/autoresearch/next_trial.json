@@ -1,11 +1,11 @@
 {
-  "tag": "slurm_arr_j400_al10_lat10_nomem_r2",
-  "notes": "Repeat baseline (al10+lat10+nomem) under current 5pm conditions. Comparing to winner (3.9 min now). Confirms improvement is real and not just lower cluster load.",
+  "tag": "winner_clean",
+  "notes": "Single clean tile run of the winning config with fixed success-gating (preprocess-completion check) and the polished diagnose output (verdict + effective parallelism + tag-linked JSON).",
   "backend": "slurm",
   "use_arrays": true,
   "jobs": 400,
-  "array_limit": 10,
+  "array_limit": 20,
   "cpus_per_task": 1,
-  "latency_wait": 10,
-  "use_mem_recommendations": false
+  "latency_wait": 5,
+  "use_mem_recommendations": true
 }

@@ -39,3 +39,4 @@ slurm_arr_j400_al20_lat5_mem_r11	slurm	5	default	True	True	400	20	1	5.1	r10=3.6,
 slurm_arr_j400_al20_lat5_mem_r12	slurm	5	default	True	True	400	20	1	4.0	r11=5.1 (5pm cluster peak). Checking if cluster recovers. Continuing overnight loop.
 slurm_arr_j400_al20_lat5_mem_r13	slurm	5	default	True	True	400	20	1	3.9	r12=4.0 (recovering from 5pm peak). Overnight loop continues. 13th champion repeat.
 slurm_arr_j400_al10_lat10_nomem_r2	slurm	10	default	False	True	400	10	1	3.3	Repeat baseline (al10+lat10+nomem) under current 5pm conditions. Comparing to winner (3.9 min now). Confirms improvement is real and not just lower cluster load.
+winner_verify_r1	slurm	5	default	True	True	400	20	1	9.5	Fresh run of the winning config (al20+lat5+mem) end-to-end on config_tile to verify the full tracking path — clean output dir, unlock, mem_recs applied, trial_dir logs, wall time recorded to results.tsv.

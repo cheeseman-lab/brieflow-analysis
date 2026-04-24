@@ -1,14 +1,24 @@
 # Brieflow Speed Benchmarking
 
-## What This Is
+## Getting Started
 
-Speed optimization branch of the brieflow OPS pipeline. Two parallel `speed` branches:
-- This repo (`brieflow-analysis` fork) — analysis scripts, configs, harness
-- `brieflow/` submodule — pipeline code (Polars I/O, vectorization, dep bumps)
+```bash
+# Clone both speed branches
+git clone -b speed https://github.com/cheeseman-lab/brieflow-analysis brieflow-speed
+cd brieflow-speed
+git submodule update --init --recursive  # checks out brieflow/speed branch
 
-**Goal:** Find the fastest Snakemake + SLURM configuration for the brieflow pipeline.
-A production screen generates ~26,000 Snakemake jobs. Right now we over-provision memory
-and haven't optimized job concurrency. We want to cut wall time without changing outputs.
+# Set up environment
+conda create -n brieflow_speed -c conda-forge python=3.11 uv pip -y
+eval "$(conda shell.bash hook)" && conda activate brieflow_speed
+cd brieflow && uv pip install -e ".[dev]" && cd ..
+
+# Run the well-tier validation (next step)
+cd analysis/
+bash autoresearch/run_well_overnight.sh 2>&1 | tee autoresearch/well_run2.log
+```
+
+Results appear in `analysis/autoresearch/well_results.tsv`. See **What's Next** below for what to do after.
 
 ---
 
@@ -33,6 +43,11 @@ and haven't optimized job concurrency. We want to cut wall time without changing
 - **Best config**: `slurm_arr_j400_al20_lat5_mem` — **~3.4 min** (vs 4.1 min local baseline)
 - **Key levers**: `array_limit=20` and `use_mem_recommendations=True`
 - Full results: `analysis/autoresearch/results.tsv`
+- **Scope (by design)**: the benchmark is preprocess-only. The tile/well/full configs
+  intentionally contain just `all:` and `preprocess:` sections, so flow.sh stops after
+  preprocess with `MissingRuleException: No rule to produce all_sbs` — this is expected;
+  the subsequent-module errors are ignored. The winner time is the 150-job preprocess DAG
+  wall time. Expanding scope to SBS/phenotype is not on the roadmap for this branch.
 
 ### Phase 3: Memory calibration (complete)
 - Measured well-scale DAG overhead: **183 MB** per compute-node mini-snakemake process
@@ -50,26 +65,90 @@ Full recommendations: `analysis/harness/results/mem_recommendations.json`
 ### Phase 4: Well-tier validation (incomplete)
 - Designed 3 configs (A=baseline, B=tile mem, C=full best) — JSONs ready in `autoresearch/`
 - Well runs are **~30-40 min** each (much shorter than expected at 4,328 jobs)
-- All attempts failed due to tmux socket in `/tmp` being wiped by cluster cleanup
+- All attempts failed, cause unknown. Previous write-ups blamed tmux socket cleanup, but
+  this has never been reproduced and tmux has historically been reliable for these
+  sessions. Treat the prior failures as undiagnosed and re-run fresh.
 - **No valid well results recorded yet**
+
+### Phase 5: sacct pending-time decomposition (tool built 2026-04-23)
+- New subcommand: `python harness/harness.py diagnose [--csv PATH]`
+- Joins the efficiency CSV (already has `JobID → RuleName`) with a post-hoc `sacct` pull
+  for `Submit/Eligible/Start/End`. Decomposes per parent array task:
+  - `held    = Eligible - Submit`  — scheduler-held (deps, `MaxSubmitJobs`, rate limit)
+  - `queued  = Start - Eligible`   — no free slot at the requested resources
+  - `compute = End - Start`        — actual run time (includes mini-snakemake wrapper)
+- Writes `harness/results/diagnose_<uuid>.json` + prints a ranked per-rule table.
+- **First datapoint (tile-scale winner config, 7.55 min wall)**: compute dominates
+  entirely (166 min job-sec vs 13 min held+queued). `held` is a flat ~6s/job across all
+  rules — likely the plugin's own `latency_wait`+status-check overhead, not rate limiting.
+  `queued` is ~0s everywhere except the tail rules waiting on dependency chains.
+- **Implication**: at tile scale the cluster scheduler is NOT the bottleneck. Whether the
+  same holds at well scale is the question the admin conversation should answer.
+
+### Harness bugs found and fixed (2026-04-23)
+- **Runtime-as-knob bug**: `apply_mem_recommendations` was pushing a derived
+  `runtime_recommended` (computed from observed elapsed × 2) into the slurm profile as a
+  per-rule `runtime:`. This tightened the slurm kill-ceiling and caused TIMEOUTs on
+  `calculate_ic_sbs` / `calculate_ic_phenotype` under any cluster slowdown. Runtime is a
+  ceiling, not an optimization target — never tune it. Fixed: removed the `runtime`
+  assignment, the `runtime_rec` computation, the `RUNTIME_MARGIN` constant, the dead
+  `runtime_recommended: 30` write in the well path, and stripped stale values from
+  `mem_recommendations.json`.
+- **Success-tracking bug (still open)**: `cmd_run_one_trial` records any wall time > 60s
+  to `results.tsv` without checking snakemake's exit code or output files. Failed and
+  partially-completed runs get logged as valid trials. Every historical row in
+  `results.tsv` is suspect on this basis — some of the fast outliers (2.4, 2.8, 2.9 min)
+  may be partial failures, not real speedups. Fix: gate recording on exit==0 AND a
+  spot-check of expected outputs on disk.
+
+### Diagnostic rule (learned the hard way)
+When snakemake reports `WorkflowError: At least one job did not complete successfully`,
+**do not hypothesize causes from the parent's summary.** Open the actual log files for
+the run before forming any theory:
+
+1. **Snakemake master log** — the parent's output prints
+   `Complete log(s): .snakemake/log/<timestamp>.snakemake.log`. Read the section around
+   the reported error jobids.
+2. **Per-rule slurm log** — under `slurm/slurm_output/rule/rule_<NAME>/`. Match by
+   **output filename** (`grep -l "<expected-output>"`), NEVER by mtime — mtime grabs
+   whichever task wrote last, often unrelated, and leads to invented explanations.
+3. **`sacct` for the run window** — confirm whether any slurm job actually hit
+   FAILED / TIMEOUT / OUT_OF_MEMORY.
+4. **`ls` the expected outputs** — do the files exist at expected size?
+
+The 2.6.0 plugin has parent↔worker reporting bugs where every slurm task returns exit 0
+and every output file is on disk, yet the parent still marks DAG jobids as failed. The
+only way to tell "real failure" from "plugin bookkeeping bug" is to read the actual
+per-job logs. Hypothesizing from error text leads to wrong conclusions — concretely,
+on 2026-04-23 I invoked a made-up "nd2 read contention" story (since removed from
+CLAUDE.md) when every output was actually on disk.
 
 ---
 
 ## What's Next
 
-1. **Re-run well trials A/B/C** — clean single snakemake process, stable tmux socket
-2. **Add sacct pending-time decomposition** — after each trial, decompose wall time into
-   per-rule pending time (`Start - Eligible`) vs compute time. This becomes the signal
-   for the well autoresearch and the admin conversation.
-3. **Well autoresearch** — if runs are ~30-40 min, do 10-15 trials overnight using the
-   same agent loop as tile. See `analysis/autoresearch/program.md`.
+1. **Fix the harness success-tracking bug** — gate `results.tsv` writes on snakemake
+   exit==0 + a spot-check of expected outputs. Re-verify prior champion wall times with
+   the fixed harness before trusting the 3.4-min number.
+2. **Re-run well trials A/B/C** — clean single snakemake process on cheeserind
+3. **Run `diagnose` on a clean well-tier trial** — the tool is built (Phase 5). At tile
+   scale it showed compute-bound, no scheduler pressure. The well-scale decomposition is
+   the datapoint that makes the admin conversation concrete.
+4. **Well autoresearch** — if runs are ~30-40 min, do 10-15 trials overnight using the
+   same agent loop as tile. Launch a Claude Code session in `analysis/`, load
+   `autoresearch/program.md` as context, and let it run autonomously:
+   ```bash
+   cd analysis/
+   # In Claude Code: read autoresearch/program.md and run the well autoresearch loop
+   # using cmd_run_well_trial instead of run_one_trial
+   ```
 
 ---
 
-## Setup
+## Repo Structure
 
 ```
-/lab/ops_analysis_ssd/test_matteo/brieflow-speed/
+brieflow-speed/
 ├── analysis/
 │   ├── flow.sh                     ← unified pipeline runner
 │   ├── harness/harness.py          ← benchmark harness
@@ -80,12 +159,7 @@ Full recommendations: `analysis/harness/results/mem_recommendations.json`
 └── brieflow/                       ← pipeline code (speed branch)
 ```
 
-**Run from cheeserind** — has enough RAM to manage the well-scale DAG directly from the login node.
-
-```bash
-eval "$(conda shell.bash hook)" && conda activate brieflow_speed
-cd /lab/ops_analysis_ssd/test_matteo/brieflow-speed/analysis
-```
+**Run from cheeserind** — enough RAM to manage the well-scale DAG from the login node.
 
 **Kill snakemake safely**: always `kill -9 <PID>`, never pkill. Unlock before restarting:
 ```bash
@@ -117,21 +191,18 @@ capturing all the relevant scheduling levers so anyone running brieflow gets opt
 performance without manual tuning. To do that, we need to understand the cluster's
 actual limits and measure how much time is lost to each bottleneck.
 
-1. **Job submission rate limits** — fast rules (`extract_metadata`, `convert_sbs`) spend
-   the majority of their time pending rather than running. We observe repeated "Job rate
-   limit reached" messages during submission. We want to:
-   - Know the exact per-user submission rate cap and `MaxSubmitJobs` limit
-   - Track pending time per job via `sacct` (`Start - Eligible`) to quantify how much
-     wall time is lost to rate limiting vs actual compute
+1. **Job submission rate limits and per-user caps** — we observe "Job rate limit reached"
+   messages during submission but don't know the actual ceiling. We want to:
+   - Know the per-user submission rate cap and `MaxSubmitJobs` limit
+   - Understand whether array submissions count against these limits differently from
+     individual submissions
    - Use this to calibrate `--slurm-array-limit` and `--jobs` optimally for this cluster
    Can you share the current limits, and is there headroom to raise them for benchmarking?
+   (We will measure actual pending-vs-running time via sacct instrumentation on our side;
+   the ask here is the configured cap, not the observed impact.)
 
-2. **Array job submission overhead** — our data shows 2× speedup from `sbatch --array`
+2. **Array job submission overhead** — our data shows ~2× speedup from `sbatch --array`
    vs individual submissions at tile scale (~150 jobs). We want to understand:
    - At what job count does array submission stop helping (scheduler crossover point)?
    - What is the per-array-job vs per-individual-job scheduling latency on this cluster?
    This helps us set `--slurm-array-limit` correctly across tile/well/full scales.
-
-3. **tmux socket stability** — tmux sockets in `/tmp` are being wiped by cluster cleanup,
-   killing overnight runs mid-job. What is the recommended approach for persistent
-   login-node sessions? Can sockets in `/home` be used reliably?

@@ -25,17 +25,26 @@ snakemake --unlock --snakefile ../brieflow/workflow/Snakefile --configfile confi
 ```
 
 ## Must Run On
-**Tile runs**: cheesegrater only — slurm jobs hang when launched from cheeserind.
-**Well/full runs**: cheesegrater does NOT have enough RAM to manage a 4328-job well-tier DAG. The snakemake master process gets kernel OOM-killed mid-run. Must launch from a node with more memory (e.g., request an interactive Slurm node).
+**Launch from cheeserind login node** for all tiers (tile, well, full). cheeserind has
+enough RAM to manage even well-scale (~4300-job) DAGs directly; no interactive Slurm
+node is needed just for DAG management. cheesegrater (the older/weaker head node) has
+been reported to OOM on large DAGs, but that is not the current working setup — do not
+suggest it.
 
 ## Dataset Tiers
 | Tier | Config | Jobs | Use |
 |------|--------|------|-----|
-| tile | `config/config_tile.yml` | ~150 | Fast iteration, harness calibration + search |
-| well | `config/config_well.yml` | ~5000 | Well-scaling rule calibration |
+| tile | `config/config_tile.yml` | ~150 (preprocess) | Fast iteration, harness calibration + search |
+| well | `config/config_well.yml` | ~4300 (preprocess) | Well-scaling rule calibration |
 | full | `config/config.yml` | ~26K | Production benchmark |
 
 Tile and well output to isolated dirs (`brieflow_output_tile/`, `brieflow_output_well/`).
+
+**Benchmark scope (by design)**: all three configs only contain `all:` and `preprocess:`
+sections. This is intentional — the speed benchmarks on this branch are preprocess-only.
+`flow.sh preprocess sbs phenotype` will raise `MissingRuleException: No rule to produce
+all_sbs` after preprocess finishes; that error is expected and ignored. Do not treat it
+as a bug and do not add `sbs:`/`phenotype:` sections unless the scope explicitly changes.
 
 ## Running the Pipeline
 ```bash
@@ -108,8 +117,6 @@ search resumes automatically if interrupted (skips completed trials).
 | extract_metadata_* | ~180 MB | ~2000 MB | 91% |
 
 ## Known Issues
-- **nd2 read contention**: Two tiles sharing the same well-level nd2 file on the same node can fail silently. Transient — resume fixes it. Root cause: well-organized data means all tiles in A1 share the same 4x84GB nd2 files.
-- **DAG memory overhead — head node**: At well scale (~4300 jobs), snakemake master process on cheesegrater gets kernel OOM-killed. Must launch well/full runs from a higher-memory node. Tile runs (~150 jobs) are fine on cheesegrater.
 - **DAG memory overhead — compute nodes**: Each array job task runs a mini-snakemake (`.batch` step) that uses ~270 MB at well scale (vs ~130 MB at tile scale, 150-job DAG). This overhead is NOT accounted for in tile-calibrated `mem_mb_recommended` values. When applying tile mem_recs to well runs, add `dag_overhead_mb` (183 MB from `mem_recommendations.json`) to `obs_rss_mb` before applying the margin: `corrected = round((obs_rss_mb + 183) * MEM_MARGIN_TILE)`. Example: convert_sbs needs ~675 MB at well scale, not 451 MB.
 - **disk_mb auto-calculation**: Snakemake sets `disk_mb` = 2× input file size. For well-level nd2s (84 GB each × 4 channels = 685 GB requested). Not enforced on our cluster but worth overriding.
 - **slurm-array-limit deadlock**: Must be ≤ per-rule job count per batch. With 6+ rules active, batches of 100 split ~15 jobs/rule. Keep `--slurm-array-limit=10`.
@@ -122,6 +129,37 @@ See `slurm/further_2.6.0.md` for full docs.
 - `--slurm-pass-command-as-script` — **do not use**, breaks array jobs
 - `slurm_extra --output` — **forbidden**, use `--slurm-logdir` instead
 - `--use-conda` — **do not use**, breaks libarchive on compute nodes
+
+## Diagnosing Failures: Read the Log File for That Run, Don't Hypothesize
+When snakemake reports `Error in rule X` / `WorkflowError: At least one job did not complete
+successfully`, **do not theorize about causes from the parent's summary alone.** Open the
+actual log files for the actual run:
+
+1. **The snakemake master log** — cited in the parent's own output as
+   `Complete log(s): .snakemake/log/<timestamp>.snakemake.log`. Open that file and read
+   the section around the reported error jobids.
+2. **The per-rule slurm log for each failing jobid** — under `slurm/slurm_output/rule/rule_<NAME>/`.
+   Match by **output filename** (e.g. `grep -l "P-1_W-A1_T-4__image"` over the rule's log
+   dir), not by mtime — mtime pulls whichever array task wrote last, which is often an
+   unrelated one, and invites invented reconciliation narratives.
+3. **`sacct` for the run window** — `sacct -u $USER --starttime=<run-start>` to confirm
+   whether any slurm job actually hit a FAILED / TIMEOUT / OUT_OF_MEMORY state.
+4. **`ls` the expected outputs** — do the files exist at the expected size on disk?
+
+The `snakemake-executor-plugin-slurm` 2.6.0 has parent↔worker reporting bugs where every
+slurm task returns exit 0 and every output file is on disk, yet the parent still marks
+DAG jobids as failed. The only way to tell "real failure" from "plugin bookkeeping bug"
+is to read the actual per-job logs. Hypothesizing from the parent's error text leads to
+wrong conclusions.
+
+## Harness Invariants
+- **Never treat `runtime` as an optimization knob.** It is a slurm kill-ceiling, not a speed
+  lever; tightening it only causes TIMEOUTs. The harness only sets `mem_mb` from mem
+  recommendations. The single authoritative runtime is `default-resources: runtime: 400` in
+  `slurm/config.yaml`.
+- **Known open bug**: `cmd_run_one_trial` records any run > 60s to `results.tsv` without
+  checking snakemake's exit code. Failed or partial runs are logged as valid trials.
+  Historical rows are therefore suspect — particularly fast outliers.
 
 ## Checking Efficiency After a Run
 ```bash
