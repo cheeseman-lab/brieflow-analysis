@@ -157,9 +157,28 @@ wrong conclusions.
   lever; tightening it only causes TIMEOUTs. The harness only sets `mem_mb` from mem
   recommendations. The single authoritative runtime is `default-resources: runtime: 400` in
   `slurm/config.yaml`.
-- **Known open bug**: `cmd_run_one_trial` records any run > 60s to `results.tsv` without
-  checking snakemake's exit code. Failed or partial runs are logged as valid trials.
-  Historical rows are therefore suspect — particularly fast outliers.
+- **Success gate (added 2026-04-28)**: `cmd_run_one_trial` requires the snakemake-emitted
+  `Finished jobid: 0 (Rule: all_preprocess)` marker in the flow.sh aggregate log before
+  writing to `results.tsv`. Pre-2026-04-28 rows used a `wall_time > 60s` check and so may
+  contain partial failures recorded as wins — the historical 3.4-min "winner" is one of
+  those (real wall time when complete is ~6 min).
+- **MEM_MARGIN_TILE = 4.0** (bumped from 1.5 on 2026-04-28). The 1.5× margin gave
+  convert_sbs a 451 MB ceiling; under cluster load actual peak RSS exceeded that and
+  slurmstepd OOM-killed jobs. 4× lifts it to 1120 MB and eliminates OOMs.
+
+## Robust Tile Config (2026-04-28)
+Verified clean (150/150, success-gated, 0 OOM, 0 MissingOutputException):
+
+```
+backend=slurm  use_arrays=true  jobs=400  array_limit=20
+latency_wait=30  cpus_per_task=1  use_mem_recommendations=true
+```
+
+Wall time: ~6.10 min (sacct envelope) / ~7.0 min (flow.sh wall, includes SBS-module
+MissingRuleException startup which is expected and ignored). NFS attribute-cache
+propagation under cluster load can exceed 10s — `latency_wait=30` clears it on this
+cluster; lower values caused snakemake to declare jobs failed and cleanup-delete
+their (already-landed) output files.
 
 ## Checking Efficiency After a Run
 ```bash

@@ -1,11 +1,11 @@
 {
-  "tag": "winner_clean",
-  "notes": "Single clean tile run of the winning config with fixed success-gating (preprocess-completion check) and the polished diagnose output (verdict + effective parallelism + tag-linked JSON).",
+  "tag": "winner_4x_lat30_noarrays",
+  "notes": "Comparison to winner_4x_lat30 (which was clean at 6.10 min). Same mem (4x) and lat=30, but use_arrays=false — each job submitted as its own sbatch, no mini-snakemake batching. Tests the hypothesis that array batching is what creates back-to-back NFS writes/stats and exposes attribute-cache races.",
   "backend": "slurm",
-  "use_arrays": true,
+  "use_arrays": false,
   "jobs": 400,
   "array_limit": 20,
   "cpus_per_task": 1,
-  "latency_wait": 5,
+  "latency_wait": 30,
   "use_mem_recommendations": true
 }

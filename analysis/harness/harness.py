@@ -150,9 +150,9 @@ WELL_MEM_CONSERVATIVE: dict[str, int] = {
 
 DAG_ANCHOR_RULES = ["extract_metadata_sbs", "extract_metadata_phenotype"]
 
-MEM_MARGIN_TILE = 1.5
-MEM_MARGIN_WELL = 1.5
-DAG_MARGIN = 1.2
+MEM_MARGIN_TILE = 4.0   # bumped from 1.5 after 2026-04-28 OOM diagnosis: convert_sbs
+MEM_MARGIN_WELL = 4.0   # at 1.5×267≈451 MB OOM-killed under cluster load. 4× covers
+DAG_MARGIN = 1.2        # observed peak RSS variance.
 
 
 # ---------------------------------------------------------------------------

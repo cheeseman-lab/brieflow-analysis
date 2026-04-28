@@ -70,6 +70,35 @@ Full recommendations: `analysis/harness/results/mem_recommendations.json`
   sessions. Treat the prior failures as undiagnosed and re-run fresh.
 - **No valid well results recorded yet**
 
+### Phase 6: First fully verified clean runs (2026-04-28)
+The success-gating exposed that the historical "3.4 min winner" was logging partial
+failures as wins. After fixing two configuration brittleness sources, we have the first
+honest baselines:
+
+| Config | Wall (gated) | held | queued | compute | parallelism | failures |
+|---|---|---|---|---|---|---|
+| `winner_4x_lat30`            (arrays)    | **6.10 min** | 29%  | 0.6%  | 70% | 19.7× | 0 |
+| `winner_4x_lat30_noarrays`   (no arrays) | **11.18 min**| 0%   | 18%   | 82% | 11.2× | 0 |
+
+**What changed from the historical "3.4 min winner":**
+- `latency_wait`: 5 → **30** (NFS attribute-cache propagation under load can exceed 10s,
+  causing MissingOutputException + snakemake's failure-cleanup to delete files that DID
+  land. lat=5 and lat=10 reproduced this; lat=30 cleared it on this cluster.)
+- `MEM_MARGIN_TILE`: 1.5× → **4.0×** (the 1.5× margin gave convert_sbs a 451 MB cap;
+  under load actual peak RSS exceeded that and slurmstepd OOM-killed jobs. 4× lifted
+  the cap to 1120 MB and OOMs went to zero.)
+
+**MissingOutputException is real data loss, not just bookkeeping noise.** When NFS
+visibility lags, snakemake's mini-snakemake declares the output missing, the parent
+declares the rule failed, and snakemake's failure-cleanup actively deletes the (just-
+landed) output file. Cross-ref evidence: per-rule slurm logs show "Storing output in
+storage" + parent-dir listings include the file at the moment the exception fires.
+
+**Array batching is NOT the cause of MissingOutputException.** Tested both with and
+without arrays at lat=30: both clean. The bottleneck is NFS visibility vs latency_wait,
+period. Arrays still win 1.8× because they absorb cluster-slot contention into a
+small held-time tax instead of a large queued-time tax.
+
 ### Phase 5: sacct pending-time decomposition (tool built 2026-04-23)
 - New subcommand: `python harness/harness.py diagnose [--csv PATH]`
 - Joins the efficiency CSV (already has `JobID → RuleName`) with a post-hoc `sacct` pull
@@ -127,10 +156,10 @@ CLAUDE.md) when every output was actually on disk.
 
 ## What's Next
 
-1. **Fix the harness success-tracking bug** — gate `results.tsv` writes on snakemake
-   exit==0 + a spot-check of expected outputs. Re-verify prior champion wall times with
-   the fixed harness before trusting the 3.4-min number.
-2. **Re-run well trials A/B/C** — clean single snakemake process on cheeserind
+1. ~~**Fix the harness success-tracking bug**~~ — DONE 2026-04-28 (preprocess-completion
+   marker gate added; runtime-as-knob removed; mem margin bumped to 4×).
+2. **Re-run well trials A/B/C with the robust config** (lat=30, mem 4×, arrays on, al=20)
+   — single snakemake process on cheeserind
 3. **Run `diagnose` on a clean well-tier trial** — the tool is built (Phase 5). At tile
    scale it showed compute-bound, no scheduler pressure. The well-scale decomposition is
    the datapoint that makes the admin conversation concrete.
