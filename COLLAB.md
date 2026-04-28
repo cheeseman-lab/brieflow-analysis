@@ -94,10 +94,42 @@ declares the rule failed, and snakemake's failure-cleanup actively deletes the (
 landed) output file. Cross-ref evidence: per-rule slurm logs show "Storing output in
 storage" + parent-dir listings include the file at the moment the exception fires.
 
-**Array batching is NOT the cause of MissingOutputException.** Tested both with and
-without arrays at lat=30: both clean. The bottleneck is NFS visibility vs latency_wait,
-period. Arrays still win 1.8× because they absorb cluster-slot contention into a
-small held-time tax instead of a large queued-time tax.
+**At tile scale**, array batching is NOT the cause of MissingOutputException. Tested both
+with and without arrays at lat=30: both clean. Arrays win 1.8× by absorbing cluster-slot
+contention into a small held-time tax instead of a large queued-time tax.
+
+### Phase 7: Array-batching wildcard-collision bug at well scale (2026-04-28)
+Above conclusion held only at tile scale (~150 jobs). At well scale (~4,300 jobs), arrays
+fail catastrophically due to a `snakemake-executor-plugin-slurm` 2.6.0 defect:
+
+- The plugin packs N distinct-wildcard rule invocations into a single slurm array task.
+- Slurm's `--comment` field (which the plugin uses to encode wildcards) is ONE string
+  per submission. The plugin emits the warning twice per batch:
+  > `Array job submission does not allow for multiple different wildcard combinations
+  > in the comment string. Only the first one will be used.`
+- All N mini-snakemakes (each on a different compute node) read the comment, see the
+  FIRST member's wildcards, and treat that tile as part of their own work.
+- Each mini-snakemake successfully writes its own assigned tile (the `.0` python step
+  records `COMPLETED 0:0` in sacct), then verifies the comment-encoded tile (which a
+  sibling task produced). NFS hasn't propagated the sibling's write → `MissingOutputException`.
+- Snakemake's failure-cleanup runs and **deletes the sibling's actual output**. The
+  sibling task ran cleanly but its output is gone. Cascade.
+
+Concrete trace (well_winner_4x_lat30_runtime1d, 2026-04-28 15:13–15:20):
+- Task `7561311_1` produced T-57_C-3 cleanly (sacct COMPLETED, log shows `1 of 1 steps
+  (100%) done`, `Storing output in storage`).
+- Task `7561311_20` (assigned T-226_C-2, host c13b3) read the same comment-string
+  wildcards and tried to verify T-57_C-3. Hit MissingOutputException at 30s.
+- `7561311_20.log` line: `Removing output files of failed job convert_sbs since they might
+  be corrupted: brieflow_output_well/preprocess/images/sbs/P-1_W-A1_T-57_C-3__image.tiff`
+- T-57_C-3 deleted from disk despite task _1 having produced it correctly.
+
+20 such cross-contaminations in a single batch caused the cascade that killed the well
+run at 134/4328 steps.
+
+**Implication**: arrays cannot be used at well or full scale on this plugin version. The
+robust well config requires `use_arrays=false` until the upstream bug is fixed. We trade
+away the plugin's headline 1.8× speedup for correctness.
 
 ### Phase 5: sacct pending-time decomposition (tool built 2026-04-23)
 - New subcommand: `python harness/harness.py diagnose [--csv PATH]`

@@ -166,19 +166,37 @@ wrong conclusions.
   convert_sbs a 451 MB ceiling; under cluster load actual peak RSS exceeded that and
   slurmstepd OOM-killed jobs. 4× lifts it to 1120 MB and eliminates OOMs.
 
-## Robust Tile Config (2026-04-28)
-Verified clean (150/150, success-gated, 0 OOM, 0 MissingOutputException):
-
+## Robust Configs (2026-04-28)
+Tile-tier (verified clean, 150/150, success-gated, 0 OOM, 0 MissingOutputException):
 ```
 backend=slurm  use_arrays=true  jobs=400  array_limit=20
 latency_wait=30  cpus_per_task=1  use_mem_recommendations=true
 ```
+Wall: ~6.10 min sacct envelope, ~7.0 min flow.sh (incl. expected SBS-module
+MissingRuleException startup). `latency_wait=30` clears NFS attribute-cache
+propagation; lower values caused MissingOutputException + failure-cleanup that
+deleted already-landed outputs.
 
-Wall time: ~6.10 min (sacct envelope) / ~7.0 min (flow.sh wall, includes SBS-module
-MissingRuleException startup which is expected and ignored). NFS attribute-cache
-propagation under cluster load can exceed 10s — `latency_wait=30` clears it on this
-cluster; lower values caused snakemake to declare jobs failed and cleanup-delete
-their (already-landed) output files.
+Well-tier (use this — `use_arrays=false`):
+```
+backend=slurm  use_arrays=false  jobs=400  latency_wait=30
+cpus_per_task=1  use_tile_mem=true  use_well_mem=true
+```
+**Do NOT use `use_arrays=true` at well or full scale.** The slurm-executor-plugin 2.6.0
+array mechanism has a wildcard-collision bug: it packs N distinct-wildcard tile jobs
+into one array task with a single `--comment` string. Sibling array members each verify
+the FIRST member's wildcards instead of their own, hit MissingOutputException, and
+trigger snakemake's failure-cleanup that deletes other siblings' real outputs. At tile
+scale (~150 jobs, small batches) this is invisible; at well scale (~4,300 jobs) it
+cascades and kills the run. See COLLAB.md Phase 7 for the concrete trace.
+
+## slurm/config.yaml runtime
+Always express `runtime` as a string with units (e.g. `runtime: "1d"`, `runtime: "12h"`),
+not a bare int. Bare ints take an unintended path through snakemake's resource
+handling that yielded a 7-min slurm Timelimit when we set `runtime: 400`. The string
+form goes through `parse_human_friendly` and produces the expected timelimit. Verify
+once via `sacct -j <id> --format=Timelimit` after any change. Do not tune runtime —
+it is a kill ceiling, not a knob.
 
 ## Checking Efficiency After a Run
 ```bash

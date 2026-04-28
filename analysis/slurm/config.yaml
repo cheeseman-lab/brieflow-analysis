@@ -8,7 +8,7 @@ default-resources:
     mem_mb: 3000
     tasks: 1
     cpus_per_task: 1
-    runtime: 400
+    runtime: "1d"
 jobs: 600
 
 set-resources:

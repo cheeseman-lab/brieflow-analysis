@@ -680,6 +680,24 @@ def cmd_run_well_trial(args):
         print(f"[harness] ERROR: {tag} finished in {wall_time:.1f}s — not recording (likely failed).")
         sys.exit(1)
 
+    # Same gate as cmd_run_one_trial. Preprocess-only scope: flow.sh exits non-zero on
+    # MissingRuleException(all_sbs); only `Finished jobid: 0 (Rule: all_preprocess)` in
+    # the log proves preprocess completed cleanly.
+    preprocess_ok = False
+    if log_path.exists():
+        try:
+            with open(log_path) as lf:
+                for line in lf:
+                    if "Finished jobid: 0 (Rule: all_preprocess)" in line:
+                        preprocess_ok = True
+                        break
+        except OSError:
+            pass
+    if not preprocess_ok:
+        print(f"[harness] ERROR: {tag} — preprocess did not complete cleanly "
+              f"(no `Finished jobid: 0 (Rule: all_preprocess)` in {log_path}). Not recording.")
+        sys.exit(1)
+
     backend = trial.get("backend", "slurm")
     lw = str(trial.get("latency_wait", 10)) if backend == "slurm" else "N/A"
     al = str(trial.get("array_limit", 10)) if backend == "slurm" else "N/A"
