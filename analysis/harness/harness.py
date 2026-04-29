@@ -142,16 +142,20 @@ RULE_MEMORY_PROFILE: dict[str, dict] = {
 # Based on well-tier calibration × 4x margin (scales with tiles/well).
 # Tile-scaling rules use mem_recommendations.json values instead.
 WELL_MEM_CONSERVATIVE: dict[str, int] = {
-    # Calibration severely underestimated peak RSS for calculate_ic rules at full well
-    # scale. Multiple bumps on 2026-04-28 still OOM'd:
-    #   calculate_ic_sbs cap: 4G→8G→16G→32G — peaks 4G, 8G observed (more cycles untested).
-    #   calculate_ic_phenotype cap: 10G→16G→32G→128G — peaks 32.7G then 125G observed.
-    # 125 GB is consistent with loading ~1300 phenotype tiles (70 MB each = 93 GB raw)
-    # plus working set. Going with baker production's proven values.
-    "calculate_ic_sbs":          50_000,
-    "calculate_ic_phenotype":   500_000,
-    "combine_metadata_sbs":       1_500,
-    "combine_metadata_phenotype": 1_500,
+    # 2026-04-29: Replaced the prior hardcoded baker-production caps (50G/500G) with
+    # values derived from this branch's actual observed peak RSS × 1.5 overhead, sourced
+    # from aggregated efficiency CSVs. These should track `mem_recommendations.json`
+    # (well-scaling rules); future cleanup is to have `use_well_mem` read directly from
+    # the JSON instead of duplicating values here.
+    #
+    # Observed peaks (well-scale, 2026-04-28):
+    #   calculate_ic_sbs        peak  15.7 GB (was at 16G cap — actual peak may be higher)
+    #   calculate_ic_phenotype  peak 215   GB (uncapped under 500G ceiling)
+    #   combine_metadata_*      peak ~350 MB
+    "calculate_ic_sbs":          24_000,
+    "calculate_ic_phenotype":   323_000,
+    "combine_metadata_sbs":         600,
+    "combine_metadata_phenotype":   600,
 }
 
 DAG_ANCHOR_RULES = ["extract_metadata_sbs", "extract_metadata_phenotype"]

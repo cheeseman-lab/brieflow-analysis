@@ -37,17 +37,17 @@ Results appear in `analysis/autoresearch/well_results.tsv`. See **What's Next** 
 - Ran 13 predefined configs (local, slurm-noarray, slurm-array variants)
 - **Finding**: slurm-array backend wins; local is fastest at tile scale but doesn't scale
 
-### Phase 2: Autoresearch — agent-driven tile search (complete, 30 trials)
-- Autonomous agent loop: write `next_trial.json` → run tile tier → observe → repeat
-- Searched: `array_limit`, `latency_wait`, `use_mem_recommendations`
-- **Best config**: `slurm_arr_j400_al20_lat5_mem` — **~3.4 min** (vs 4.1 min local baseline)
-- **Key levers**: `array_limit=20` and `use_mem_recommendations=True`
-- Full results: `analysis/autoresearch/results.tsv`
-- **Scope (by design)**: the benchmark is preprocess-only. The tile/well/full configs
-  intentionally contain just `all:` and `preprocess:` sections, so flow.sh stops after
-  preprocess with `MissingRuleException: No rule to produce all_sbs` — this is expected;
-  the subsequent-module errors are ignored. The winner time is the 150-job preprocess DAG
-  wall time. Expanding scope to SBS/phenotype is not on the roadmap for this branch.
+### Phase 2: Autoresearch — agent-driven tile search (data discarded 2026-04-29)
+- Autonomous agent loop ran 30+ trials searching `array_limit`, `latency_wait`,
+  `use_mem_recommendations`. Recorded data was DELETED after we found the harness's
+  pre-gate success-tracking was logging partial-failure runs as if they had completed.
+  Wall times in the historical rows underestimated by ~1.8× and parameter rankings
+  were not trustworthy. Only post-gate rows from 2026-04-28 onward remain in
+  `results.tsv` (see Phase 6).
+- The qualitative finding that **arrays-on beats arrays-off ~2×** survived the cleanup
+  because both modes were similarly affected by the tracking bug, so the relative
+  comparison was preserved. Confirmed under the gated harness: 6.10 min arrays vs
+  11.18 min no-arrays.
 
 ### Phase 3: Memory calibration (complete)
 - Measured well-scale DAG overhead: **183 MB** per compute-node mini-snakemake process
@@ -71,22 +71,22 @@ Full recommendations: `analysis/harness/results/mem_recommendations.json`
 - **No valid well results recorded yet**
 
 ### Phase 6: First fully verified clean runs (2026-04-28)
-The success-gating exposed that the historical "3.4 min winner" was logging partial
-failures as wins. After fixing two configuration brittleness sources, we have the first
-honest baselines:
+With the success gate in place, two clean tile-tier baselines were established:
 
 | Config | Wall (gated) | held | queued | compute | parallelism | failures |
 |---|---|---|---|---|---|---|
 | `winner_4x_lat30`            (arrays)    | **6.10 min** | 29%  | 0.6%  | 70% | 19.7× | 0 |
 | `winner_4x_lat30_noarrays`   (no arrays) | **11.18 min**| 0%   | 18%   | 82% | 11.2× | 0 |
 
-**What changed from the historical "3.4 min winner":**
-- `latency_wait`: 5 → **30** (NFS attribute-cache propagation under load can exceed 10s,
-  causing MissingOutputException + snakemake's failure-cleanup to delete files that DID
-  land. lat=5 and lat=10 reproduced this; lat=30 cleared it on this cluster.)
-- `MEM_MARGIN_TILE`: 1.5× → **4.0×** (the 1.5× margin gave convert_sbs a 451 MB cap;
-  under load actual peak RSS exceeded that and slurmstepd OOM-killed jobs. 4× lifted
-  the cap to 1120 MB and OOMs went to zero.)
+**Two configuration brittleness sources had to be fixed before either could complete:**
+- `latency_wait`: pre-gate trials had used 5 (an unreliable value chosen during the
+  unreliable autoresearch). Bumped to **30** because NFS attribute-cache propagation
+  under cluster load can exceed 10s, causing MissingOutputException → snakemake's
+  failure-cleanup → deletion of files that DID land. lat=5 and lat=10 reproduced this;
+  lat=30 cleared it on this cluster.
+- `MEM_MARGIN_TILE`: was 1.5× (giving convert_sbs a 451 MB cap), bumped to **4.0×**.
+  Under load the actual peak RSS exceeded 451 MB and slurmstepd OOM-killed jobs.
+  4× lifts the cap to 1120 MB and eliminates OOMs at tile scale.
 
 **MissingOutputException is real data loss, not just bookkeeping noise.** When NFS
 visibility lags, snakemake's mini-snakemake declares the output missing, the parent
@@ -130,6 +130,39 @@ run at 134/4328 steps.
 **Implication**: arrays cannot be used at well or full scale on this plugin version. The
 robust well config requires `use_arrays=false` until the upstream bug is fixed. We trade
 away the plugin's headline 1.8× speedup for correctness.
+
+### Phase 8: Well-tier preprocess success + memory calibration learning (2026-04-29)
+
+**Outcome**: First fully success-gated well-tier preprocess completion on the speed
+branch. 4,328 jobs total, ~136 GB output. Cumulative wall ~3.5 hr across resume
+iterations (most work in v2 to 99.7%, completed in v6 with mem caps that don't OOM).
+
+**Key memory calibration finding**: `calibrate_well` (single-sample, run on Apr 5)
+severely underestimated peak RSS for `calculate_ic_*` rules at full well scale because
+those rules' memory scales linearly with N_tiles per cycle/round:
+
+| Rule | Apr 5 calibration | 2026-04-28 well-scale observed |
+|---|---|---|
+| `calculate_ic_sbs` | 945 MB | **15.7 GB** (per cycle, ~333 tiles each) |
+| `calculate_ic_phenotype` | 2.5 GB | **210 GB** (~1300 tiles × 70 MB raw + working set) |
+| `convert_phenotype` | 686 MB | 839 MB |
+| `convert_sbs` | 268 MB | 402 MB |
+| `extract_metadata_*` | ~180 MB | ~317 MB |
+
+The calculate_ic_phenotype gap is **80× the calibration value**. Iterating up on
+caps based on OOM events consumed 6 attempts (10G → 16G → 32G → 128G → 500G) before
+landing on baker's production value. With the actual data in hand, true peak is 210 GB
+and a 1.5× overhead gives 315 GB — substantially under baker's 500 GB.
+
+**Updated `mem_recommendations.json`** (2026-04-29): switched semantics from
+"calibration sample × margin" to "worst-case observed peak across all efficiency CSVs
+× 1.5 overhead". This is the new stable defaults source; `WELL_MEM_CONSERVATIVE` in
+harness.py duplicates these values for now (cleanup TODO).
+
+**Lesson**: every run produces an efficiency CSV with per-job `MaxRSS_MB`. We were
+generating this data from the start but not feeding it back into mem recommendations.
+"Iterate up on the cap until it stops OOMing" was the bad workflow; "look at the data
+we already have" was the missed opportunity.
 
 ### Phase 5: sacct pending-time decomposition (tool built 2026-04-23)
 - New subcommand: `python harness/harness.py diagnose [--csv PATH]`
@@ -188,10 +221,17 @@ CLAUDE.md) when every output was actually on disk.
 
 ## What's Next
 
-1. ~~**Fix the harness success-tracking bug**~~ — DONE 2026-04-28 (preprocess-completion
-   marker gate added; runtime-as-knob removed; mem margin bumped to 4×).
-2. **Re-run well trials A/B/C with the robust config** (lat=30, mem 4×, arrays on, al=20)
-   — single snakemake process on cheeserind
+1. ~~**Fix the harness success-tracking bug**~~ — DONE 2026-04-28.
+2. ~~**Re-run well trials with the robust config**~~ — DONE 2026-04-29 (`well_winner_noarrays_v6`,
+   first gated well-preprocess success).
+3. **Replace single-sample `calibrate_well` with efficiency-CSV aggregator.** Walk every
+   `logs/efficiency_*/efficiency_report_*.csv`, take worst-case observed peak per rule,
+   apply overhead, write `mem_recommendations.json`. Self-correcting calibration.
+4. **Per-rule scoring formula for memory.** `mem_mb = k_rule × total_input_size_MB + b_rule`
+   with constants learned from observations. Generalizes to new screens with different
+   tile counts without recalibration. See CLAUDE.md "Memory Calibration" for design.
+5. **Drop `WELL_MEM_CONSERVATIVE` from harness.py.** Have `use_well_mem` read directly
+   from `mem_recommendations.json` for tier=="well" rules.
 3. **Run `diagnose` on a clean well-tier trial** — the tool is built (Phase 5). At tile
    scale it showed compute-bound, no scheduler pressure. The well-scale decomposition is
    the datapoint that makes the admin conversation concrete.

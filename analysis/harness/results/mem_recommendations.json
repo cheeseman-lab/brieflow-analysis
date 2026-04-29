@@ -1,58 +1,75 @@
 {
   "calculate_ic_phenotype": {
-    "tier": "well",
-    "obs_rss_mb": 2503.42578125,
-    "dag_overhead_mb": 183.2890625,
-    "rule_mem_mb": 2320.13671875,
-    "mem_mb_recommended": 9549
+    "mem_mb_recommended": 322900,
+    "obs_cap_at_peak_mb": 500000.0,
+    "obs_n": 3,
+    "obs_peak_rss_mb": 215252.01171875,
+    "obs_source": "efficiency_aggregated",
+    "overhead": 1.5,
+    "tier": "well"
   },
   "calculate_ic_sbs": {
-    "tier": "well",
-    "obs_rss_mb": 944.64453125,
-    "dag_overhead_mb": 183.2890625,
-    "rule_mem_mb": 761.35546875,
-    "mem_mb_recommended": 3314
+    "WARNING": "peak_was_at_cap_actual_peak_may_be_higher",
+    "mem_mb_recommended": 23600,
+    "obs_cap_at_peak_mb": 16000.0,
+    "obs_n": 18,
+    "obs_peak_rss_mb": 15725.8828125,
+    "obs_source": "efficiency_aggregated",
+    "overhead": 1.5,
+    "tier": "well"
   },
   "combine_metadata_phenotype": {
-    "tier": "well",
-    "obs_rss_mb": 212.42578125,
-    "dag_overhead_mb": 183.2890625,
-    "rule_mem_mb": 106.212890625,
-    "mem_mb_recommended": 693
+    "mem_mb_recommended": 600,
+    "obs_cap_at_peak_mb": 1500.0,
+    "obs_n": 1,
+    "obs_peak_rss_mb": 337.57421875,
+    "obs_source": "efficiency_aggregated",
+    "overhead": 1.5,
+    "tier": "well"
   },
   "combine_metadata_sbs": {
-    "tier": "well",
-    "obs_rss_mb": 217.640625,
-    "dag_overhead_mb": 183.2890625,
-    "rule_mem_mb": 108.8203125,
-    "mem_mb_recommended": 704
+    "mem_mb_recommended": 600,
+    "obs_cap_at_peak_mb": 1500.0,
+    "obs_n": 1,
+    "obs_peak_rss_mb": 366.44921875,
+    "obs_source": "efficiency_aggregated",
+    "overhead": 1.5,
+    "tier": "well"
   },
   "convert_phenotype": {
-    "tier": "tile",
-    "obs_rss_mb": 686.453125,
-    "dag_overhead_mb": 0.0,
-    "rule_mem_mb": 686.453125,
-    "mem_mb_recommended": 2795
+    "mem_mb_recommended": 1300,
+    "obs_cap_at_peak_mb": 3479.0,
+    "obs_n": 1281,
+    "obs_peak_rss_mb": 838.7890625,
+    "obs_source": "efficiency_aggregated",
+    "overhead": 1.5,
+    "tier": "tile"
   },
   "convert_sbs": {
-    "tier": "tile",
-    "obs_rss_mb": 267.55078125,
-    "dag_overhead_mb": 0.0,
-    "rule_mem_mb": 267.55078125,
-    "mem_mb_recommended": 1120
+    "mem_mb_recommended": 700,
+    "obs_cap_at_peak_mb": 1803.0,
+    "obs_n": 2997,
+    "obs_peak_rss_mb": 401.5546875,
+    "obs_source": "efficiency_aggregated",
+    "overhead": 1.5,
+    "tier": "tile"
   },
   "extract_metadata_phenotype": {
-    "tier": "tile",
-    "obs_rss_mb": 186.80078125,
-    "dag_overhead_mb": 183.2890625,
-    "rule_mem_mb": 93.400390625,
-    "mem_mb_recommended": 642
+    "mem_mb_recommended": 500,
+    "obs_cap_at_peak_mb": 1480.0,
+    "obs_n": 4,
+    "obs_peak_rss_mb": 320.2578125,
+    "obs_source": "efficiency_aggregated",
+    "overhead": 1.5,
+    "tier": "tile"
   },
   "extract_metadata_sbs": {
-    "tier": "tile",
-    "obs_rss_mb": 179.77734375,
-    "dag_overhead_mb": 183.2890625,
-    "rule_mem_mb": 89.888671875,
-    "mem_mb_recommended": 628
+    "mem_mb_recommended": 500,
+    "obs_cap_at_peak_mb": 1452.0,
+    "obs_n": 33,
+    "obs_peak_rss_mb": 316.6875,
+    "obs_source": "efficiency_aggregated",
+    "overhead": 1.5,
+    "tier": "tile"
   }
 }

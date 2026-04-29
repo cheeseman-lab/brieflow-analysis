@@ -157,14 +157,53 @@ wrong conclusions.
   lever; tightening it only causes TIMEOUTs. The harness only sets `mem_mb` from mem
   recommendations. The single authoritative runtime is `default-resources: runtime: 400` in
   `slurm/config.yaml`.
-- **Success gate (added 2026-04-28)**: `cmd_run_one_trial` requires the snakemake-emitted
-  `Finished jobid: 0 (Rule: all_preprocess)` marker in the flow.sh aggregate log before
-  writing to `results.tsv`. Pre-2026-04-28 rows used a `wall_time > 60s` check and so may
-  contain partial failures recorded as wins — the historical 3.4-min "winner" is one of
-  those (real wall time when complete is ~6 min).
+- **Success gate (added 2026-04-28)**: `cmd_run_one_trial` and `cmd_run_well_trial` require
+  the snakemake-emitted `Finished jobid: 0 (Rule: all_preprocess)` marker in the flow.sh
+  aggregate log before writing to `results.tsv` / `well_results.tsv`. Pre-gate code only
+  checked `wall_time > 60s`, which let partial-failure runs record a wall time as if they
+  had completed. All such pre-gate rows were deleted on 2026-04-29 — only success-gated
+  rows remain. The marker pattern is `Finished jobid: 0 (Rule: all_<MODULE>)` — snakemake
+  emits one per top-level rule. If scope expands beyond preprocess, the same gate logic
+  works by checking for `all_sbs`, `all_phenotype`, etc.
 - **MEM_MARGIN_TILE = 4.0** (bumped from 1.5 on 2026-04-28). The 1.5× margin gave
   convert_sbs a 451 MB ceiling; under cluster load actual peak RSS exceeded that and
   slurmstepd OOM-killed jobs. 4× lifts it to 1120 MB and eliminates OOMs.
+
+## Memory Calibration (Known Gap)
+The `calibrate_well` command samples peak RSS from a single sample run under one cluster
+condition. For most rules this is fine. For `calculate_ic_sbs` and `calculate_ic_phenotype`
+it severely underestimates real full-scale peaks because those rules' memory scales
+linearly with the **number of tiles per cycle/round**, not per job:
+
+- `calculate_ic_sbs`: input ≈ N_tiles × tile_size for one cycle. Peak ≈ input + working
+  set. Tile config (~10 tiles): peak < 1 GB. Well config (~333 tiles): peak ~15 GB observed.
+- `calculate_ic_phenotype`: input ≈ N_tiles × phenotype_tile_size for one round.
+  Tile config: peak ~2.5 GB. Well config (~1300 tiles, 70 MB each = 93 GB raw input):
+  peak ~210 GB observed.
+
+The original calibration values (945 MB / 2.5 GB) reflected tile-only sampling, and a
+4× margin couldn't absorb the well-scale 5–80× growth. **Iterating up on memory caps
+based on OOM events is wasteful** — it consumed 6 attempts × cluster compute on
+2026-04-28 before we had stable values.
+
+**Current stopgap** (2026-04-29):
+- `harness/results/mem_recommendations.json` — observed peak × 1.5 overhead, aggregated
+  across all efficiency CSVs in `logs/`. Self-correcting: each successful run feeds
+  forward worst-case observations.
+- `WELL_MEM_CONSERVATIVE` in `harness.py` — duplicates the well-scaling rule values from
+  the JSON. Future cleanup is to drop the duplicate and have `use_well_mem` read the JSON.
+
+**Real fix (TODO, not yet implemented)**:
+1. Replace `calibrate_well` with an aggregator that walks `logs/efficiency_*.csv` and
+   recomputes worst-case peak per rule on every call, instead of single-sample.
+2. Build a per-rule scoring formula: `mem_mb = k_rule × total_input_size_MB + b_rule`,
+   with constants learned from observations. Predicts memory for any new screen with
+   different tile counts WITHOUT recalibration. Falls back to `mem_recommendations.json`
+   if the formula isn't computable for a given rule.
+
+The lesson from 2026-04-28: "iterate up on the cap until it stops OOMing" is a bad
+workflow. Trust the observation data we already produce; don't re-derive memory empirically
+under cluster pressure.
 
 ## Robust Configs (2026-04-28)
 Tile-tier (verified clean, 150/150, success-gated, 0 OOM, 0 MissingOutputException):
@@ -189,6 +228,33 @@ the FIRST member's wildcards instead of their own, hit MissingOutputException, a
 trigger snakemake's failure-cleanup that deletes other siblings' real outputs. At tile
 scale (~150 jobs, small batches) this is invisible; at well scale (~4,300 jobs) it
 cascades and kills the run. See COLLAB.md Phase 7 for the concrete trace.
+
+## Resume Workflow (Recovering from Late-Stage Failures)
+
+When a long run dies after most jobs have completed (e.g. an OOM in the long-pole tail
+at 99.7% of preprocess), don't restart from scratch. Snakemake's incremental scheduler
+will skip jobs whose outputs already exist on disk:
+
+1. **Fix the underlying issue** (bump mem cap, fix config, etc.).
+2. **Don't wipe the output directory.** `cmd_run_well_trial` clears `brieflow_output_well/`
+   by default; pass `--resume` to skip that step:
+   ```bash
+   python harness/harness.py run_well_trial --resume
+   ```
+3. **Snakemake re-detects the DAG state** via `--rerun-triggers mtime` (already in the
+   harness's flow.sh invocation) and submits only the still-needed jobs.
+4. **Wall time recorded by the harness in this case is for the resume only**, not the
+   cumulative time across attempts. Note this in `well_results.tsv` notes column when
+   recording — single-run wall is misleading after a resume.
+
+This is what made the 2026-04-29 well-tier success possible: the bulk of preprocess
+(4317/4328 jobs) was completed in v2, then v6 finished the remaining 11 IC jobs in ~10 min
+after `WELL_MEM_CONSERVATIVE` was bumped. Without `--resume`, we'd have re-run ~3 hours
+of completed work.
+
+**Caveat**: only use `--resume` when you're confident the existing outputs are correct.
+If a previous failure mode could have corrupted partial outputs (e.g. a write that got
+truncated), it's safer to wipe and restart.
 
 ## slurm/config.yaml runtime
 Always express `runtime` as a string with units (e.g. `runtime: "1d"`, `runtime: "12h"`),
