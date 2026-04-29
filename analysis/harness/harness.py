@@ -142,8 +142,14 @@ RULE_MEMORY_PROFILE: dict[str, dict] = {
 # Based on well-tier calibration × 4x margin (scales with tiles/well).
 # Tile-scaling rules use mem_recommendations.json values instead.
 WELL_MEM_CONSERVATIVE: dict[str, int] = {
-    "calculate_ic_sbs":           4_000,
-    "calculate_ic_phenotype":    10_000,
+    # Calibration severely underestimated peak RSS for calculate_ic rules at full well
+    # scale. Multiple bumps on 2026-04-28 still OOM'd:
+    #   calculate_ic_sbs cap: 4G→8G→16G→32G — peaks 4G, 8G observed (more cycles untested).
+    #   calculate_ic_phenotype cap: 10G→16G→32G→128G — peaks 32.7G then 125G observed.
+    # 125 GB is consistent with loading ~1300 phenotype tiles (70 MB each = 93 GB raw)
+    # plus working set. Going with baker production's proven values.
+    "calculate_ic_sbs":          50_000,
+    "calculate_ic_phenotype":   500_000,
     "combine_metadata_sbs":       1_500,
     "combine_metadata_phenotype": 1_500,
 }
@@ -659,8 +665,10 @@ def cmd_run_well_trial(args):
             mem_recs[rule] = {"mem_mb_recommended": mb}
         print(f"[harness] Applying conservative well mem for: {list(WELL_MEM_CONSERVATIVE)}")
 
-    # Wipe well output for a clean run.
-    if WELL_OUTPUT_DIR.exists():
+    # Wipe well output for a clean run unless --resume.
+    if getattr(args, "resume", False):
+        print(f"[harness] --resume: keeping existing {WELL_OUTPUT_DIR} for snakemake to pick up")
+    elif WELL_OUTPUT_DIR.exists():
         print(f"[harness] Deleting {WELL_OUTPUT_DIR}...")
         shutil.rmtree(WELL_OUTPUT_DIR)
     unlock_snakemake(WELL_CONFIG)
@@ -1319,6 +1327,7 @@ def main():
     # Well-tier validation
     wt = sub.add_parser("run_well_trial", help="[Well] Run a trial JSON on well tier, append to well_results.tsv")
     wt.add_argument("--trial-json", default=None, help="Path to trial JSON")
+    wt.add_argument("--resume", action="store_true", help="Keep existing brieflow_output_well/; let snakemake skip already-complete jobs")
     sub.add_parser("well_report", help="[Well] Ranked well-tier results")
 
     # Diagnose

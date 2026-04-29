@@ -1,11 +1,12 @@
 {
-  "tag": "winner_4x_lat30_noarrays",
-  "notes": "Comparison to winner_4x_lat30 (which was clean at 6.10 min). Same mem (4x) and lat=30, but use_arrays=false — each job submitted as its own sbatch, no mini-snakemake batching. Tests the hypothesis that array batching is what creates back-to-back NFS writes/stats and exposes attribute-cache races.",
+  "tag": "well_winner_noarrays_v6",
+  "notes": "Resume v5 with baker production mem caps for IC rules (proven at well scale): calculate_ic_sbs=50000 MB, calculate_ic_phenotype=500000 MB. Output preserved (136GB). Done iterating on the tight-margin path; using values that have demonstrably worked.",
   "backend": "slurm",
   "use_arrays": false,
   "jobs": 400,
   "array_limit": 20,
   "cpus_per_task": 1,
   "latency_wait": 30,
-  "use_mem_recommendations": true
+  "use_tile_mem": true,
+  "use_well_mem": true
 }

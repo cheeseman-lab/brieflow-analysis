@@ -2,3 +2,4 @@ tag	backend	latency_wait	array_limit	use_tile_mem	use_well_mem	wall_time_min	not
 well_baseline	slurm	10	10	False	False	3944.5	Current config, no mem changes, al=10 (original). Establishes well-tier baseline wall time.
 well_baseline	slurm	10	10	False	False	3943.4	Current config, no mem changes, al=10 (original). Establishes well-tier baseline wall time.
 well_baseline	slurm	10	10	False	False	5445.2	Current config, no mem changes, al=10 (original). Establishes well-tier baseline wall time.
+well_winner_noarrays_v6	slurm	30	n/a	True	True	~10.8	Resume preprocess wall time only (long-pole tail finished in 10:47 after v6 IC mem cap bumps to 50G/500G). Preprocess overall: ~3 hr cumulative across v2+v6 (most work in v2 to 99.7%, completed via mem-cap iterations). Output: 136GB at brieflow_output_well/. First fully gated well-preprocess success.

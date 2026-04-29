@@ -35,3 +35,85 @@ preprocess:
   phenotype_n_z_planes: null
   phenotype_metadata_samples_df_fp: null
   sample_fraction: 0.5
+sbs:
+  alignment_method: null
+  barcode_col: sgRNA
+  barcode_type: simple
+  bases:
+  - G
+  - T
+  - A
+  - C
+  call_reads_method: median
+  cell_cellprob_threshold: 0
+  cell_diameter: 24.174717186214192
+  cell_flow_threshold: 1
+  cellpose_model: cyto3
+  channel_names:
+  - DAPI
+  - G
+  - T
+  - A
+  - C
+  cyto_cycle: 9
+  cyto_cycle_index: 8
+  cyto_index: 4
+  cyto_model: cyto3
+  dapi_cycle: 1
+  dapi_cycle_index: 0
+  dapi_index: 0
+  df_barcode_library_fp: config/barcode_library.tsv
+  error_correct: false
+  extra_channel_indices:
+  - 0
+  gpu: false
+  heatmap_plate: 6W
+  heatmap_shape: square
+  manual_background_cycle_index: null
+  manual_channel_mapping: null
+  max_filter_width: 3
+  mode: null
+  nuclei_cellprob_threshold: 0.0
+  nuclei_diameter: 10.524820207108489
+  nuclei_flow_threshold: 0.4
+  peak_width: 5
+  prefix_col: prefix
+  q_min: 0
+  reconcile: contained_in_cells
+  segment_cells: true
+  segmentation_method: cellpose
+  skip_cycles_indices: null
+  sort_calls: count
+  spot_detection_method: standard
+  threshold_peaks: 300
+  upsample_factor: 2
+  window: 2
+phenotype:
+  align: true
+  cell_diameter: 72.94427841011642
+  cellpose_model: cyto3
+  cellprob_threshold: 0.0
+  channel_names:
+  - DAPI
+  - COXIV
+  - CENPA
+  - WGA
+  cp_method: cp_multichannel
+  cyto_index: 1
+  dapi_index: 0
+  flow_threshold: 0.4
+  foci_channel_index: 2
+  gpu: false
+  heatmap_plate: 6W
+  heatmap_shape: square
+  mode: null
+  nuclei_diameter: 48.415224897313394
+  reconcile: contained_in_cells
+  remove_channel: null
+  riders:
+  - 2
+  - 3
+  segment_cells: true
+  segmentation_method: cellpose
+  source: 1
+  target: 0
