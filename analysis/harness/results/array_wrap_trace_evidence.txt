@@ -1,0 +1,26 @@
+# Array job wrap-target evidence
+# Captured 2026-04-29 from --verbose tile preprocess run
+# Source log: logs/array_verbose_20260429_234800.log
+
+## Pattern: each --array=N-M chunk has a single --target-jobs spec (= chunk's first job)
+
+chunk 1-7 (rule_convert_phenotype_wildcards_) wrap target=convert_phenotype:plate=1,well=A1,tile=7
+chunk 1-10 (rule_extract_metadata_sbs_wildcards_) wrap target=extract_metadata_sbs:plate=1,well=A1,cycle=7,channel=CY5_30p
+chunk 11-20 (rule_extract_metadata_sbs_wildcards_) wrap target=extract_metadata_sbs:plate=1,well=A1,cycle=3,channel=CY5_30p
+chunk 1-10 (rule_convert_sbs_wildcards_) wrap target=convert_sbs:plate=1,well=A1,tile=3,cycle=3
+chunk 21-24 (rule_extract_metadata_sbs_wildcards_) wrap target=extract_metadata_sbs:plate=1,well=A1,cycle=6,channel=A594_30p
+chunk 11-20 (rule_convert_sbs_wildcards_) wrap target=convert_sbs:plate=1,well=A1,tile=3,cycle=1
+chunk 1-4 (rule_extract_metadata_phenotype_wildcards_) wrap target=extract_metadata_phenotype:plate=1,well=A1,round=1,channel=A594_1x1
+chunk 21-30 (rule_convert_sbs_wildcards_) wrap target=convert_sbs:plate=1,well=A1,tile=3,cycle=4
+chunk 31-40 (rule_convert_sbs_wildcards_) wrap target=convert_sbs:plate=1,well=A1,tile=6,cycle=4
+chunk 41-50 (rule_convert_sbs_wildcards_) wrap target=convert_sbs:plate=1,well=A1,tile=2,cycle=2
+chunk 51-60 (rule_convert_sbs_wildcards_) wrap target=convert_sbs:plate=1,well=A1,tile=5,cycle=2
+chunk 61-65 (rule_convert_sbs_wildcards_) wrap target=convert_sbs:plate=1,well=A1,tile=5,cycle=8
+chunk 1-9 (rule_extract_metadata_sbs_wildcards_) wrap target=extract_metadata_sbs:plate=1,well=A1,cycle=2,channel=CY3_30p_545
+chunk 1-10 (rule_convert_sbs_wildcards_) wrap target=convert_sbs:plate=1,well=A1,tile=9,cycle=3
+chunk 11-20 (rule_convert_sbs_wildcards_) wrap target=convert_sbs:plate=1,well=A1,tile=4,cycle=6
+chunk 1-3 (rule_convert_phenotype_wildcards_) wrap target=convert_phenotype:plate=1,well=A1,tile=9
+chunk 21-25 (rule_convert_sbs_wildcards_) wrap target=convert_sbs:plate=1,well=A1,tile=9,cycle=5
+
+## Total chunks captured:
+17

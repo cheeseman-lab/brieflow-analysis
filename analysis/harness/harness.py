@@ -9,17 +9,19 @@ Phase 1 — Speed search (tile tier):
   report      — ranked comparison of search trials.
 
 Phase 2 — Memory + scale (well tier, run after finding best config):
-  calibrate_well  — well tier for rules that scale with tile count.
-  dag_overhead    — estimate DAG memory overhead from anchor rules.
-  mem_report      — recommended mem_mb per rule with breakdown.
-  scale_test      — run well tier with the best Phase 1 config; measure scaling.
+  aggregate_efficiency — roll up peak RSS across all logs/efficiency_*/ CSVs;
+                          canonical writer of mem_recommendations.json.
+  calibrate_well       — DEPRECATED single-sample calibration; use aggregate_efficiency.
+  dag_overhead         — estimate DAG memory overhead from anchor rules.
+  mem_report           — print per-rule breakdown (does NOT write JSON).
+  scale_test           — run well tier with the best Phase 1 config; measure scaling.
 
 Usage:
     python harness.py calibrate
     python harness.py search
     python harness.py report
 
-    python harness.py calibrate_well
+    python harness.py aggregate_efficiency
     python harness.py dag_overhead
     python harness.py mem_report
     python harness.py scale_test
@@ -138,31 +140,17 @@ RULE_MEMORY_PROFILE: dict[str, dict] = {
     "combine_phenotype_info":       {"scales_with": "well", "dag_sensitive": True},
 }
 
-# Conservative memory for well-scaling rules at full baker scale.
-# Based on well-tier calibration × 4x margin (scales with tiles/well).
-# Tile-scaling rules use mem_recommendations.json values instead.
-WELL_MEM_CONSERVATIVE: dict[str, int] = {
-    # 2026-04-29: Replaced the prior hardcoded baker-production caps (50G/500G) with
-    # values derived from this branch's actual observed peak RSS × 1.5 overhead, sourced
-    # from aggregated efficiency CSVs. These should track `mem_recommendations.json`
-    # (well-scaling rules); future cleanup is to have `use_well_mem` read directly from
-    # the JSON instead of duplicating values here.
-    #
-    # Observed peaks (well-scale, 2026-04-28):
-    #   calculate_ic_sbs        peak  15.7 GB (was at 16G cap — actual peak may be higher)
-    #   calculate_ic_phenotype  peak 215   GB (uncapped under 500G ceiling)
-    #   combine_metadata_*      peak ~350 MB
-    "calculate_ic_sbs":          24_000,
-    "calculate_ic_phenotype":   323_000,
-    "combine_metadata_sbs":         600,
-    "combine_metadata_phenotype":   600,
-}
-
 DAG_ANCHOR_RULES = ["extract_metadata_sbs", "extract_metadata_phenotype"]
 
 MEM_MARGIN_TILE = 4.0   # bumped from 1.5 after 2026-04-28 OOM diagnosis: convert_sbs
 MEM_MARGIN_WELL = 4.0   # at 1.5×267≈451 MB OOM-killed under cluster load. 4× covers
 DAG_MARGIN = 1.2        # observed peak RSS variance.
+
+# Overhead applied by `aggregate_efficiency` on top of observed worst-case peak RSS.
+# Smaller than MEM_MARGIN_TILE because the input is already the worst observation
+# across many runs (less single-sample variance to absorb).
+AGGREGATE_OVERHEAD = 1.5
+PEAK_AT_CAP_THRESHOLD = 0.95  # warn if peak >= 95% of the request that observed it
 
 
 # ---------------------------------------------------------------------------
@@ -644,30 +632,31 @@ def cmd_run_well_trial(args):
     print(f"\n[harness] === well trial: {tag} ===")
     _print_trial_params(trial)
 
-    # Build mem_recs from tile and/or well sources.
+    # Build mem_recs from mem_recommendations.json (single source of truth, written by
+    # `aggregate_efficiency`). use_tile_mem / use_well_mem are tier filters: each restricts
+    # which rules are pulled from the JSON. Values are used as-is — no recomputation, no
+    # added DAG overhead, no separate WELL_MEM_CONSERVATIVE table.
     mem_recs: dict = {}
-    if trial.get("use_tile_mem"):
+    want_tile = bool(trial.get("use_tile_mem"))
+    want_well = bool(trial.get("use_well_mem"))
+    if want_tile or want_well:
         rec_path = RESULTS_DIR / "mem_recommendations.json"
-        if rec_path.exists():
+        if not rec_path.exists():
+            print(f"[harness] WARNING: use_tile_mem/use_well_mem set but {rec_path.name} not found. "
+                  "Run `python harness/harness.py aggregate_efficiency` first.")
+        else:
             with open(rec_path) as f:
                 all_recs = json.load(f)
-            well_dag_overhead = next(
-                v["dag_overhead_mb"] for v in all_recs.values()
-                if v.get("tier") == "well" and v.get("dag_overhead_mb", 0) > 0
-            )
-            mem_recs = {}
             for r, v in all_recs.items():
-                if RULE_MEMORY_PROFILE.get(r, {}).get("scales_with") == "tile":
-                    corrected_mb = round((v["obs_rss_mb"] + well_dag_overhead) * MEM_MARGIN_TILE)
-                    mem_recs[r] = {**v, "mem_mb_recommended": corrected_mb}
-            print(f"[harness] Applying well-corrected tile mem_recs (dag_overhead={well_dag_overhead:.0f}MB): {list(mem_recs)}")
-        else:
-            print("[harness] WARNING: use_tile_mem=true but mem_recommendations.json not found.")
-
-    if trial.get("use_well_mem"):
-        for rule, mb in WELL_MEM_CONSERVATIVE.items():
-            mem_recs[rule] = {"mem_mb_recommended": mb}
-        print(f"[harness] Applying conservative well mem for: {list(WELL_MEM_CONSERVATIVE)}")
+                tier = v.get("tier")
+                if (tier == "tile" and want_tile) or (tier == "well" and want_well):
+                    mem_recs[r] = v
+            applied_tile = [r for r, v in mem_recs.items() if v.get("tier") == "tile"]
+            applied_well = [r for r, v in mem_recs.items() if v.get("tier") == "well"]
+            if want_tile:
+                print(f"[harness] Applying tile-tier mem_recs ({len(applied_tile)} rules): {applied_tile}")
+            if want_well:
+                print(f"[harness] Applying well-tier mem_recs ({len(applied_well)} rules): {applied_well}")
 
     # Wipe well output for a clean run unless --resume.
     if getattr(args, "resume", False):
@@ -680,8 +669,12 @@ def cmd_run_well_trial(args):
     trial_dir = RESULTS_DIR / f"well_trial_{tag}"
     trial_dir.mkdir(exist_ok=True)
 
+    # Modules: trial JSON may set "modules" to scope the run (e.g. ["preprocess"] to
+    # benchmark preprocess only and skip the brittle sbs/phenotype phases). Default keeps
+    # the historical behavior that runs all three downstream modules.
+    modules = trial.get("modules") or ["preprocess", "sbs", "phenotype"]
     log_path, wall_time, exit_code = run_flow(
-        ["preprocess", "sbs", "phenotype"],
+        modules,
         config=WELL_CONFIG,
         trial=trial,
         trial_dir=trial_dir,
@@ -692,9 +685,10 @@ def cmd_run_well_trial(args):
         print(f"[harness] ERROR: {tag} finished in {wall_time:.1f}s — not recording (likely failed).")
         sys.exit(1)
 
-    # Same gate as cmd_run_one_trial. Preprocess-only scope: flow.sh exits non-zero on
-    # MissingRuleException(all_sbs); only `Finished jobid: 0 (Rule: all_preprocess)` in
-    # the log proves preprocess completed cleanly.
+    # Gate: preprocess success marker. flow.sh exits non-zero on the MissingRuleException
+    # at end-of-preprocess when sbs/phenotype rule sets aren't in scope, and it can also
+    # exit non-zero on real rule failures in those modules — the marker is what proves
+    # preprocess specifically completed.
     preprocess_ok = False
     if log_path.exists():
         try:
@@ -763,7 +757,14 @@ def cmd_well_report(args):
 # ---------------------------------------------------------------------------
 
 def cmd_calibrate_well(args):
-    """Calibrate well-scaling rules (calculate_ic, combine_*) on the well tier."""
+    """Calibrate well-scaling rules (calculate_ic, combine_*) on the well tier.
+
+    DEPRECATED: single-sample calibration severely underestimates scale-sensitive
+    rules (calculate_ic_*) — see CLAUDE.md "Memory Calibration (Known Gap)". Prefer
+    `aggregate_efficiency`, which rolls up worst-case peaks across all
+    logs/efficiency_*/ CSVs and self-corrects as more runs land.
+    """
+    print("[harness] WARNING: calibrate_well is deprecated. Prefer `aggregate_efficiency`.")
     print("[harness] === CALIBRATION (well tier) ===")
     unlock_snakemake(WELL_CONFIG)
     trial_dir = RESULTS_DIR / "calibration_well"
@@ -894,12 +895,91 @@ def cmd_mem_report(args):
         }
         print(f"{rule:<35} {tier:>5} {obs_rss:>8.0f} {dag_oh:>7.0f} {rule_mem:>9.0f} {margin:>7.1f}x {rec:>8}")
 
+    if per_1k_mb:
+        print(f"\nDAG overhead: ~{per_1k_mb:.1f} MB/1K jobs → ~{per_1k_mb*26:.0f} MB at full baker scale")
+    print("\n[harness] Note: mem_report no longer writes mem_recommendations.json — "
+          "it derives values from a single calibration sample, which underestimates "
+          "scale-sensitive rules (calculate_ic_*). Use `aggregate_efficiency` to "
+          "(re)write the canonical mem_recommendations.json from all logs/efficiency_*/ CSVs.")
+
+
+def cmd_aggregate_efficiency(args):
+    """Aggregate worst-case peak RSS per rule across all logs/efficiency_*/*.csv.
+
+    This is the canonical writer of `mem_recommendations.json`. Each successful run
+    drops a fresh efficiency CSV under `logs/efficiency_*/`; this command rolls them
+    all up so memory recommendations self-correct as more data accumulates.
+    """
+    log_dir = ANALYSIS_DIR / "logs"
+    csvs: list[Path] = []
+    for d in log_dir.iterdir():
+        if d.is_dir() and d.name.startswith("efficiency_"):
+            csvs.extend(d.glob("*.csv"))
+    if not csvs:
+        print(f"[harness] ERROR: no efficiency CSVs under {log_dir}/efficiency_*/.")
+        sys.exit(1)
+
+    # Per-rule aggregate state.
+    agg: dict[str, dict] = {}
+    for csv_path in csvs:
+        try:
+            with open(csv_path) as f:
+                for row in csv.DictReader(f):
+                    rule = (row.get("RuleName") or "").split("_wildcards")[0].replace("rule_", "")
+                    if not rule or rule not in RULE_MEMORY_PROFILE:
+                        continue
+                    try:
+                        rss = float(row["MaxRSS_MB"]) if row.get("MaxRSS_MB") else 0.0
+                        cap = float(row["RequestedMem_MB"]) if row.get("RequestedMem_MB") else 0.0
+                    except ValueError:
+                        continue
+                    if rss <= 0:
+                        continue
+                    cur = agg.setdefault(rule, {"peak": 0.0, "cap_at_peak": 0.0, "n": 0})
+                    cur["n"] += 1
+                    if rss > cur["peak"]:
+                        cur["peak"] = rss
+                        cur["cap_at_peak"] = cap
+        except OSError as e:
+            print(f"[harness] WARN: skipping {csv_path}: {e}")
+
+    if not agg:
+        print("[harness] ERROR: no observations matched RULE_MEMORY_PROFILE rules.")
+        sys.exit(1)
+
+    def ceil_to_100(x: float) -> int:
+        return int(((x // 100) + 1) * 100)
+
+    recommendations: dict = {}
+    for rule, cur in sorted(agg.items()):
+        tier = RULE_MEMORY_PROFILE[rule]["scales_with"]
+        rec = ceil_to_100(cur["peak"] * AGGREGATE_OVERHEAD)
+        entry = {
+            "tier": tier,
+            "obs_peak_rss_mb": cur["peak"],
+            "obs_cap_at_peak_mb": cur["cap_at_peak"],
+            "obs_n": cur["n"],
+            "obs_source": "efficiency_aggregated",
+            "overhead": AGGREGATE_OVERHEAD,
+            "mem_mb_recommended": rec,
+        }
+        if cur["cap_at_peak"] > 0 and cur["peak"] >= cur["cap_at_peak"] * PEAK_AT_CAP_THRESHOLD:
+            entry["WARNING"] = "peak_was_at_cap_actual_peak_may_be_higher"
+        recommendations[rule] = entry
+
+    print(f"\n[harness] === AGGREGATE EFFICIENCY ({len(csvs)} CSVs, {sum(c['n'] for c in agg.values())} rule-observations) ===")
+    print(f"{'Rule':<32} {'Tier':>5} {'N':>5} {'PeakMB':>10} {'CapMB':>10} {'RecMB':>10}  Flag")
+    print("-" * 88)
+    for rule, v in sorted(recommendations.items(), key=lambda kv: (kv[1]["tier"], kv[0])):
+        flag = v.get("WARNING", "")
+        print(f"{rule:<32} {v['tier']:>5} {v['obs_n']:>5} "
+              f"{v['obs_peak_rss_mb']:>10.1f} {v['obs_cap_at_peak_mb']:>10.1f} "
+              f"{v['mem_mb_recommended']:>10}  {flag}")
+
     out = RESULTS_DIR / "mem_recommendations.json"
     with open(out, "w") as f:
-        json.dump(recommendations, f, indent=2)
+        json.dump(recommendations, f, indent=2, sort_keys=True)
     print(f"\n[harness] Saved to {out}")
-    if per_1k_mb:
-        print(f"DAG overhead: ~{per_1k_mb:.1f} MB/1K jobs → ~{per_1k_mb*26:.0f} MB at full baker scale")
 
 
 def cmd_scale_test(args):
@@ -1318,9 +1398,11 @@ def main():
     sub.add_parser("report",     help="[Phase 1] Ranked comparison of search trials")
 
     # Phase 2
-    sub.add_parser("calibrate_well", help="[Phase 2] Well tier: measure well-scaling rules")
+    sub.add_parser("aggregate_efficiency",
+                   help="[Phase 2] Aggregate peak RSS across all logs/efficiency_*/ → mem_recommendations.json")
+    sub.add_parser("calibrate_well", help="[DEPRECATED] Use aggregate_efficiency instead")
     sub.add_parser("dag_overhead",   help="[Phase 2] Estimate DAG memory overhead")
-    sub.add_parser("mem_report",     help="[Phase 2] Recommended mem_mb per rule")
+    sub.add_parser("mem_report",     help="[Phase 2] Print per-rule mem breakdown (does not write JSON)")
     sub.add_parser("scale_test",     help="[Phase 2] Run well tier with best Phase 1 config")
 
     # Autoresearch
@@ -1350,6 +1432,7 @@ def main():
         "calibrate":      cmd_calibrate,
         "search":         cmd_search,
         "report":         cmd_report,
+        "aggregate_efficiency": cmd_aggregate_efficiency,
         "calibrate_well": cmd_calibrate_well,
         "dag_overhead":   cmd_dag_overhead,
         "mem_report":     cmd_mem_report,

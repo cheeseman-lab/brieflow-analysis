@@ -1,0 +1,61 @@
+# Well-tier array submission wrap traces
+# Run: well_arrays_failure_test_20260430 (started 2026-04-30 07:44, killed 08:55)
+# Source log: logs/run_well_arrays_failure_20260430_074405.log
+#
+# Pattern: every chunk has ONE --target-jobs spec, regardless of how many sibling tasks share it.
+# Each line below: chunk size in array tasks → the SINGLE wrap target shared by them all.
+
+chunk 1-10 → convert_phenotype:plate=1,well=A1,tile=1277
+chunk 1-10 → convert_sbs:plate=1,well=A1,tile=314,cycle=4
+chunk 11-20 → convert_phenotype:plate=1,well=A1,tile=706
+chunk 11-20 → convert_sbs:plate=1,well=A1,tile=182,cycle=1
+chunk 21-23 → convert_phenotype:plate=1,well=A1,tile=1048
+chunk 21-30 → convert_sbs:plate=1,well=A1,tile=298,cycle=2
+chunk 31-40 → convert_sbs:plate=1,well=A1,tile=308,cycle=5
+chunk 41-50 → convert_sbs:plate=1,well=A1,tile=32,cycle=6
+chunk 51-60 → convert_sbs:plate=1,well=A1,tile=19,cycle=1
+chunk 61-70 → convert_sbs:plate=1,well=A1,tile=202,cycle=5
+chunk 71-77 → convert_sbs:plate=1,well=A1,tile=203,cycle=5
+chunk 1-10 → convert_phenotype:plate=1,well=A1,tile=197
+chunk 1-10 → convert_sbs:plate=1,well=A1,tile=258,cycle=4
+chunk 11-18 → convert_phenotype:plate=1,well=A1,tile=257
+chunk 11-20 → convert_sbs:plate=1,well=A1,tile=315,cycle=6
+chunk 21-30 → convert_sbs:plate=1,well=A1,tile=95,cycle=9
+chunk 31-40 → convert_sbs:plate=1,well=A1,tile=197,cycle=6
+chunk 41-50 → convert_sbs:plate=1,well=A1,tile=302,cycle=2
+chunk 51-60 → convert_sbs:plate=1,well=A1,tile=23,cycle=2
+chunk 61-70 → convert_sbs:plate=1,well=A1,tile=143,cycle=3
+chunk 71-80 → convert_sbs:plate=1,well=A1,tile=330,cycle=9
+chunk 81-81 → convert_sbs:plate=1,well=A1,tile=145,cycle=3
+chunk 1-10 → convert_phenotype:plate=1,well=A1,tile=966
+chunk 1-10 → convert_sbs:plate=1,well=A1,tile=15,cycle=7
+chunk 11-20 → convert_phenotype:plate=1,well=A1,tile=196
+chunk 11-20 → convert_sbs:plate=1,well=A1,tile=236,cycle=7
+chunk 21-23 → convert_phenotype:plate=1,well=A1,tile=259
+chunk 21-30 → convert_sbs:plate=1,well=A1,tile=31,cycle=8
+chunk 31-40 → convert_sbs:plate=1,well=A1,tile=14,cycle=2
+chunk 41-50 → convert_sbs:plate=1,well=A1,tile=160,cycle=8
+chunk 51-60 → convert_sbs:plate=1,well=A1,tile=102,cycle=9
+chunk 61-70 → convert_sbs:plate=1,well=A1,tile=332,cycle=9
+chunk 71-77 → convert_sbs:plate=1,well=A1,tile=221,cycle=9
+chunk 1-10 → convert_phenotype:plate=1,well=A1,tile=126
+chunk 1-10 → convert_sbs:plate=1,well=A1,tile=146,cycle=4
+chunk 11-15 → convert_phenotype:plate=1,well=A1,tile=1049
+chunk 11-20 → convert_sbs:plate=1,well=A1,tile=173,cycle=1
+chunk 21-30 → convert_sbs:plate=1,well=A1,tile=298,cycle=5
+chunk 31-40 → convert_sbs:plate=1,well=A1,tile=22,cycle=6
+chunk 41-50 → convert_sbs:plate=1,well=A1,tile=192,cycle=6
+chunk 51-60 → convert_sbs:plate=1,well=A1,tile=142,cycle=3
+chunk 61-70 → convert_sbs:plate=1,well=A1,tile=219,cycle=8
+chunk 71-80 → convert_sbs:plate=1,well=A1,tile=211,cycle=5
+chunk 81-85 → convert_sbs:plate=1,well=A1,tile=53,cycle=8
+chunk 1-10 → convert_sbs:plate=1,well=A1,tile=122,cycle=6
+chunk 11-11 → convert_sbs:plate=1,well=A1,tile=54,cycle=8
+chunk 1-10 → convert_sbs:plate=1,well=A1,tile=217,cycle=5
+chunk 1-10 → convert_sbs:plate=1,well=A1,tile=13,cycle=7
+chunk 11-14 → convert_sbs:plate=1,well=A1,tile=164,cycle=8
+
+# Total chunks captured: 49
+# Total cleanup events (Removing output files): 91
+# Total Error in rule events: 353
+# Steps marked done: 81 of 4328 (after 70 min)

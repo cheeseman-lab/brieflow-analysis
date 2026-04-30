@@ -230,6 +230,10 @@ build_snakemake_cmd() {
     cmd+=" --configfile ${CONFIGFILE}"
     cmd+=" --rerun-triggers mtime"
     cmd+=" --until ${target}"
+    # --verbose: preserves the plugin's array-submission debug logs ("call with array:")
+    # so every run captures the wrap content per chunk. Cheap, useful for diagnosing the
+    # wrap-target collision documented in COLLAB.md Phase 7.
+    cmd+=" --verbose"
 
     # Dry run
     if [[ "$DRY_RUN" == true ]]; then

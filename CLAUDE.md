@@ -40,11 +40,24 @@ suggest it.
 
 Tile and well output to isolated dirs (`brieflow_output_tile/`, `brieflow_output_well/`).
 
-**Benchmark scope (by design)**: all three configs only contain `all:` and `preprocess:`
-sections. This is intentional — the speed benchmarks on this branch are preprocess-only.
-`flow.sh preprocess sbs phenotype` will raise `MissingRuleException: No rule to produce
-all_sbs` after preprocess finishes; that error is expected and ignored. Do not treat it
-as a bug and do not add `sbs:`/`phenotype:` sections unless the scope explicitly changes.
+**Benchmark scope (revised 2026-04-30)**: as of commit `c370a0b` (2026-04-29) the well
+config `config_well.yml` carries real `sbs:` and `phenotype:` sections — the original
+"preprocess-only" claim is no longer accurate. When the harness invokes flow.sh with
+`["preprocess", "sbs", "phenotype"]` modules at well scale, snakemake actually schedules
+sbs/phenotype rules and tries to run them.
+
+The current sbs/phenotype phases at well scale are **not stable** — `phenotype_tile_group`
+jobs fail in the .5 sub-step within ~12s, exit code 1:0, MaxRSS ~629MB on a 6GB cap (so
+not OOM). Real rule-code failure that needs separate triage. This is unrelated to the
+array-bug investigation.
+
+**To benchmark preprocess only**, set `"modules": ["preprocess"]` in your trial JSON.
+The harness (`cmd_run_well_trial`) reads this list and passes only those modules to
+flow.sh, avoiding the broken sbs/phenotype phases. Default (no `modules` key) is the
+historical `["preprocess", "sbs", "phenotype"]`.
+
+The preprocess success gate (`Finished jobid: 0 (Rule: all_preprocess)` in the flow.sh
+log) is what proves the run completed cleanly regardless of which modules were scoped.
 
 ## Running the Pipeline
 ```bash
@@ -79,26 +92,24 @@ python harness/harness.py report
 
 ### Phase 2 — Memory + scale (run after Phase 1):
 ```bash
-# Step 4: Calibrate well-scaling rules on well tier (~1-2 hr)
-python harness/harness.py calibrate_well
+# Refresh memory recommendations from all logs/efficiency_*/ CSVs (canonical writer
+# of mem_recommendations.json — replaces the old calibrate_well + mem_report flow).
+# Self-correcting: each successful run feeds forward worst-case observations.
+python harness/harness.py aggregate_efficiency
 
-# Step 5: Compute DAG memory overhead
-python harness/harness.py dag_overhead
-
-# Step 6: Generate memory recommendations
-python harness/harness.py mem_report
-
-# Step 7: Run well tier with best Phase 1 config
-python harness/harness.py scale_test
+# Run a well trial (default reads autoresearch/next_trial.json)
+python harness/harness.py run_well_trial
 ```
 
+`calibrate_well` and `mem_report` still exist for legacy reference but no longer
+write `mem_recommendations.json`. `aggregate_efficiency` is the only writer now.
+
 Results saved to `harness/results/`:
-- `calibration_tile.json` — per-rule MaxRSS/elapsed on tile tier
+- `calibration_tile.json` — per-rule MaxRSS/elapsed on tile tier (Phase 1 calibrate)
 - `trials.jsonl` — one line per search trial with wall time + params
-- `calibration_well.json` — per-rule MaxRSS/elapsed on well tier
-- `dag_overhead.json` — estimated DAG memory overhead per 1000 jobs
-- `mem_recommendations.json` — final mem_mb per rule with breakdown
-- `scale_test_well.json` — tile vs well wall time comparison
+- `mem_recommendations.json` — canonical mem_mb per rule, written by `aggregate_efficiency`
+- `array_wrap_trace_*.txt` — captured array submission wrap content (verbose-log
+  derived; see COLLAB.md Phase 7 / Phase 9 for the bug story)
 
 ### Search trials (defined in SEARCH_TRIALS list in harness.py)
 13 trials covering:
@@ -108,18 +119,42 @@ Results saved to `harness/results/`:
 
 search resumes automatically if interrupted (skips completed trials).
 
-### Key findings so far (from Apr 4 efficiency report)
-| Rule | MaxRSS | Requested | Waste |
-|------|--------|-----------|-------|
-| convert_sbs | 265 MB | 2130 MB | 88% |
-| convert_phenotype | 687 MB | 3069 MB | 78% |
-| calculate_ic_sbs | 945 MB | 59033 MB | 98% |
-| extract_metadata_* | ~180 MB | ~2000 MB | 91% |
+### Key findings (current `mem_recommendations.json`, aggregated across all runs)
+| Rule | Tier | Observed peak | Recommended (×1.5) | Original brieflow request |
+|------|------|---------------|--------------------|---------------------------|
+| convert_sbs | tile | 402 MB | 700 MB | 2,130 MB |
+| convert_phenotype | tile | 839 MB | 1,300 MB | 3,069 MB |
+| extract_metadata_sbs | tile | 317 MB | 500 MB | 1,452 MB |
+| calculate_ic_sbs | well | 15.7 GB | 23.6 GB | 59 GB |
+| calculate_ic_phenotype | well | 215 GB | 322.9 GB | 500 GB |
+
+`calculate_ic_*` peaks scale with N tiles per cycle/round, so they're well-tier values.
+The single-sample `calibrate_well` from Apr 5 reported them at < 1 GB and 2.5 GB
+respectively — see "Memory Calibration (Known Gap)" below for why aggregating across
+runs replaced single-sample calibration.
 
 ## Known Issues
-- **DAG memory overhead — compute nodes**: Each array job task runs a mini-snakemake (`.batch` step) that uses ~270 MB at well scale (vs ~130 MB at tile scale, 150-job DAG). This overhead is NOT accounted for in tile-calibrated `mem_mb_recommended` values. When applying tile mem_recs to well runs, add `dag_overhead_mb` (183 MB from `mem_recommendations.json`) to `obs_rss_mb` before applying the margin: `corrected = round((obs_rss_mb + 183) * MEM_MARGIN_TILE)`. Example: convert_sbs needs ~675 MB at well scale, not 451 MB.
-- **disk_mb auto-calculation**: Snakemake sets `disk_mb` = 2× input file size. For well-level nd2s (84 GB each × 4 channels = 685 GB requested). Not enforced on our cluster but worth overriding.
-- **slurm-array-limit deadlock**: Must be ≤ per-rule job count per batch. With 6+ rules active, batches of 100 split ~15 jobs/rule. Keep `--slurm-array-limit=10`.
+- **Array wrap-target collision (well/full scale, BLOCKING)**: `snakemake-executor-plugin-slurm`
+  2.6.0/2.6.1/main builds each `--array=N-M` chunk's `--wrap=` from `jobs[start_index-1]`
+  only, so all sibling tasks share one `--target-jobs` and verify the wrong file. At well
+  scale this cascades into snakemake's failure-cleanup deleting siblings' real outputs.
+  No fix in flight upstream (see COLLAB.md Phase 7/9). Must use `use_arrays=false` at
+  well/full scale.
+- **`phenotype_tile_group` rule-code bug (well scale)**: jobs fail in the .5 sub-step
+  with exit 1:0 in ~12s, MaxRSS ~629MB on 6GB cap (not OOM, not timeout — real Python
+  error). Triage by reading per-job slurm log under `slurm/slurm_output/rule/group_phenotype_tile_group_*`.
+  Unrelated to the array bug.
+- **disk_mb auto-calculation**: Snakemake sets `disk_mb` = 2× input file size. For
+  well-level nd2s (84 GB each × 4 channels = 685 GB requested). Not enforced on our
+  cluster but worth overriding.
+- **slurm-array-limit deadlock**: Must be ≤ per-rule job count per batch. With 6+ rules
+  active, batches of 100 split ~15 jobs/rule. Keep `--slurm-array-limit=10`. (Only
+  relevant if you're testing arrays — production runs use `use_arrays=false`.)
+- **DAG memory overhead is already baked into mem_recommendations.json now.** The
+  aggregator computes worst-case peak across all runs at the scale they actually ran;
+  no manual `+183 MB` adjustment is needed when applying tile mem_recs to well runs.
+  (Old behavior preserved as a footnote — the values in CLAUDE.md commit history under
+  "Memory Calibration" predate the aggregator.)
 
 ## snakemake-executor-plugin-slurm 2.6.0 Notes
 See `slurm/further_2.6.0.md` for full docs.
@@ -186,20 +221,25 @@ The original calibration values (945 MB / 2.5 GB) reflected tile-only sampling, 
 based on OOM events is wasteful** — it consumed 6 attempts × cluster compute on
 2026-04-28 before we had stable values.
 
-**Current stopgap** (2026-04-29):
-- `harness/results/mem_recommendations.json` — observed peak × 1.5 overhead, aggregated
-  across all efficiency CSVs in `logs/`. Self-correcting: each successful run feeds
-  forward worst-case observations.
-- `WELL_MEM_CONSERVATIVE` in `harness.py` — duplicates the well-scaling rule values from
-  the JSON. Future cleanup is to drop the duplicate and have `use_well_mem` read the JSON.
+**Current approach** (2026-04-29):
+- `harness/results/mem_recommendations.json` — observed peak × 1.5 overhead (`AGGREGATE_OVERHEAD`),
+  aggregated across all efficiency CSVs in `logs/`. Self-correcting: each successful run
+  feeds forward worst-case observations.
+- `python harness/harness.py aggregate_efficiency` is the canonical writer of that JSON.
+  It walks every `logs/efficiency_*/*.csv`, takes the worst-case peak RSS per rule, and
+  flags rules whose peak landed at ≥95% of the slurm mem cap (likely OOM-clipped — the
+  recommendation is then a lower bound). Run this command after any well/full-scale run
+  with `--profile` to refresh recommendations.
+- `cmd_run_well_trial`'s `use_tile_mem` and `use_well_mem` flags both read from the same
+  JSON, filtered by tier. There is no separate `WELL_MEM_CONSERVATIVE` table — that
+  duplicate was removed 2026-04-29.
+- `calibrate_well` is deprecated (single-sample, undershoots IC rules). `mem_report`
+  still prints a breakdown table for reference but no longer writes the JSON.
 
-**Real fix (TODO, not yet implemented)**:
-1. Replace `calibrate_well` with an aggregator that walks `logs/efficiency_*.csv` and
-   recomputes worst-case peak per rule on every call, instead of single-sample.
-2. Build a per-rule scoring formula: `mem_mb = k_rule × total_input_size_MB + b_rule`,
-   with constants learned from observations. Predicts memory for any new screen with
-   different tile counts WITHOUT recalibration. Falls back to `mem_recommendations.json`
-   if the formula isn't computable for a given rule.
+**TODO — per-rule scoring formula**: `mem_mb = k_rule × total_input_size_MB + b_rule`,
+with constants learned from observations. Would predict memory for any new screen with
+different tile counts WITHOUT a fresh calibration run. Falls back to
+`mem_recommendations.json` if the formula isn't computable for a given rule.
 
 The lesson from 2026-04-28: "iterate up on the cap until it stops OOMing" is a bad
 workflow. Trust the observation data we already produce; don't re-derive memory empirically
@@ -218,9 +258,18 @@ deleted already-landed outputs.
 
 Well-tier (use this — `use_arrays=false`):
 ```
-backend=slurm  use_arrays=false  jobs=400  latency_wait=30
-cpus_per_task=1  use_tile_mem=true  use_well_mem=true
+backend=slurm  use_arrays=false  jobs=400  latency_wait=60
+cpus_per_task=1  use_tile_mem=true  use_well_mem=true  modules=["preprocess"]
 ```
+**latency_wait note (2026-04-30)**: bumped from 30 → 60. With 30s, well-tier no-array
+runs are borderline under cluster load: an early-2026-04-30 retry hit 3 convert_sbs
+MissingOutputException events on jobs whose output WAS actually on disk (verified by
+`ls`), they just hadn't propagated to the login-node NFS view within 30s. Snakemake then
+declared the run failed at ~92% via WorkflowError. Earlier the same day under lighter
+load, the identical config completed cleanly in 193 min. 60s gives more headroom; bump
+further (120s) if the cluster is heavily loaded. Note that `latency_wait` becomes much
+more load-bearing in array mode (cross-node visibility, not just compute-node→login-node)
+— see Phase 7 in COLLAB.md.
 **Do NOT use `use_arrays=true` at well or full scale.** The slurm-executor-plugin 2.6.0
 array mechanism has a wildcard-collision bug: it packs N distinct-wildcard tile jobs
 into one array task with a single `--comment` string. Sibling array members each verify

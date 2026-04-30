@@ -9,3 +9,4 @@ analysis/autoresearch/*.log
 analysis/harness/results/autoresearch_*/
 analysis/harness/results/well_trial_*/
 analysis/harness/results/diagnose_*.json
+**/__pycache__/

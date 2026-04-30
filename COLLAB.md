@@ -13,12 +13,18 @@ conda create -n brieflow_speed -c conda-forge python=3.11 uv pip -y
 eval "$(conda shell.bash hook)" && conda activate brieflow_speed
 cd brieflow && uv pip install -e ".[dev]" && cd ..
 
-# Run the well-tier validation (next step)
+# Run a well-tier trial (default reads autoresearch/next_trial.json)
 cd analysis/
-bash autoresearch/run_well_overnight.sh 2>&1 | tee autoresearch/well_run2.log
+python harness/harness.py run_well_trial 2>&1 | tee logs/run_well_$(date +%Y%m%d_%H%M%S).log
+
+# Or pass an explicit trial JSON
+python harness/harness.py run_well_trial --trial-json autoresearch/well_arrays_failure_test.json
 ```
 
-Results appear in `analysis/autoresearch/well_results.tsv`. See **What's Next** below for what to do after.
+Results appear in `analysis/autoresearch/well_results.tsv`. The harness's success gate
+(`Finished jobid: 0 (Rule: all_preprocess)` in the flow.sh log) is what proves a run
+completed cleanly; trials that fail the gate exit non-zero without recording. See
+**What's Next** and **Handoff Notes** below for current state.
 
 ---
 
@@ -98,34 +104,101 @@ storage" + parent-dir listings include the file at the moment the exception fire
 with and without arrays at lat=30: both clean. Arrays win 1.8× by absorbing cluster-slot
 contention into a small held-time tax instead of a large queued-time tax.
 
-### Phase 7: Array-batching wildcard-collision bug at well scale (2026-04-28)
+### Phase 7: Array-batching wildcard-collision bug at well scale (2026-04-28, mechanism revised 2026-04-29)
 Above conclusion held only at tile scale (~150 jobs). At well scale (~4,300 jobs), arrays
-fail catastrophically due to a `snakemake-executor-plugin-slurm` 2.6.0 defect:
+fail catastrophically due to a `snakemake-executor-plugin-slurm` 2.6.0 defect.
 
-- The plugin packs N distinct-wildcard rule invocations into a single slurm array task.
-- Slurm's `--comment` field (which the plugin uses to encode wildcards) is ONE string
-  per submission. The plugin emits the warning twice per batch:
-  > `Array job submission does not allow for multiple different wildcard combinations
-  > in the comment string. Only the first one will be used.`
-- All N mini-snakemakes (each on a different compute node) read the comment, see the
-  FIRST member's wildcards, and treat that tile as part of their own work.
-- Each mini-snakemake successfully writes its own assigned tile (the `.0` python step
-  records `COMPLETED 0:0` in sacct), then verifies the comment-encoded tile (which a
-  sibling task produced). NFS hasn't propagated the sibling's write → `MissingOutputException`.
-- Snakemake's failure-cleanup runs and **deletes the sibling's actual output**. The
-  sibling task ran cleanly but its output is gone. Cascade.
+**Source-level diagnosis (2026-04-29 re-investigation, verified by `--verbose` trace):**
 
-Concrete trace (well_winner_4x_lat30_runtime1d, 2026-04-28 15:13–15:20):
-- Task `7561311_1` produced T-57_C-3 cleanly (sacct COMPLETED, log shows `1 of 1 steps
-  (100%) done`, `Storing output in storage`).
-- Task `7561311_20` (assigned T-226_C-2, host c13b3) read the same comment-string
-  wildcards and tried to verify T-57_C-3. Hit MissingOutputException at 30s.
-- `7561311_20.log` line: `Removing output files of failed job convert_sbs since they might
+The bug is in how the plugin builds its `sbatch --wrap` command for array submissions
+(`snakemake_executor_plugin_slurm/__init__.py:884–917`):
+
+```python
+exec_job = self.format_job_exec(jobs[start_index - 1])   # only the FIRST job in the chunk
+sub_array_execs = {str(i): array_execs[i]
+                   for i in range(start_index + 1, end_index + 1)}  # remaining N-1 jobs
+...
+call_with_array += f' --wrap="{exec_job} --slurm-jobstep-array-execs={...payload...}"'
+```
+
+A single `--wrap=` is built from the chunk's first job and reused for every array task.
+That wrap is a snakemake invocation carrying `--target-jobs '<rule>:<wildcards-of-first-job>'`.
+Inside, the jobstep plugin sees `SLURM_ARRAY_TASK_ID`; for non-first tasks it decompresses
+the right command from the payload and `Popen`s it (the actual work happens correctly,
+producing the right tile's output). **But the surrounding inner snakemake spawned by the
+wrap still has `--target-jobs=<first job>`. After Popen returns, that inner snakemake
+verifies its own target on disk — the chunk's FIRST job's output, not whatever this task
+actually produced.** If the first task's output isn't visible to this NFS client yet,
+inner-1 raises `MissingOutputException`, and snakemake's failure-cleanup deletes the
+target — i.e., wipes the *first* task's real output that some other compute node already
+wrote. Cascade.
+
+**Concrete `--verbose` trace (tile preprocess, 2026-04-29 23:48):**
+The plugin debug-logs each chunk's wrap. Captured wraps (saved to
+`analysis/harness/results/array_wrap_trace_evidence.txt`):
+
+```
+chunk 1-10 (convert_sbs)              wrap target=convert_sbs:plate=1,well=A1,tile=3,cycle=3
+chunk 11-20 (convert_sbs)             wrap target=convert_sbs:plate=1,well=A1,tile=3,cycle=1
+chunk 21-30 (convert_sbs)             wrap target=convert_sbs:plate=1,well=A1,tile=3,cycle=4
+chunk 31-40 (convert_sbs)             wrap target=convert_sbs:plate=1,well=A1,tile=6,cycle=4
+chunk 1-7  (convert_phenotype)        wrap target=convert_phenotype:plate=1,well=A1,tile=7
+chunk 11-20 (extract_metadata_sbs)    wrap target=extract_metadata_sbs:...,cycle=3,channel=CY5_30p
+...
+```
+
+Each `--array=N-M` carries a single `--target-jobs` for one tile. All M-N+1 sibling
+tasks share that target. Confirmed across all rules submitted as arrays in the run.
+
+**Concrete failure trace (well run, 2026-04-28 15:13–15:20):**
+- Task `7561311_1` produced T-57_C-3 cleanly (sacct COMPLETED, `1 of 1 steps (100%) done`,
+  `Storing output in storage`).
+- Task `7561311_20` was assigned T-226_C-2 by the array_execs payload. It produced
+  T-226_C-2 correctly via Popen. Then its surrounding inner snakemake (started with
+  `--target-jobs=...,tile=57,cycle=3` per the chunk's wrap) verified T-57_C-3 instead of
+  T-226_C-2. T-57_C-3 hadn't propagated yet on this NFS client.
+- `7561311_20.log`: `Removing output files of failed job convert_sbs since they might
   be corrupted: brieflow_output_well/preprocess/images/sbs/P-1_W-A1_T-57_C-3__image.tiff`
-- T-57_C-3 deleted from disk despite task _1 having produced it correctly.
+- T-57_C-3 deleted from disk despite task `_1` having produced it correctly.
 
 20 such cross-contaminations in a single batch caused the cascade that killed the well
 run at 134/4328 steps.
+
+**Why tile scale survives:** the same race exists. Inner-1 of every non-first task
+verifies the chunk's first task's output. At tile scale (~150 jobs, fast rules, batches
+of ≤10) the first task typically completes and its output propagates within
+`latency_wait=30` of when sibling tasks finish, so verification incidentally passes. At
+well scale (~4,300 jobs, slower rules, more variance) the first task is often still
+running when siblings finish; verification fails; cleanup deletes; cascade. `latency_wait`
+just buys the FS more propagation grace — it doesn't fix the underlying mistake.
+
+**Note on prior diagnosis:** the original 2026-04-28 write-up attributed the cascade to
+the `--comment` field. The plugin does emit a misleading warning to that effect:
+> `Array job submission does not allow for multiple different wildcard combinations in
+> the comment string. Only the first one will be used.`
+…but `--comment` is purely a sacct/squeue label — snakemake never reads it back. The
+real shared-state vector is `--target-jobs` inside the wrap, as shown above.
+
+**Live capture at well scale (2026-04-30 07:44–08:55, 70 min run, killed in deadlock):**
+A fresh `well_arrays_failure_test_20260430` trial reproduced everything above with
+verbose plugin debug logging:
+- 49 array submissions captured with full wrap content. Every chunk has exactly one
+  `--target-jobs` regardless of array task count — same shape we observed at tile.
+- 91 "Removing output files" cleanup events fired (the failure-cleanup that wipes
+  siblings' real outputs).
+- 353 "Error in rule" events — the failure pattern in action.
+- Only 81/4328 steps marked done after 70 min, then snakemake deadlocked in
+  "Ready jobs: 3481, Selected: 0" because every dependent had a "failed" upstream.
+- Saved as `analysis/harness/results/array_wrap_trace_well_20260430.txt`.
+- Recorded in `well_results.tsv` as `well_arrays_failure_test_20260430`.
+
+**Upstream status (checked 2026-04-29):** wrap construction is identical in v2.6.0,
+v2.6.1 (current release), and `main` HEAD. No PR fixes it. Adjacent open issue
+[#447](https://github.com/snakemake/snakemake-executor-plugin-slurm/issues/447) reports
+"Job arrays across different wildcards may not create output directories" with a related-
+but-distinct symptom (output directories not created for templated paths) — same bug
+family ("array path makes wildcard assumptions") but a different failure mode. We have
+not filed an upstream issue for our exact symptom yet.
 
 **Implication**: arrays cannot be used at well or full scale on this plugin version. The
 robust well config requires `use_arrays=false` until the upstream bug is fixed. We trade
@@ -154,15 +227,64 @@ caps based on OOM events consumed 6 attempts (10G → 16G → 32G → 128G → 5
 landing on baker's production value. With the actual data in hand, true peak is 210 GB
 and a 1.5× overhead gives 315 GB — substantially under baker's 500 GB.
 
-**Updated `mem_recommendations.json`** (2026-04-29): switched semantics from
-"calibration sample × margin" to "worst-case observed peak across all efficiency CSVs
-× 1.5 overhead". This is the new stable defaults source; `WELL_MEM_CONSERVATIVE` in
-harness.py duplicates these values for now (cleanup TODO).
+**Updated `mem_recommendations.json`** (2026-04-29, formalized 2026-04-30): switched
+semantics from "calibration sample × margin" to "worst-case observed peak across all
+efficiency CSVs × 1.5 overhead". This is the new stable defaults source. The aggregator
+is now a first-class harness command (`python harness/harness.py aggregate_efficiency`,
+added 2026-04-30) — walks every `logs/efficiency_*/*.csv`, takes worst peak per rule,
+flags rules whose peak landed within 5% of the slurm cap (likely OOM-clipped). The
+duplicated `WELL_MEM_CONSERVATIVE` table was deleted from `harness.py` on 2026-04-30;
+both `use_tile_mem` and `use_well_mem` flags now read directly from the JSON, filtered
+by tier.
 
 **Lesson**: every run produces an efficiency CSV with per-job `MaxRSS_MB`. We were
 generating this data from the start but not feeding it back into mem recommendations.
 "Iterate up on the cap until it stops OOMing" was the bad workflow; "look at the data
 we already have" was the missed opportunity.
+
+### Phase 9: Source-level array-bug confirmation + first fresh well wall (2026-04-30)
+
+Three things happened today, all flow from yesterday's open thread on the array bug.
+
+**(A) Source-level confirmation of the array wrap-collision mechanism.** Original 04-28
+narrative blamed `--comment`; turns out the actual shared-state vector is `--target-jobs`
+inside the `--wrap=` string (built from `jobs[start_index-1]` only). Confirmed by reading
+`snakemake_executor_plugin_slurm/__init__.py:884-916` and tracing the jobstep counterpart.
+A subagent search confirmed: identical in v2.6.0, v2.6.1, current `main` HEAD; no fix
+in flight; adjacent issue #447 is in the same bug family but a distinct symptom. Phase 7
+above is the rewritten mechanism; the `--comment` story is preserved as a "prior
+diagnosis" footnote.
+
+**(B) Live capture of the bug at both scales.** `flow.sh` now permanently passes
+`--verbose` so the plugin's `call with array:` debug line is preserved on every run.
+- Tile capture (2026-04-29, 7-min run): 17 chunks across 4 rules, single `--target-jobs`
+  per chunk every time. Saved to `harness/results/array_wrap_trace_evidence.txt`.
+- Well capture (2026-04-30, killed at 70 min): 49 chunks captured, 91 cleanup events,
+  353 rule-error events, 81/4328 steps before deadlock. Saved to
+  `harness/results/array_wrap_trace_well_20260430.txt`.
+
+**(C) First fresh end-to-end well-tier preprocess wall.** `well_noarrays_fresh_20260430_preprocess`:
+**193 min** (preprocess only, modules=["preprocess"], use_arrays=false, latency_wait=30,
+mem_recommendations.json). 4328/4328 steps, success-gate marker landed.
+
+**Other findings from the day:**
+- `latency_wait=30` is borderline at well scale even with `use_arrays=false`. The 193-min
+  run got lucky on cross-node NFS visibility; an immediate retry with the same config
+  hit 3 convert_sbs MissingOutputException events at exactly 30s (files were on disk —
+  the visibility lag was the issue, not real data loss). CLAUDE.md "Robust Configs" now
+  recommends `latency_wait=60` for well-tier no-array runs.
+- `config_well.yml` carries real `sbs:` and `phenotype:` sections (added 2026-04-29 in
+  commit `c370a0b`). The original "preprocess-only by design" CLAUDE.md claim was
+  out of date. The harness was hardcoding `["preprocess", "sbs", "phenotype"]` modules
+  and actually running them at well scale — discovered when the 193-min run cascaded
+  into `phenotype_tile_group` rule failures after preprocess succeeded.
+- **`phenotype_tile_group` has a real rule-code bug at well scale**: jobs fail in the .5
+  sub-step with exit 1:0 in ~12s, MaxRSS ~629 MB on a 6 GB cap (so not OOM, not timeout).
+  Real code error inside the python step. Needs separate triage; not infrastructure.
+- Harness `cmd_run_well_trial` now reads `modules` from the trial JSON (defaults to the
+  historical `["preprocess", "sbs", "phenotype"]` for back-compat). Both
+  `next_trial.json` and `well_arrays_failure_test.json` now scope `modules: ["preprocess"]`
+  so the broken phenotype phases don't pollute speed measurements.
 
 ### Phase 5: sacct pending-time decomposition (tool built 2026-04-23)
 - New subcommand: `python harness/harness.py diagnose [--csv PATH]`
@@ -221,28 +343,92 @@ CLAUDE.md) when every output was actually on disk.
 
 ## What's Next
 
-1. ~~**Fix the harness success-tracking bug**~~ — DONE 2026-04-28.
-2. ~~**Re-run well trials with the robust config**~~ — DONE 2026-04-29 (`well_winner_noarrays_v6`,
-   first gated well-preprocess success).
-3. **Replace single-sample `calibrate_well` with efficiency-CSV aggregator.** Walk every
-   `logs/efficiency_*/efficiency_report_*.csv`, take worst-case observed peak per rule,
-   apply overhead, write `mem_recommendations.json`. Self-correcting calibration.
+Done since this doc was last refreshed (2026-04-29 / 2026-04-30):
+- ~~**Fix the harness success-tracking bug**~~ — DONE 2026-04-28.
+- ~~**Re-run well trials with the robust config**~~ — DONE 2026-04-29.
+- ~~**Replace single-sample `calibrate_well` with efficiency-CSV aggregator**~~ — DONE
+  2026-04-30 as `python harness/harness.py aggregate_efficiency`.
+- ~~**Drop `WELL_MEM_CONSERVATIVE` from harness.py**~~ — DONE 2026-04-30.
+- ~~**Confirm array-bug mechanism at source level + capture at well scale**~~ — DONE
+  2026-04-30 (Phase 9).
+- ~~**First fresh end-to-end well-preprocess wall time**~~ — DONE 2026-04-30, 193 min.
+
+Open:
+1. **File an upstream issue** for the array `--target-jobs` collision. We have all the
+   evidence: source-line citation, tile + well verbose traces, well-scale failure trace
+   with 91 cleanup events. Cross-link issue #447 as related-but-distinct. Until upstream
+   merges a fix, `use_arrays=false` is the only correct setting at well/full scale.
+2. **Triage the `phenotype_tile_group` rule-code bug.** Jobs fail in the .5 sub-step
+   with exit 1:0 in ~12s, MaxRSS 629MB / 6GB cap (not OOM, not timeout — real Python
+   error). Read the actual per-job slurm log under
+   `slurm/slurm_output/rule/group_phenotype_tile_group_*` to see what's throwing.
+   Unrelated to the array bug; blocks downstream module benchmarking.
+3. **Re-run well no-array preprocess at `latency_wait=60`** to get an auto-recorded row
+   in `well_results.tsv` (the current 193-min row is hand-recorded because the harness
+   was killed mid-cascade). Bumping latency_wait should keep no-array runs robust under
+   varying cluster load.
 4. **Per-rule scoring formula for memory.** `mem_mb = k_rule × total_input_size_MB + b_rule`
    with constants learned from observations. Generalizes to new screens with different
    tile counts without recalibration. See CLAUDE.md "Memory Calibration" for design.
-5. **Drop `WELL_MEM_CONSERVATIVE` from harness.py.** Have `use_well_mem` read directly
-   from `mem_recommendations.json` for tier=="well" rules.
-3. **Run `diagnose` on a clean well-tier trial** — the tool is built (Phase 5). At tile
+   Falls back to `mem_recommendations.json` if not computable.
+5. **Run `diagnose` on a clean well-tier trial** — the tool is built (Phase 5). At tile
    scale it showed compute-bound, no scheduler pressure. The well-scale decomposition is
    the datapoint that makes the admin conversation concrete.
-4. **Well autoresearch** — if runs are ~30-40 min, do 10-15 trials overnight using the
-   same agent loop as tile. Launch a Claude Code session in `analysis/`, load
-   `autoresearch/program.md` as context, and let it run autonomously:
+6. **Well autoresearch** — once latency_wait is settled and the phenotype bug is
+   triaged, do 10-15 trials overnight using the same agent loop as tile. Launch a Claude
+   Code session in `analysis/`, load `autoresearch/program.md` as context, and let it
+   run autonomously:
    ```bash
    cd analysis/
    # In Claude Code: read autoresearch/program.md and run the well autoresearch loop
    # using cmd_run_well_trial instead of run_one_trial
    ```
+
+---
+
+## Handoff Notes (2026-04-30)
+
+The repo is in a clean state for fresh investigation. Key artifacts:
+
+**Evidence files** (under `analysis/harness/results/`):
+- `array_wrap_trace_evidence.txt` — tile-tier verbose trace, 17 chunks, 4 rules
+- `array_wrap_trace_well_20260430.txt` — well-tier verbose trace, 49 chunks, single
+  `--target-jobs` per chunk regardless of array task count, plus deadlock summary
+- `mem_recommendations.json` — current canonical memory caps, regenerable via
+  `python harness/harness.py aggregate_efficiency`
+
+**Logs** (under `analysis/logs/`):
+- `run_well_arrays_failure_20260430_074405.log` — full verbose harness log of the
+  array failure run (91 cleanup events, 353 rule errors)
+- `run_well_noarrays_preprocess_*.log` — both the 193-min successful run and the
+  immediate retry that hit the latency_wait=30 NFS race
+- `preprocess-20260430_*.log` — flow.sh log files
+
+**Results** (under `analysis/autoresearch/`):
+- `well_results.tsv` — 4 rows, all with explicit caveats:
+  - `well_resume_only_v6` — historical resume-only baseline (NOT a benchmark)
+  - `well_noarrays_fresh_20260430_preprocess` — 193 min fresh wall (manual)
+  - `well_noarrays_preprocess_20260430_FAILED` — NFS race retry (manual)
+  - `well_arrays_failure_test_20260430` — array bug live (manual)
+- `next_trial.json` and `well_arrays_failure_test.json` — both scope to
+  `modules: ["preprocess"]`, both use the success-gated harness path
+
+**Key code locations to dig into:**
+- Array bug: `site-packages/snakemake_executor_plugin_slurm/__init__.py` lines
+  884-916, especially line 889 (`exec_job = self.format_job_exec(jobs[start_index - 1])`)
+- Jobstep counterpart: `site-packages/snakemake_executor_plugin_slurm_jobstep/__init__.py`
+  lines 154-166 (the `_is_first_array_task` branch)
+- Harness modules-arg: `analysis/harness/harness.py` `cmd_run_well_trial`, line ~672
+- Aggregator: `analysis/harness/harness.py` `cmd_aggregate_efficiency`
+
+**Things that look surprising but are intentional:**
+- `flow.sh` always passes `--verbose` — keeps the plugin's array-debug log line on
+  every run; tiny overhead, big diagnostic value.
+- The 193-min row is hand-recorded — the harness's success gate worked correctly
+  (preprocess marker landed) but flow.sh kept running into the broken sbs/phenotype
+  phase, which we killed before the harness got back to writing the row.
+- `well_results.tsv` has no `use_arrays` column — `array_limit=n/a` implies false,
+  a number implies true. The notes column is the source of truth for each row.
 
 ---
 

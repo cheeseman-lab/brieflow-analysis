@@ -1,0 +1,13 @@
+{
+  "tag": "well_arrays_failure_test_20260430",
+  "notes": "EXPECTED-FAIL run: use_arrays=true at well-tier preprocess to capture verbose wrap-collision trace for upstream report (see COLLAB.md Phase 7). Modules scoped to preprocess only — the sbs/phenotype phases have an unrelated rule-code bug that pollutes the diagnostic. Latency_wait=30. Do NOT retry on failure — the cascade IS the data.",
+  "modules": ["preprocess"],
+  "backend": "slurm",
+  "use_arrays": true,
+  "jobs": 400,
+  "array_limit": 10,
+  "cpus_per_task": 1,
+  "latency_wait": 30,
+  "use_tile_mem": true,
+  "use_well_mem": true
+}
