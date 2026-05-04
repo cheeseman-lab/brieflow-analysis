@@ -365,6 +365,32 @@ for zarr_store in "${OUTPUT_ROOT}"/phenotype/aligned_*.zarr; do
         new_name="${SCREEN_NAME}_${plate_num}"
         echo "  Copying ${old_name} -> ${new_name}..."
         cp -r "$zarr_store" "${SCREEN_DIR}/${new_name}"
+
+        # Fix plate name in zarr.json (pipeline writes "aligned_{plate}", rename to screen name)
+        ZARR_JSON="${SCREEN_DIR}/${new_name}/zarr.json"
+        if [ -f "$ZARR_JSON" ]; then
+            STORE_NAME="${new_name%.zarr}"  # strip .zarr suffix
+            python3 -c "
+import json, sys
+with open('${ZARR_JSON}') as f:
+    meta = json.load(f)
+try:
+    meta['attributes']['ome']['plate']['name'] = '${STORE_NAME}'
+except KeyError:
+    pass
+with open('${ZARR_JSON}', 'w') as f:
+    json.dump(meta, f, indent=2)
+"
+            echo "  -> patched zarr.json plate name to '${STORE_NAME}'"
+        fi
+
+        # Remove .snakemake_timestamp files (Snakemake internals, not part of the data)
+        N_TIMESTAMPS=$(find "${SCREEN_DIR}/${new_name}" -name ".snakemake_timestamp" | wc -l)
+        if [ "$N_TIMESTAMPS" -gt 0 ]; then
+            find "${SCREEN_DIR}/${new_name}" -name ".snakemake_timestamp" -delete
+            echo "  -> removed ${N_TIMESTAMPS} .snakemake_timestamp files"
+        fi
+
         ZARR_FOUND=true
     fi
 done
@@ -411,6 +437,7 @@ if [ -n "$AGG_H5AD" ]; then
     python3 -c "
 import anndata as ad
 import numpy as np
+import pandas as pd
 import yaml
 from itertools import combinations
 
@@ -462,8 +489,21 @@ if len(cluster_cols) > 1:
         adata.obs = adata.obs.drop(columns=[c])
     print(f'Kept cluster column: {keep}')
 
-# Keep only spec obs columns
-spec_obs = {'cell_cycle_phase'} | {c for c in adata.obs.columns if c.startswith('cluster_group_')}
+# Promote former obs index (perturbation_id) to an obs column,
+# then build aggregate_id as the new obs index per OPS spec v0.1.0.
+# Currently brieflow emits one aggregated_data.h5ad per cell class, so
+# observation_unit is just ['perturbation_id'] and aggregate_id == perturbation_id.
+prev_index_name = adata.obs.index.name or 'perturbation_id'
+adata.obs['perturbation_id'] = adata.obs.index.astype(str).values
+
+observation_unit = ['perturbation_id']
+agg_id = adata.obs[observation_unit[0]].astype(str)
+for col in observation_unit[1:]:
+    agg_id = agg_id.str.cat(adata.obs[col].astype(str), sep='|')
+adata.obs.index = pd.Index(agg_id.values, name='aggregate_id')
+
+# Keep only spec obs columns: required FK + observation_unit cols + cluster_group_*
+spec_obs = {'perturbation_id'} | set(observation_unit) | {c for c in adata.obs.columns if c.startswith('cluster_group_')}
 extra_obs = [c for c in adata.obs.columns if c not in spec_obs]
 if extra_obs:
     adata.obs = adata.obs.drop(columns=extra_obs)
@@ -474,8 +514,10 @@ extra_var = [c for c in adata.var.columns if c not in spec_var]
 if extra_var:
     adata.var = adata.var.drop(columns=extra_var)
 
-# Keep only spec uns
-spec_uns = {'schema_version', 'default_embedding', 'title'}
+# uns: required schema_version/default_embedding/title/observation_unit + recommended neg_log10_fdr_threshold
+adata.uns['observation_unit'] = observation_unit
+adata.uns.setdefault('neg_log10_fdr_threshold', float(np.log10(1 / 0.05)))  # ≈1.30103 for FDR=0.05
+spec_uns = {'schema_version', 'default_embedding', 'title', 'observation_unit', 'neg_log10_fdr_threshold'}
 for k in list(adata.uns.keys()):
     if k not in spec_uns:
         del adata.uns[k]
@@ -519,5 +561,6 @@ ZIP_FILE="${SUBMISSION_DIR}.zip"
 echo ""
 echo "Creating ${ZIP_FILE}..."
 cd "$(dirname "${SUBMISSION_DIR}")"
+rm -f "$(basename "${ZIP_FILE}")"
 zip -r "$(basename "${ZIP_FILE}")" "$(basename "${SUBMISSION_DIR}")" -q
 echo "  -> $(du -sh "${ZIP_FILE}" | cut -f1) compressed"

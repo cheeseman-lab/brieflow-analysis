@@ -2,3 +2,10 @@
 analysis/.snakemake/
 analysis/slurm/slurm_output/
 analysis/brieflow_output/
+
+# OPS submission build artifacts (regenerable)
+analysis/cellxstate_submission/
+analysis/cellxstate_submission.zip
+
+# Local Claude Code state
+.claude/
