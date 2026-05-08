@@ -17,7 +17,7 @@
 #       ├── visualizations/
 #       │   └── {visualization_id}/
 #       │       ├── aggregated_data.h5ad       (TODO)
-#       │       └── examples.zarr              (TODO)
+#       │       └── examples/                  (per-perturbation example image stores)
 #       └── {screen_name}.zarr
 #
 # Usage:
@@ -402,7 +402,7 @@ fi
 # 7. Example images (examples.zarr from montage pipeline)
 # ---------------------------------------------------------------------------
 echo "[7/8] Example images..."
-EXAMPLES_DEST="${SCREEN_DIR}/visualizations/default/examples.zarr"
+EXAMPLES_DEST="${SCREEN_DIR}/visualizations/default/examples"
 mkdir -p "$EXAMPLES_DEST"
 EXAMPLES_FOUND=false
 for examples_src in "${OUTPUT_ROOT}"/aggregate/montages/*__examples.zarr; do
@@ -420,7 +420,7 @@ print('_'.join(channels))
         mkdir -p "${EXAMPLES_DEST}/${CHANNEL_COMBO}"
         cp -r "$examples_src"/* "${EXAMPLES_DEST}/${CHANNEL_COMBO}/"
         NUM_GENES=$(ls "${EXAMPLES_DEST}/${CHANNEL_COMBO}" 2>/dev/null | wc -l)
-        echo "  -> examples.zarr/${CHANNEL_COMBO}/ (${NUM_GENES} perturbations)"
+        echo "  -> examples/${CHANNEL_COMBO}/ (${NUM_GENES} perturbations)"
         EXAMPLES_FOUND=true
     fi
 done
@@ -496,6 +496,10 @@ if len(cluster_cols) > 1:
 prev_index_name = adata.obs.index.name or 'perturbation_id'
 adata.obs['perturbation_id'] = adata.obs.index.astype(str).values
 
+# OPS submission spec calls this n_cells; brieflow's internal name is cell_count
+if 'cell_count' in adata.obs.columns:
+    adata.obs = adata.obs.rename(columns={'cell_count': 'n_cells'})
+
 observation_unit = ['perturbation_id']
 agg_id = adata.obs[observation_unit[0]].astype(str)
 for col in observation_unit[1:]:
@@ -503,7 +507,7 @@ for col in observation_unit[1:]:
 adata.obs.index = pd.Index(agg_id.values, name='aggregate_id')
 
 # Keep only spec obs columns: required FK + observation_unit cols + cluster_group_*
-spec_obs = {'perturbation_id'} | set(observation_unit) | {c for c in adata.obs.columns if c.startswith('cluster_group_')}
+spec_obs = {'perturbation_id', 'n_cells'} | set(observation_unit) | {c for c in adata.obs.columns if c.startswith('cluster_group_')}
 extra_obs = [c for c in adata.obs.columns if c not in spec_obs]
 if extra_obs:
     adata.obs = adata.obs.drop(columns=extra_obs)
@@ -546,7 +550,7 @@ echo "  [x] perturbation_library.csv"
 echo "  [x] feature_definitions.csv"
 echo "  [x] zarr images"
 echo "  [x] cell_data.parquet (single-cell features)"
-echo "  [x] examples.zarr (single-cell crops)"
+echo "  [x] examples (single-cell crops)"
 echo ""
 echo "  [x] aggregated_data.h5ad (perturbation-level with PHATE embedding)"
 echo ""
