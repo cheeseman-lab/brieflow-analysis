@@ -21,6 +21,11 @@ analysis/cluster_optimization/results/run_*.log
 analysis/cluster_optimization/results/_archive_*.tar.gz
 analysis/cluster_optimization/__pycache__/
 
+# auto-regenerated per-job observation CSV (written by plugin's aggregate_efficiency)
+# Curated bootstrap datasets like baker_observations_raw_2026-05-14.csv are
+# committed separately as snapshots.
+analysis/cluster_optimization/results/observations_raw_*.csv
+
 # python build / cache
 **/__pycache__/
 
