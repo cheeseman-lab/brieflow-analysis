@@ -1,3 +1,0 @@
-tag	backend	latency_wait	max_status_checks	use_mem_recs	use_arrays	jobs	array_limit	cpus	wall_time_min	notes
-winner_4x_lat30	slurm	30	default	True	True	400	20	1	7.0	Same as winner_4x_lat10 but latency_wait=30. lat=10 had ~4 MissingOutputException due to NFS visibility >10s under load. Testing if 30s clears it.
-winner_4x_lat30_noarrays	slurm	30	default	True	False	400	20	1	13.0	Comparison to winner_4x_lat30 (which was clean at 6.10 min). Same mem (4x) and lat=30, but use_arrays=false — each job submitted as its own sbatch, no mini-snakemake batching. Tests the hypothesis that array batching is what creates back-to-back NFS writes/stats and exposes attribute-cache races.

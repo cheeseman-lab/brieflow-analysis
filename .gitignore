@@ -1,12 +1,25 @@
 # ignore files generated during run
 analysis/.snakemake/
+analysis/.brieflow_run/
+analysis/.brieflow_runloop/
 analysis/slurm/slurm_output/
 analysis/brieflow_output/
 analysis/brieflow_output_tile/
 analysis/brieflow_output_well/
 analysis/logs/
-analysis/autoresearch/*.log
-analysis/harness/results/autoresearch_*/
-analysis/harness/results/well_trial_*/
-analysis/harness/results/diagnose_*.json
+analysis/runloop_*.log
+analysis/brieflow_run_results.tsv
+analysis/tmp.*
+.tmp/
+.claude/scheduled_tasks.lock
+
+# legacy harness reorg detritus (cluster_optimization/results)
+analysis/cluster_optimization/results/well_trial_*/
+analysis/cluster_optimization/results/diagnose_*.json
+analysis/cluster_optimization/results/autoresearch_*/
+analysis/cluster_optimization/results/run_*.log
+analysis/cluster_optimization/results/_archive_*.tar.gz
+analysis/cluster_optimization/__pycache__/
+
+# python build / cache
 **/__pycache__/

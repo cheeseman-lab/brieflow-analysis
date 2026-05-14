@@ -1,0 +1,41 @@
+rule,scaling_dim,N_observations,peak_MB,p99_MB,p95_MB,median_MB,min_MB,mean_MB,max_cap_MB,peak_util_pct,suggested_cap_p99_x1_5
+aggregate,unknown,3,16796.3,16796.3,16796.3,10381.7,10264.2,12480.7,980000.0,1.7,25194
+align,per-channel-combo,3,37237.1,37237.1,37237.1,20236.2,20183.2,25885.5,980000.0,3.8,55856
+benchmark_clusters,"per (combo, leiden_resolution)",54,2219.8,2219.8,2092.7,2046.3,751.5,1414.3,40000.0,5.5,3330
+bootstrap_construct,"per (plate, combo, gene, sgRNA)",10321,2140.1,2050.9,2039.8,1882.6,801.8,1519.9,5600.0,38.2,3076
+bootstrap_gene,"per (plate, combo, gene)",2016,2000.6,1854.6,1843.7,1826.9,661.0,1541.3,5600.0,35.7,2782
+calculate_ic_phenotype,per-well per-round (k * N_tiles_per_round),24,215378.0,215378.0,215252.0,192965.2,9995.6,181296.0,500000.0,43.1,323067
+calculate_ic_sbs,per-well per-cycle (k * N_tiles_per_cycle),206,18976.1,18907.5,18769.6,15429.0,3823.3,15016.8,28200.0,67.3,28361
+clean_aggregate,per-channel-combo,6,1751.4,1751.4,1751.4,1743.8,547.2,1148.2,4000.0,43.8,2627
+combine_bootstrap,"per (plate, combo) (k * library_size)",4,2059.1,2059.1,2059.1,1971.0,844.4,1709.3,5200.0,39.6,3089
+combine_cells,per-well,25,3568.2,3568.2,3515.9,1358.0,328.8,1694.9,20000.0,17.8,5352
+combine_metadata_phenotype,per-well (k * N_tiles),27,1650.2,1650.2,1647.3,1547.5,328.8,1165.3,32000.0,5.2,2475
+combine_metadata_sbs,per-well (k * N_tiles),21,1570.6,1570.6,1567.6,1544.8,328.6,1032.3,32000.0,4.9,2356
+combine_phenotype_info,per-well,24,2393.7,2393.7,2384.7,2354.4,328.5,1879.8,32000.0,7.5,3591
+combine_reads,per-well,13,5885.4,5885.4,5885.4,4491.0,3421.5,4630.8,20000.0,29.4,8828
+combine_sbs_info,per-well,13,2353.1,2353.1,2353.1,1011.4,328.7,1356.7,32000.0,7.4,3530
+convert_phenotype,per-tile (PWT),13808,2362.3,2198.3,2094.3,2018.3,799.8,1596.6,4000.0,59.1,3298
+convert_sbs,per-tile (PWT),32957,2009.8,1803.1,1799.5,1676.9,378.9,1218.6,4000.0,50.2,2705
+deduplicate_merge,per-well,4,6730.8,6730.8,6730.8,4718.6,3575.7,4888.1,20000.0,33.7,10096
+eval_aggregate,unknown,3,27486.2,27486.2,27486.2,14080.1,13742.9,18436.4,980000.0,2.8,41229
+eval_features,per-well,5,4006.0,4006.0,4006.0,921.7,330.2,1917.2,6000.0,66.8,6009
+eval_mapping,per-plate,3,12680.6,12680.6,12680.6,9117.3,9096.0,10298.0,200000.0,6.3,19021
+eval_merge,per-well,6,21009.0,21009.0,21009.0,16684.7,4104.5,13869.6,67000.0,31.4,31513
+eval_segmentation_phenotype,per-well,4,7053.0,7053.0,7053.0,6918.3,1192.0,4174.4,50000.0,14.1,10579
+eval_segmentation_sbs,per-well,3,1886.1,1886.1,1886.1,1885.6,1806.9,1859.5,50000.0,3.8,2829
+extract_metadata_phenotype,per-tile (PWT),62,127520.8,127520.8,127515.1,126498.2,276.6,92204.0,128000.0,99.6,191281
+extract_metadata_sbs,per-tile (PWT),325,14554.7,14551.5,4291.8,2956.0,259.6,2480.6,16000.0,91.0,21827
+fast_alignment,per-well (k * N_cells),7,17393.2,17393.2,17393.2,14392.3,1763.6,11025.5,23900.0,72.8,26090
+fast_merge,per-well,4,3339.3,3339.3,3339.3,3198.0,1569.1,2426.2,7000.0,47.7,5009
+filter,per-channel-combo,3,72672.9,72672.9,72672.9,39298.3,39102.4,50357.9,100000.0,72.7,109009
+final_merge,per-well (k * N_cells * cp_features),7,266749.6,266749.6,266749.6,177207.8,118948.5,178437.7,600000.0,44.5,400124
+format_cluster_anndata,per-channel-combo,3,1821.0,1821.0,1821.0,1793.4,1793.1,1802.5,3000.0,60.7,2732
+format_merge,per-well,4,5249.5,5249.5,5249.5,5111.5,2954.5,4259.0,20000.0,26.2,7874
+format_singlecell_anndata,"per (well, channel-combo) (k * N_cells * N_channels)",10,38992.5,38992.5,38992.5,7684.4,2176.4,14227.4,125000.0,31.2,58489
+generate_feature_table,per-channel-combo (k * N_cells * features),4,34512.8,34512.8,34512.8,18882.5,493.5,18129.7,980000.0,3.5,51769
+generate_montage,"per (gene, combo) (k * N_cells_per_gene)",6138,3119.8,2758.1,2525.6,496.6,427.8,1154.6,12000.0,26.0,4137
+merge_phenotype,per-well per-channel,26,93099.7,93099.7,92864.8,85215.5,328.2,65286.2,128000.0,72.7,139650
+phate_leiden_clustering,"per (combo, leiden_resolution)",54,2220.9,2220.9,2191.7,2031.3,744.4,1421.6,40000.0,5.6,3331
+prepare_bootstrap_data,per (combo) (k * library * N_wells),2,11419.3,11419.3,11419.3,11419.3,2991.0,7205.2,12000.0,95.2,17129
+prepare_montage_data,per-channel-combo (k * N_cells),1,964.1,964.1,964.1,964.1,964.1,964.1,100000.0,1.0,1446
+split_datasets,"per (plate, well, channel-combo)",4,106797.0,106797.0,106797.0,76100.8,71543.4,82023.5,200000.0,53.4,160196

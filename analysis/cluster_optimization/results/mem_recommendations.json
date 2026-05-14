@@ -1,0 +1,282 @@
+{
+  "benchmark_clusters": {
+    "WARNING": "4x library-size bump applied 2026-05-04. Pre-bump rec=10000MB. Reason: v3b ran on essential-wide library; real libraries are ~4x larger so per-job feature table size scales proportionally.",
+    "mem_mb_recommended": 40000,
+    "obs_cap_at_peak_mb": 0,
+    "obs_n": 0,
+    "obs_peak_rss_mb": 0,
+    "obs_source": "manual_override_library_4x_2026-05-04",
+    "overhead": "explicit_4x_library_bump",
+    "tier": "well"
+  },
+  "calculate_ic_phenotype": {
+    "mem_mb_recommended": 323100,
+    "obs_cap_at_peak_mb": 322900.0,
+    "obs_n": 24,
+    "obs_peak_rss_mb": 215377.953125,
+    "obs_source": "efficiency_aggregated",
+    "overhead": 1.5,
+    "tier": "well"
+  },
+  "calculate_ic_sbs": {
+    "mem_mb_recommended": 28500,
+    "obs_cap_at_peak_mb": 28200.0,
+    "obs_n": 206,
+    "obs_peak_rss_mb": 18976.12109375,
+    "obs_source": "efficiency_aggregated",
+    "overhead": 1.5,
+    "tier": "well"
+  },
+  "clean_aggregate": {
+    "WARNING": "manual_override_after_OOM_2026-05-14_actual_peak_may_be_higher",
+    "mem_mb_recommended": 4000,
+    "obs_cap_at_peak_mb": 900.0,
+    "obs_n": 4,
+    "obs_peak_rss_mb": 899.0,
+    "obs_source": "manual_override_after_OOM_2026-05-14",
+    "overhead": "explicit_post_OOM_bump",
+    "tier": "well"
+  },
+  "combine_bootstrap": {
+    "WARNING": "4x library-size bump applied 2026-05-04. Pre-bump rec=1300MB. Reason: combine_bootstrap concatenates all bootstrap_construct + bootstrap_gene outputs for one (cell_class, channel_combo); peak scales with library size (N_constructs \u00d7 N_genes). v3b ran on essential-wide; real libraries ~4x larger.",
+    "mem_mb_recommended": 5200,
+    "obs_cap_at_peak_mb": 3000.0,
+    "obs_n": 1,
+    "obs_peak_rss_mb": 844.40625,
+    "obs_source": "manual_override_library_4x_2026-05-04",
+    "overhead": "explicit_4x_library_bump",
+    "scaling_factors": [
+      "library"
+    ],
+    "tier": "well"
+  },
+  "combine_cells": {
+    "WARNING": "manual_override_after_OOM_2026-05-08_actual_peak_may_be_higher",
+    "mem_mb_recommended": 7000,
+    "obs_cap_at_peak_mb": 2600.0,
+    "obs_n": 8,
+    "obs_peak_rss_mb": 1564.1,
+    "obs_source": "manual_override_after_OOM_2026-05-08",
+    "overhead": "explicit_post_OOM_bump",
+    "tier": "well"
+  },
+  "combine_metadata_phenotype": {
+    "mem_mb_recommended": 2500,
+    "obs_cap_at_peak_mb": 8000.0,
+    "obs_n": 27,
+    "obs_peak_rss_mb": 1650.16796875,
+    "obs_source": "efficiency_aggregated",
+    "overhead": 1.5,
+    "tier": "well"
+  },
+  "combine_metadata_sbs": {
+    "mem_mb_recommended": 2400,
+    "obs_cap_at_peak_mb": 32000.0,
+    "obs_n": 21,
+    "obs_peak_rss_mb": 1570.5859375,
+    "obs_source": "efficiency_aggregated",
+    "overhead": 1.5,
+    "tier": "well"
+  },
+  "combine_phenotype_info": {
+    "mem_mb_recommended": 3600,
+    "obs_cap_at_peak_mb": 32000.0,
+    "obs_n": 24,
+    "obs_peak_rss_mb": 2393.6796875,
+    "obs_source": "efficiency_aggregated",
+    "overhead": 1.5,
+    "tier": "well"
+  },
+  "combine_reads": {
+    "WARNING": "manual_override_after_OOM_2026-05-08_actual_peak_may_be_higher",
+    "mem_mb_recommended": 16000,
+    "obs_cap_at_peak_mb": 5200.0,
+    "obs_n": 3,
+    "obs_peak_rss_mb": 3941.6,
+    "obs_source": "manual_override_after_OOM_2026-05-08",
+    "overhead": "explicit_post_OOM_bump",
+    "tier": "well"
+  },
+  "combine_sbs_info": {
+    "mem_mb_recommended": 3600,
+    "obs_cap_at_peak_mb": 32000.0,
+    "obs_n": 13,
+    "obs_peak_rss_mb": 2353.125,
+    "obs_source": "efficiency_aggregated",
+    "overhead": 1.5,
+    "tier": "well"
+  },
+  "convert_phenotype": {
+    "mem_mb_recommended": 3600,
+    "obs_cap_at_peak_mb": 4000.0,
+    "obs_n": 13808,
+    "obs_peak_rss_mb": 2362.30078125,
+    "obs_source": "efficiency_aggregated",
+    "overhead": 1.5,
+    "tier": "tile"
+  },
+  "convert_sbs": {
+    "mem_mb_recommended": 3100,
+    "obs_cap_at_peak_mb": 4000.0,
+    "obs_n": 32957,
+    "obs_peak_rss_mb": 2009.796875,
+    "obs_source": "efficiency_aggregated",
+    "overhead": 1.5,
+    "tier": "tile"
+  },
+  "deduplicate_merge": {
+    "WARNING": "manual_override_after_OOM_2026-05-12_actual_peak_may_be_higher",
+    "mem_mb_recommended": 19000,
+    "obs_cap_at_peak_mb": 5400.0,
+    "obs_n": 2,
+    "obs_peak_rss_mb": 4718.6,
+    "obs_source": "manual_override_after_OOM_2026-05-12",
+    "overhead": "explicit_post_OOM_bump",
+    "tier": "well"
+  },
+  "eval_features": {
+    "WARNING": "manual_override_after_OOM_2026-05-10_actual_peak_may_be_higher",
+    "mem_mb_recommended": 6000,
+    "obs_cap_at_peak_mb": 1400.0,
+    "obs_n": 2,
+    "obs_peak_rss_mb": 1399.0,
+    "obs_source": "manual_override_after_OOM_2026-05-10",
+    "overhead": "explicit_post_OOM_bump",
+    "tier": "well"
+  },
+  "eval_mapping": {
+    "mem_mb_recommended": 60000,
+    "obs_cap_at_peak_mb": 200000.0,
+    "obs_n": 2,
+    "obs_peak_rss_mb": 9117.265625,
+    "obs_source": "manual_post_oom_phase2_attempt3_2026-05-09 (was 13700; MaxRSS 12.9GB on 13.7GB cap (CANCELLED/OOM); cap was at-peak so true peak unknown \u2014 4\u00d7 cap = 55GB, round to 60GB)",
+    "overhead": 1.5,
+    "tier": "well"
+  },
+  "eval_merge": {
+    "WARNING": "manual_override_after_OOM_2026-05-12_actual_peak_may_be_higher",
+    "mem_mb_recommended": 67000,
+    "obs_cap_at_peak_mb": 19000.0,
+    "obs_n": 3,
+    "obs_peak_rss_mb": 16684.7,
+    "obs_source": "manual_override_after_OOM_2026-05-12",
+    "overhead": "explicit_post_OOM_bump",
+    "tier": "well"
+  },
+  "eval_segmentation_phenotype": {
+    "WARNING": "manual_override_after_OOM_2026-05-10_actual_peak_may_be_higher",
+    "mem_mb_recommended": 9000,
+    "obs_cap_at_peak_mb": 2400.0,
+    "obs_n": 2,
+    "obs_peak_rss_mb": 2050.8,
+    "obs_source": "manual_override_after_OOM_2026-05-10",
+    "overhead": "explicit_post_OOM_bump",
+    "tier": "well"
+  },
+  "eval_segmentation_sbs": {
+    "mem_mb_recommended": 12000,
+    "obs_cap_at_peak_mb": 50000.0,
+    "obs_n": 2,
+    "obs_peak_rss_mb": 1886.05859375,
+    "obs_source": "manual_post_oom_phase2_attempt3_2026-05-09 (was 2900; MaxRSS 2.1GB on 2.9GB cap (OUT_OF_MEMORY); 4\u00d7 cap = 11.6GB, round to 12GB)",
+    "overhead": 1.5,
+    "tier": "well"
+  },
+  "extract_metadata_phenotype": {
+    "WARNING": "peak_was_at_cap_actual_peak_may_be_higher",
+    "mem_mb_recommended": 191300,
+    "obs_cap_at_peak_mb": 128000.0,
+    "obs_n": 62,
+    "obs_peak_rss_mb": 127520.83203125,
+    "obs_source": "efficiency_aggregated",
+    "overhead": 1.5,
+    "tier": "tile"
+  },
+  "extract_metadata_sbs": {
+    "mem_mb_recommended": 21900,
+    "obs_cap_at_peak_mb": 16000.0,
+    "obs_n": 325,
+    "obs_peak_rss_mb": 14554.66796875,
+    "obs_source": "efficiency_aggregated",
+    "overhead": 1.5,
+    "tier": "tile"
+  },
+  "fast_merge": {
+    "WARNING": "manual_override_after_OOM_2026-05-11_actual_peak_may_be_higher",
+    "mem_mb_recommended": 7000,
+    "obs_cap_at_peak_mb": 2400.0,
+    "obs_n": 2,
+    "obs_peak_rss_mb": 1614.0,
+    "obs_source": "manual_override_after_OOM_2026-05-11",
+    "overhead": "explicit_post_OOM_bump",
+    "tier": "well"
+  },
+  "final_merge": {
+    "mem_mb_recommended": 600000,
+    "obs_source": "manual_post_oom_v24_2026-05-11 (was 350000; final_merge MaxRSS grew 181GB\u2192273GB as cap grew 178GB\u2192350GB; true peak likely ~400-500GB; bump to 600GB for headroom)",
+    "tier": "well"
+  },
+  "finalize_hcs_phenotype": {
+    "WARNING": "manual_override_after_OOM_2026-05-10_actual_peak_may_be_higher",
+    "mem_mb_recommended": 13000,
+    "obs_cap_at_peak_mb": 3000.0,
+    "obs_n": 1,
+    "obs_peak_rss_mb": 2998.8,
+    "obs_source": "manual_override_after_OOM_2026-05-10",
+    "overhead": "explicit_post_OOM_bump",
+    "tier": "well"
+  },
+  "format_merge": {
+    "WARNING": "manual_override_after_OOM_2026-05-11_actual_peak_may_be_higher",
+    "mem_mb_recommended": 15000,
+    "obs_cap_at_peak_mb": 4500.0,
+    "obs_n": 2,
+    "obs_peak_rss_mb": 3720.8,
+    "obs_source": "manual_override_after_OOM_2026-05-11",
+    "overhead": "explicit_post_OOM_bump",
+    "tier": "well"
+  },
+  "format_singlecell_anndata": {
+    "WARNING": "manual_override_after_OOM_2026-05-13_actual_peak_may_be_higher",
+    "mem_mb_recommended": 125000,
+    "obs_cap_at_peak_mb": 31000.0,
+    "obs_n": 3,
+    "obs_peak_rss_mb": 29904.3,
+    "obs_source": "manual_override_after_OOM_2026-05-13",
+    "overhead": "explicit_post_OOM_bump",
+    "tier": "well"
+  },
+  "merge_phenotype": {
+    "WARNING": "manual_override_after_OOM_2026-05-01_actual_peak_may_be_higher",
+    "mem_mb_recommended": 128000,
+    "obs_cap_at_peak_mb": 128000.0,
+    "obs_n": 1,
+    "obs_peak_rss_mb": 82879.0,
+    "obs_source": "manual_override_after_OOM_2026-05-01",
+    "overhead": "explicit_post_OOM_bump",
+    "tier": "well"
+  },
+  "phate_leiden_clustering": {
+    "WARNING": "4x library-size bump applied 2026-05-04. Pre-bump rec=10000MB. Reason: v3b ran on essential-wide library; real libraries are ~4x larger so per-job feature table size scales proportionally.",
+    "mem_mb_recommended": 40000,
+    "obs_cap_at_peak_mb": 0,
+    "obs_n": 0,
+    "obs_peak_rss_mb": 0,
+    "obs_source": "manual_override_library_4x_2026-05-04",
+    "overhead": "explicit_4x_library_bump",
+    "tier": "well"
+  },
+  "prepare_bootstrap_data": {
+    "WARNING": "4x library-size bump applied 2026-05-04. Pre-bump rec=12000MB. Reason: prepare_bootstrap_data reads the dataset-aggregated singlecell parquet + gene/construct tsvs from generate_feature_table; peak scales with both library size AND total cells (i.e. N_wells \u00d7 N_plates). 4x covers the library factor only \u2014 at full-dataset scale also multiply by N_wells.",
+    "mem_mb_observed_peak": 3000,
+    "mem_mb_recommended": 48000,
+    "note": "OOM at 3GB default cap on slurm job 7603739; rule has no resources block. 4x bump.",
+    "obs_source": "manual_override_library_4x_2026-05-04",
+    "overhead": "explicit_4x_library_bump",
+    "scaling_factors": [
+      "library",
+      "dataset_wells"
+    ],
+    "tier": "well"
+  }
+}
