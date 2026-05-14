@@ -18,6 +18,10 @@
 #   --cores N               Number of cores for local backend (default: all)
 #   --profile               Enable profiling mode: keep all slurm logs, generate
 #                           efficiency report, verbose job output (default: off)
+#   --forcerun rule1,rule2  Force-rerun the listed rules even if outputs are
+#                           up-to-date (snakemake --forcerun pass-through).
+#                           Use after editing a rule's script so mtime caching
+#                           doesn't silently skip the change.
 #   --help, -h              Show this help message
 #
 # Examples:
@@ -84,6 +88,11 @@ PROFILE_MODE=false
 NO_ARRAYS=false
 MODULES=()
 EXTRA_CONFIG=""
+# Snakemake --forcerun passthrough (HARDENING #7 layer 1): comma-separated
+# list of rules to force-rerun even if their outputs are up-to-date.
+# Use after editing a rule's script so mtime-based caching doesn't silently
+# skip the change.
+FORCERUN=""
 
 # ---------------------------------------------------------------------------
 # Parse arguments
@@ -123,6 +132,8 @@ while [[ $# -gt 0 ]]; do
             LATENCY_WAIT="$2"; shift 2 ;;
         --max-status-checks)
             MAX_STATUS_CHECKS="$2"; shift 2 ;;
+        --forcerun)
+            FORCERUN="$2"; shift 2 ;;
         --help|-h)
             show_help ;;
         -*)
@@ -237,6 +248,14 @@ build_snakemake_cmd() {
     # 222 align_phenotype zarr.json files marked incomplete from v20's
     # OOM-killed attempts blocked DAG build entirely.
     cmd+=" --rerun-incomplete"
+    # --forcerun: HARDENING #7 layer 1. Comma-separated list translated into
+    # snakemake's space-separated --forcerun rules. Use after editing a
+    # rule's script — mtime-only triggers will silently skip the change
+    # otherwise (caught 2026-05-12 baker v26 format_merge silent skip).
+    if [[ -n "$FORCERUN" ]]; then
+        local forcerun_rules="${FORCERUN//,/ }"
+        cmd+=" --forcerun ${forcerun_rules}"
+    fi
     cmd+=" --until ${target}"
     # --verbose: preserves the plugin's array-submission debug logs ("call with array:")
     # so every run captures the wrap content per chunk. Cheap, useful for diagnosing the
