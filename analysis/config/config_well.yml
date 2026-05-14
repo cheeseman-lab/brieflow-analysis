@@ -98,7 +98,7 @@ phenotype:
   - COXIV
   - CENPA
   - WGA
-  cp_method: cp_multichannel
+  cp_method: cp_emulator
   cyto_index: 1
   dapi_index: 0
   flow_threshold: 0.4
@@ -117,3 +117,147 @@ phenotype:
   segmentation_method: cellpose
   source: 1
   target: 0
+
+# ---------------------------------------------------------------------------
+# Sections added 2026-05-01 for plugin testing on merge -> aggregate -> cluster.
+# Sourced from brieflow/tests/small_test_analysis/config/config.yml (canonical
+# schema for this brieflow version), with paths adjusted to point at speed-
+# branch's existing config/ files (which already match baker's content).
+# ---------------------------------------------------------------------------
+merge:
+  approach: fast
+  merge_combo_fp: config/merge_combo.tsv
+  phenotype_dimensions:
+  - 2400
+  - 2400
+  sbs_dimensions:
+  - 1200
+  - 1200
+  sbs_metadata_cycle: 1
+  score: 0.1
+  threshold: 2
+  sbs_metadata_channel: null
+  ph_metadata_channel: null
+  alignment_flip_x: false
+  alignment_flip_y: false
+  alignment_rotate_90: false
+  sbs_dedup_prior:
+    mapped_single_gene: false
+    fov_distance_1: true
+  pheno_dedup_prior:
+    fov_distance_0: true
+  # initial_sites copied from baker's config.yml (baker-tuned for this dataset).
+  # Previous values (from small_test_analysis fixture) didn't fit baker's data:
+  # fast_alignment hit 0 initial sites passing thresholds, then crashed in
+  # multistep_alignment's df.query() against an empty df. Schema-vs-values
+  # boundary: shape comes from canonical, values come from the source screen.
+  initial_sites:
+  - - 1
+    - 1
+  - - 186
+    - 50
+  - - 548
+    - 150
+  - - 656
+    - 174
+  - - 887
+    - 225
+  - - 1279
+    - 331
+  det_range:
+  - 0.06
+  - 0.065
+
+classify:
+  # Skipping classifier entirely for the plugin-validation test (no scientific
+  # cell-stage labeling needed; baker's binary model is incompatible with this
+  # brieflow's expected `cell_stage` output column, and we don't have a model
+  # tuned for baker's actual data). Required corollary: aggregate_combo.tsv
+  # and cluster_combo.tsv must contain only `cell_class=all` rows — split_datasets
+  # at line 159 reads metadata["class"] for any non-"all" class, which doesn't
+  # exist when the classifier didn't run.
+  classifier_path: null
+  confidence_thresholds:
+    1:
+      threshold: 0.5
+      mode: exclude
+    2:
+      threshold: 0.5
+      mode: exclude
+  metadata_cols_fp: config/cell_data_metadata_cols.tsv
+  class_title: cell_stage
+  class_mapping:
+    label_to_class:
+      1: Mitotic
+      2: Interphase
+
+aggregate:
+  agg_method: median
+  aggregate_combo_fp: config/aggregate_combo.tsv
+  batch_cols:
+  - plate
+  - well
+  # Speed-branch's brieflow merge output uses cell_barcode_0/cell_barcode_1
+  # column names (verified from split_datasets failure 2026-05-01: error listed
+  # cell_barcode_0/cell_barcode_1/gene_symbol_1 as the unmapped columns).
+  # Earlier I had incorrectly ported baker's `sgRNA_0` here — baker's older
+  # brieflow used a different column name for the same logical field. Schema
+  # values must match what THIS brieflow's merge phase emits, not what baker's
+  # brieflow used.
+  collapse_cols:
+  - cell_barcode_0
+  - gene_symbol_0
+  contamination: 0.01
+  control_key: nontargeting
+  drop_cols_threshold: 0.1
+  drop_rows_threshold: 0.01
+  # filter_queries from baker — keeps only single-mapped-gene cells.
+  filter_queries:
+  - mapped_single_gene == True
+  impute: true
+  metadata_cols_fp: config/cell_data_metadata_cols.tsv
+  perturbation_id_col: cell_barcode_0
+  perturbation_name_col: gene_symbol_0
+  variance_or_ncomp: 0.99
+  num_align_batches: 1
+  ps_auc_threshold: 0.6
+  perturbation_score_threshold: 0.5
+  skip_perturbation_score: true
+  ps_probability_threshold: null
+  ps_percentile_threshold: null
+  feature_normalization: mad
+  num_sims: 100
+  exclusion_string: null
+  # bootstrap_combinations was [{cell_class: Interphase, ...}] from canonical;
+  # but with classifier disabled, no cells get Interphase labels and the
+  # Interphase merge_data parquet ends up empty, crashing generate_feature_table.
+  # Switched to cell_class=all to match the rest of the disabled-classifier scope.
+  bootstrap_combinations:
+  - cell_class: all
+    channel_combo: DAPI_COXIV_CENPA_WGA
+
+cluster:
+  cluster_combo_fp: config/cluster_combo.tsv
+  uniprot_data_fp: config/benchmark_clusters/uniprot_data.tsv
+  corum_group_benchmark_fp: config/benchmark_clusters/corum_group_benchmark.tsv
+  kegg_group_benchmark_fp: config/benchmark_clusters/kegg_group_benchmark.tsv
+  # leiden_resolutions + min_cell_cutoffs from baker's config.yml.
+  # Baker sweeps resolutions 2..10 (canonical small_test only had [2]) and
+  # uses 5-cell minima per class (canonical: 0).
+  leiden_resolutions:
+  - 2
+  - 3
+  - 4
+  - 5
+  - 6
+  - 7
+  - 8
+  - 9
+  - 10
+  min_cell_cutoffs:
+    all: 5
+    Interphase: 5
+    Mitotic: 5
+  phate_distance_metric: euclidean
+  string_pair_benchmark_fp: config/benchmark_clusters/string_pair_benchmark.tsv
+  perturbation_auc_threshold: null

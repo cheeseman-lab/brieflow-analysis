@@ -98,7 +98,7 @@ phenotype:
   - COXIV
   - CENPA
   - WGA
-  cp_method: cp_multichannel
+  cp_method: cp_emulator
   cyto_index: 1
   dapi_index: 0
   flow_threshold: 0.4

@@ -229,6 +229,14 @@ build_snakemake_cmd() {
     cmd+=" --snakefile ${SNAKEFILE}"
     cmd+=" --configfile ${CONFIGFILE}"
     cmd+=" --rerun-triggers mtime"
+    # --rerun-incomplete: snakemake tracks files whose write-side started but
+    # whose job never marked completion (slurm OOM-kill, SIGKILL, node crash).
+    # Default behavior throws IncompleteFilesException at DAG-build time,
+    # blocking ALL execution. With --rerun-incomplete, snakemake re-runs
+    # those specific jobs to completion. Caught 2026-05-10 baker v22 phase 2:
+    # 222 align_phenotype zarr.json files marked incomplete from v20's
+    # OOM-killed attempts blocked DAG build entirely.
+    cmd+=" --rerun-incomplete"
     cmd+=" --until ${target}"
     # --verbose: preserves the plugin's array-submission debug logs ("call with array:")
     # so every run captures the wrap content per chunk. Cheap, useful for diagnosing the
@@ -256,24 +264,24 @@ build_snakemake_cmd() {
 }
 
 get_groups_flag() {
-    local module="$1"
-    local groups_flag=""
-
-    case "$module" in
-        sbs)
-            groups_flag="--groups"
-            for g in "${SBS_GROUPS[@]}"; do
-                groups_flag+=" ${g}"
-            done
-            ;;
-        phenotype)
-            groups_flag="--groups"
-            for g in "${PHENOTYPE_GROUPS[@]}"; do
-                groups_flag+=" ${g}"
-            done
-            ;;
-    esac
-
+    # ALWAYS emit both SBS and PHENOTYPE groups regardless of which module is
+    # being run. The grouping is metadata about how rules should be bundled
+    # when their wildcards align — declaring it doesn't force any rule to run.
+    # Without this, downstream phases (merge/aggregate/cluster) that incidentally
+    # need to re-materialize per-tile sbs/phenotype outputs schedule them as
+    # standalone slurm jobs at the un-grouped per-rule mem cap, which OOMs
+    # because phenotype tile dimensions need ~4× per-rule mem (2400×2400 vs
+    # 1200×1200 for sbs). Caught 2026-05-10 baker v20 phase 4: 1247
+    # align_phenotype OOMs in one attempt before the cap was bumped.
+    # The module argument is now unused but kept for API compat.
+    local _module_unused="$1"
+    local groups_flag="--groups"
+    for g in "${SBS_GROUPS[@]}"; do
+        groups_flag+=" ${g}"
+    done
+    for g in "${PHENOTYPE_GROUPS[@]}"; do
+        groups_flag+=" ${g}"
+    done
     echo "$groups_flag"
 }
 

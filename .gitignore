@@ -23,3 +23,6 @@ analysis/cluster_optimization/__pycache__/
 
 # python build / cache
 **/__pycache__/
+
+# plugin-improvement docs (live locally for reference; belong to brieflow-ops, not this repo)
+BRIEFLOW_PLUGIN_FEEDBACK.md
