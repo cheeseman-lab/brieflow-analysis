@@ -94,6 +94,18 @@ EXTRA_CONFIG=""
 # skip the change.
 FORCERUN=""
 
+# HARDENING #23: resolve per-rule mem caps from scaling formulas + geometry
+# + mem_recommendations.json before launching snakemake. The resolver lives
+# in the brieflow-ops plugin; we invoke it once per flow.sh run and pass its
+# output to snakemake as --set-resources. Set BRIEFLOW_SKIP_RESOLVE=1 to
+# disable (falls back to slurm/config.yaml set-resources floor only).
+PLUGIN_DIR="${BRIEFLOW_OPS_PLUGIN_DIR:-/lab/barcheese01/mdiberna/brieflow-ops/plugins/brieflow-ops}"
+RESOLVED_SET_RESOURCES=""
+if [ -z "${BRIEFLOW_SKIP_RESOLVE:-}" ] && [ -x "${PLUGIN_DIR}/scripts/brieflow_resolve_resources.py" ]; then
+    RESOLVED_SET_RESOURCES=$(python "${PLUGIN_DIR}/scripts/brieflow_resolve_resources.py" \
+        --analysis-dir "${SCRIPT_DIR}" --format snakemake 2>/dev/null || echo "")
+fi
+
 # ---------------------------------------------------------------------------
 # Parse arguments
 # ---------------------------------------------------------------------------
@@ -248,6 +260,12 @@ build_snakemake_cmd() {
     # 222 align_phenotype zarr.json files marked incomplete from v20's
     # OOM-killed attempts blocked DAG build entirely.
     cmd+=" --rerun-incomplete"
+    # --set-resources from the HARDENING #23 resolver (formulas × geometry
+    # × mem_recommendations.json). Appended BEFORE --until so snakemake's
+    # arg parser treats them as positional set-resources entries.
+    if [ -n "$RESOLVED_SET_RESOURCES" ]; then
+        cmd+=" --set-resources ${RESOLVED_SET_RESOURCES}"
+    fi
     # --forcerun: HARDENING #7 layer 1. Comma-separated list translated into
     # snakemake's space-separated --forcerun rules. Use after editing a
     # rule's script — mtime-only triggers will silently skip the change

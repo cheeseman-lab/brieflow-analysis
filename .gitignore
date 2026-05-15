@@ -26,6 +26,10 @@ analysis/cluster_optimization/__pycache__/
 # committed separately as snapshots.
 analysis/cluster_optimization/results/observations_raw_*.csv
 
+# auto-regenerated screen geometry probe (HARDENING #23). Recreated by
+# brieflow_screen_geometry.py at run start; never operator-edited.
+analysis/.brieflow/
+
 # python build / cache
 **/__pycache__/
 
