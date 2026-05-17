@@ -1,0 +1,206 @@
+all:
+  root_fp: brieflow_output/
+preprocess:
+  phenotype_channel_order:
+  - DAPI_1x1
+  - GFP_1x1
+  - A594_1x1
+  - A750_1x1
+  phenotype_channel_order_flip: false
+  phenotype_combo_fp: config/marimo/phenotype_combo.tsv
+  phenotype_data_format: nd2
+  phenotype_data_organization: well
+  phenotype_metadata_samples_df_fp: null
+  phenotype_n_z_planes: null
+  phenotype_round_order:
+  - 1
+  phenotype_samples_fp: config/marimo/phenotype_samples.tsv
+  sample_fraction: 0.5
+  sbs_channel_order:
+  - Dapi_1p-CY3_30p_545-A594_30p-CY5_30p-CY7_30p
+  - CY3_30p_545
+  - A594_30p
+  - CY5_30p
+  - CY7_30p
+  sbs_channel_order_flip: false
+  sbs_combo_fp: config/marimo/sbs_combo.tsv
+  sbs_data_format: nd2
+  sbs_data_organization: well
+  sbs_metadata_samples_df_fp: null
+  sbs_n_z_planes: null
+  sbs_samples_fp: config/marimo/sbs_samples.tsv
+sbs:
+  alignment_method: null
+  barcode_col: sgRNA
+  barcode_type: simple
+  bases:
+  - G
+  - T
+  - A
+  - C
+  call_reads_method: median
+  cell_cellprob_threshold: 0
+  cell_diameter: 24.174717186214192
+  cell_flow_threshold: 1
+  cellpose_model: cyto3
+  channel_names:
+  - DAPI
+  - G
+  - T
+  - A
+  - C
+  cyto_cycle: 9
+  cyto_cycle_index: 8
+  cyto_index: 4
+  cyto_model: cyto3
+  dapi_cycle: 1
+  dapi_cycle_index: 0
+  dapi_index: 0
+  df_barcode_library_fp: config/barcode_library.tsv
+  error_correct: false
+  extra_channel_indices:
+  - 0
+  gpu: false
+  heatmap_plate: 6W
+  heatmap_shape: square
+  manual_background_cycle_index: null
+  manual_channel_mapping: null
+  max_filter_width: 3
+  nuclei_cellprob_threshold: 0.0
+  nuclei_diameter: 10.524820207108489
+  nuclei_flow_threshold: 0.4
+  peak_width: 5
+  prefix_col: prefix
+  q_min: 0
+  reconcile: contained_in_cells
+  segment_cells: true
+  segmentation_method: cellpose
+  skip_cycles_indices: null
+  sort_calls: count
+  spot_detection_method: standard
+  threshold_peaks: 300
+  upsample_factor: 2
+  window: 2
+phenotype:
+  align: true
+  cell_cellprob_threshold: 0
+  cell_diameter: 72.94427841011642
+  cell_flow_threshold: 1
+  cellpose_model: cyto3
+  channel_names:
+  - DAPI
+  - COXIV
+  - CENPA
+  - WGA
+  cp_method: cp_emulator
+  cyto_index: 1
+  dapi_index: 0
+  foci_channel_index: 2
+  gpu: false
+  heatmap_plate: 6W
+  heatmap_shape: square
+  nuclei_cellprob_threshold: 0.0
+  nuclei_diameter: 48.415224897313394
+  nuclei_flow_threshold: 0.4
+  reconcile: contained_in_cells
+  remove_channel: null
+  riders:
+  - 2
+  - 3
+  segment_cells: true
+  segmentation_method: cellpose
+  source: 1
+  target: 0
+  upsample_factor: 2
+  window: 2
+merge:
+  alignment_flip_x: false
+  alignment_flip_y: false
+  alignment_rotate_90: false
+  approach: fast
+  det_range:
+  - 0.06
+  - 0.065
+  initial_sites:
+  - - 1
+    - 1
+  - - 186
+    - 50
+  - - 548
+    - 150
+  - - 656
+    - 174
+  - - 887
+    - 225
+  - - 1279
+    - 331
+  merge_combo_fp: config/marimo/merge_combo.tsv
+  ph_metadata_channel: null
+  pheno_dedup_prior:
+    fov_distance_0: true
+  phenotype_dimensions:
+  - 2400
+  - 2400
+  sbs_dedup_prior:
+    fov_distance_1: true
+    mapped_single_gene: false
+  sbs_dimensions:
+  - 1200
+  - 1200
+  sbs_metadata_channel: null
+  sbs_metadata_cycle: 1
+  score: 0.1
+  threshold: 2
+aggregate:
+  agg_method: median
+  aggregate_combo_fp: config/marimo/aggregate_combo.tsv
+  batch_cols:
+  - plate
+  - well
+  bootstrap_combinations:
+  - cell_class: all
+    channel_combo: DAPI_COXIV_CENPA_WGA
+  collapse_cols:
+  - cell_barcode_0
+  - gene_symbol_0
+  contamination: 0.01
+  control_key: nontargeting
+  drop_cols_threshold: 0.1
+  drop_rows_threshold: 0.01
+  exclusion_string: null
+  feature_normalization: mad
+  filter_queries:
+  - mapped_single_gene == True
+  impute: true
+  metadata_cols_fp: config/marimo/cell_data_metadata_cols.tsv
+  num_align_batches: 1
+  num_sims: 100
+  perturbation_id_col: cell_barcode_0
+  perturbation_name_col: gene_symbol_0
+  ps_percentile_threshold: null
+  ps_probability_threshold: null
+  pseudogene_patterns: null
+  skip_perturbation_score: true
+  variance_or_ncomp: 0.99
+cluster:
+  cluster_combo_fp: config/marimo/cluster_combo.tsv
+  corum_group_benchmark_fp: config/benchmark_clusters/corum_group_benchmark.tsv
+  kegg_group_benchmark_fp: config/benchmark_clusters/kegg_group_benchmark.tsv
+  leiden_resolutions:
+  - 2
+  - 3
+  - 4
+  - 5
+  - 6
+  - 7
+  - 8
+  - 9
+  - 10
+  min_cell_cutoffs:
+    Interphase: 5
+    Mitotic: 5
+    all: 5
+  perturbation_auc_threshold: null
+  phate_distance_metric: euclidean
+  string_pair_benchmark_fp: config/benchmark_clusters/string_pair_benchmark.tsv
+  uniprot_data_fp: config/benchmark_clusters/uniprot_data.tsv
