@@ -1,296 +1,1721 @@
-"""2_sbs.py — sbs config (dual-mode marimo).
-
-Hand-converted from `analysis/2.configure_sbs_params.ipynb`.
-
-v1 scope (manifest passthrough; review_required=True):
-  - Derive channel + cycle indices from channel_names + dapi_cycle / cyto_cycle
-  - Pass through every other sbs param from manifest
-  - Flag review_required=True — the 9 tuned sbs params (cell_diameter,
-    nuclei_diameter, threshold_peaks, call_reads_method, q_min, max_filter_width,
-    peak_width, upsample_factor, window) really do need visual validation:
-    threshold_peaks from background statistics, diameters from
-    estimate_diameters, call_reads_method from peak distribution shape.
-
-The .ipynb's heavy work (test image segmentation, spot detection viz, barcode
-calling, automated parameter search) is config-irrelevant validation tooling —
-kept available in `marimo edit` mode but skipped headlessly.
-
-## Manifest fields consumed (sbs section)
-
-  channel_names: list [DAPI, G, T, A, C]
-  dapi_channel, cyto_channel: names → indices
-  dapi_cycle, cyto_cycle: int → 1-based cycle, ints; -1 → 0-based indices
-  extra_channel_indices: list of int (typically [0] for DAPI)
-  # Alignment / preprocess
-  alignment_method, upsample_factor, window, skip_cycles_indices,
-  manual_background_cycle_index, manual_channel_mapping, max_filter_width
-  # Spot detection
-  spot_detection_method, peak_width, threshold_peaks
-  # Segmentation
-  segmentation_method, cellpose_model, cyto_model, reconcile, segment_cells, gpu
-  nuclei_diameter, cell_diameter
-  nuclei_flow_threshold, nuclei_cellprob_threshold,
-  cell_flow_threshold, cell_cellprob_threshold
-  # Read calling + barcode mapping
-  call_reads_method, bases, q_min, error_correct, sort_calls, max_distance
-  df_barcode_library_fp
-  # Barcode mode
-  barcode_type: "simple" | "multi"
-  # simple: barcode_col, prefix_col
-  # multi: map_start/end/col, recomb_*, etc.
-  # Heatmap
-  heatmap_plate, heatmap_shape
-
-Source of truth: 2.configure_sbs_params.ipynb (sibling).
-"""
-
 import marimo
 
 __generated_with = "0.23.6"
-app = marimo.App(width="medium")
+app = marimo.App()
 
 
 @app.cell
-def imports():
-    import argparse as _argparse
-    import sys as _sys
-    from pathlib import Path
-
-    _SCRIPT_DIR = Path(__file__).resolve().parent
-    _ANALYSIS_DIR = _SCRIPT_DIR  # gen lives at analysis/ root
-    _BRIEFLOW_WORKFLOW = _ANALYSIS_DIR.parent / "brieflow" / "workflow"
-    for _p in (str(_SCRIPT_DIR), str(_BRIEFLOW_WORKFLOW)):
-        if _p not in _sys.path:
-            _sys.path.insert(0, _p)
-
+def _():
     import marimo as mo
 
-    from _gen_common import GenResult, emit, emit_failure, load_manifest
+    return (mo,)
 
-    SCRIPT_DIR = _SCRIPT_DIR
-    ANALYSIS_DIR = _ANALYSIS_DIR
-    sys = _sys
-    argparse = _argparse
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    # Configure SBS Parameters
+
+    This notebook should be used as a test for ensuring correct SBS image loading and processing before running the SBS module.
+    Cells marked with <font color='red'>SET PARAMETERS</font> contain crucial variables that need to be set according to your specific experimental setup and data organization.
+    Please review and modify these variables as needed before proceeding with the analysis.
+    """)
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## <font color='red'>SET PARAMETERS</font>
+
+    ### Fixed parameters for SBS processing
+
+    - `CONFIG_FILE_PATH`: Path to a Brieflow config file used during processing. Absolute or relative to where workflows are run from.
+    """)
+    return
+
+
+@app.cell
+def _():
+    # === OPERATOR PARAMETERS ===
+    CONFIG_FILE_PATH = "config/config.yml"
+    # === END OPERATOR PARAMETERS ===
+    return (CONFIG_FILE_PATH,)
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## Imports
+    """)
+    return
+
+
+@app.cell
+def _():
+    from pathlib import Path
+
+    import yaml
+    from lib.shared.io import read_image
+    import pandas as pd
+    from snakemake.io import expand
+    from microfilm.microplot import Microimage
+    import matplotlib.pyplot as plt
+    import numpy as np
+    import seaborn as sns
+
+    from lib.shared.configuration_utils import (
+        CONFIG_FILE_HEADER,
+        create_micropanel,
+        random_cmap,
+        image_segmentation_annotations,
+        convert_tuples_to_lists,
+    )
+    from lib.shared.file_utils import get_filename, get_hcs_nested_path
+    from lib.sbs.align_cycles import align_cycles, visualize_sbs_alignment
+    from lib.shared.log_filter import log_filter
+    from lib.sbs.compute_standard_deviation import compute_standard_deviation
+    from lib.sbs.max_filter import max_filter
+    from lib.sbs.find_peaks import find_peaks, find_peaks_spotiflow, plot_channels_with_peaks
+    from lib.shared.illumination_correction import apply_ic_field, combine_ic_images
+    from lib.shared.segment_cellpose import prepare_cellpose
+    from lib.cluster.scrape_benchmarks import get_uniprot_data
+    from lib.sbs.standardize_barcode_design import standardize_barcode_design, get_barcode_list, get_gene_mapping
+    from lib.sbs.extract_bases import extract_bases
+    from lib.sbs.call_reads import call_reads, plot_normalization_comparison
+    from lib.sbs.call_cells import call_cells
+    from lib.shared.extract_phenotype_minimal import extract_phenotype_minimal
+    from lib.sbs.eval_mapping import (
+        plot_mapping_vs_threshold,
+        plot_cell_mapping_heatmap,
+        plot_cell_metric_histogram,
+        plot_gene_symbol_histogram,
+        plot_barcode_prefix_matching,
+    )
 
     return (
-        ANALYSIS_DIR,
-        GenResult,
+        CONFIG_FILE_HEADER,
+        Microimage,
         Path,
-        SCRIPT_DIR,
-        argparse,
-        emit,
-        emit_failure,
-        load_manifest,
-        mo,
-        sys,
+        align_cycles,
+        apply_ic_field,
+        call_cells,
+        call_reads,
+        combine_ic_images,
+        compute_standard_deviation,
+        convert_tuples_to_lists,
+        create_micropanel,
+        expand,
+        extract_bases,
+        extract_phenotype_minimal,
+        find_peaks,
+        find_peaks_spotiflow,
+        get_barcode_list,
+        get_filename,
+        get_gene_mapping,
+        get_hcs_nested_path,
+        get_uniprot_data,
+        image_segmentation_annotations,
+        log_filter,
+        max_filter,
+        np,
+        pd,
+        plot_barcode_prefix_matching,
+        plot_cell_mapping_heatmap,
+        plot_cell_metric_histogram,
+        plot_channels_with_peaks,
+        plot_gene_symbol_histogram,
+        plot_mapping_vs_threshold,
+        plot_normalization_comparison,
+        plt,
+        prepare_cellpose,
+        random_cmap,
+        read_image,
+        sns,
+        standardize_barcode_design,
+        visualize_sbs_alignment,
+        yaml,
+    )
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## <font color='red'>SET PARAMETERS</font>
+
+    ### Parameters for testing SBS processing
+
+    - `TEST_PLATE`, `TEST_WELL`, `TEST_TILE`: Plate/well/tile combination used for configuring parameters in this notebook.
+
+    ### Channels
+
+    - `CHANNEL_NAMES`: A list of ordered names for each channel in your SBS image.
+    - `CHANNEL_CMAPS`: A list of color maps to use when showing channel microimages. These need to be a Matplotlib or microfilm colormap. We recommend using: `["pure_red", "pure_green", "pure_blue", "pure_cyan", "pure_magenta", "pure_yellow"]`.
+    """)
+    return
+
+
+@app.cell
+def _():
+    # === OPERATOR PARAMETERS ===
+    TEST_PLATE = None
+    TEST_WELL = None
+    TEST_TILE = None
+    CHANNEL_NAMES = None              # e.g., ["DAPI", "G", "T", "A", "C"]
+    CHANNEL_CMAPS = None
+    # === END OPERATOR PARAMETERS ===
+
+    # Derive wildcard dictionary for testing
+    WILDCARDS = dict(well=TEST_WELL, tile=TEST_TILE)
+    # Remove DAPI channel to get bases
+    BASES = [channel for channel in CHANNEL_NAMES if channel in ["G", "T", "A", "C"]]
+    EXTRA_CHANNELS = [channel for channel in CHANNEL_NAMES if channel not in ["G", "T", "A", "C"]]
+    return (
+        BASES,
+        CHANNEL_CMAPS,
+        CHANNEL_NAMES,
+        EXTRA_CHANNELS,
+        TEST_PLATE,
+        TEST_TILE,
+        TEST_WELL,
+        WILDCARDS,
+    )
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## <font color='red'>SET PARAMETERS</font>
+
+      ### Alignment
+      - `ALIGNMENT_METHOD`: Optional. Method for aligning SBS images between cycles. If not specified, the method will be automatically selected based on available channels, but can be overridden by the user:
+          - `DAPI`: the DAPI channel is used for alignment between cycles. Automatically selected if **DAPI is present in each** round of SBS imaging.
+          - `sbs_mean`: the mean intensity of base channels is used for alignment between cycles. Automatically selected if **DAPI is not present in each** round of SBS imaging.
+      - `UPSAMPLE_FACTOR`: Factor used for subpixel alignment. Defaults to `2`
+          - Higher values provide more precise alignment but increase processing time.
+          - Set to `1` to disable subpixel alignment for faster processing.
+      - `WINDOW`: A centered subset of data is used for alignment if greater than one. Defaults to `2`
+          - Higher values use more of the image for alignment registration.
+          - Set to `1` to use the full image.
+      - `SKIP_CYCLES`: Optional. List of cycle indices to skip during alignment. Defaults to `None`
+          - Use this to exclude problematic cycles that would interfere with alignment
+          - Example: `[1]` to skip the first cycle, `[1, 6]` to skip cycles 1 and 6
+          - Skipped cycles are completely removed from processing and will not appear in final results
+      - `MANUAL_BACKGROUND_CYCLE`: Optional. Specific cycle to use as the source for segmentation background channels. Defaults to `None`
+          - Use this when you have segmentation channels (e.g., DAPI, Vimentin) in a specific cycle that you want propagated to all cycles
+          - If not specified, automatically selects the cycle with the most extra (non-GTAC) channels
+          - Example: `3` to use cycle 3 as the source for background channels
+          - Note: This refers to the original cycle number before any cycles are skipped
+          - **Only works with simple channel configurations** (see note below)
+      - `MANUAL_CHANNEL_MAPPING`: Optional. Explicit specification of which channels are present in each cycle. Defaults to `None`
+          - Required when channel structure varies across cycles in non-standard ways
+          - Provide a list of channel name lists, one per cycle, matching the order channels appear in each cycle's image data
+          - The function will map channels by name to create the final output matching `CHANNEL_NAMES`
+
+      **Note on Channel Configuration:**
+
+      SBS images are commonly generated in two ways:
+      1. **Same channels across all cycles** - All cycles have identical channel structure (e.g., all have DAPI, Vimentin, G, T, A, C)
+      2. **Base channels + one background cycle** - Most cycles have only base channels (G, T, A, C), and one cycle has additional channels for segmentation (e.g., DAPI, Vimentin) at the beginning or end of the channel array
+
+      If your imaging setup deviates from these approaches (e.g., some cycles missing channels that are in the middle of your target channel order), you must use `MANUAL_CHANNEL_MAPPING` to explicitly specify which channels are
+      present in each cycle.
+
+      **Example:** If `CHANNEL_NAMES = ["DAPI", "Vimentin", "G", "T", "A", "C"]` but only cycle 3 has Vimentin:
+
+      ```python
+      MANUAL_CHANNEL_MAPPING = [
+          ["DAPI", "G", "T", "A", "C"],              # Cycle 1: no Vimentin
+          ["DAPI", "G", "T", "A", "C"],              # Cycle 2: no Vimentin
+          ["DAPI", "Vimentin", "G", "T", "A", "C"],  # Cycle 3: has Vimentin
+          ["DAPI", "G", "T", "A", "C"],              # Cycle 4: no Vimentin
+          # ... repeat for all cycles
+      ]
+      MANUAL_BACKGROUND_CYCLE = 3  # Source for Vimentin propagation
+      ```
+
+      The function will copy Vimentin from cycle 3 to all other cycles, creating output with shape (n_cycles, 6, height, width) where all cycles have the full `CHANNEL_NAMES` channel order.
+    """)
+    return
+
+
+@app.cell
+def _():
+    # === OPERATOR PARAMETERS ===
+    ALIGNMENT_METHOD = None
+    UPSAMPLE_FACTOR = 2               # library default
+    WINDOW = 2                        # library default
+    SKIP_CYCLES = None
+    MANUAL_BACKGROUND_CYCLE = None
+    MANUAL_CHANNEL_MAPPING = None
+    # === END OPERATOR PARAMETERS ===
+    return (
+        ALIGNMENT_METHOD,
+        MANUAL_BACKGROUND_CYCLE,
+        MANUAL_CHANNEL_MAPPING,
+        SKIP_CYCLES,
+        UPSAMPLE_FACTOR,
+        WINDOW,
     )
 
 
 @app.cell
-def cli_or_defaults(ANALYSIS_DIR, Path, argparse, mo, sys):
-    headless = not mo.running_in_notebook()
-    if headless:
-        _p = argparse.ArgumentParser(description=__doc__)
-        _p.add_argument("--manifest", required=True, type=Path)
-        _p.add_argument("--output-dir", type=Path, default=Path("config"))
-        _p.add_argument("--verbose-json", action="store_true", default=True)
-        _args, _ = _p.parse_known_args()
-        MANIFEST_PATH = _args.manifest
-        OUTPUT_DIR = _args.output_dir
-    else:
-        MANIFEST_PATH = SCRIPT_DIR / "screen_manifest_baker.yaml"
-        OUTPUT_DIR = ANALYSIS_DIR.parent / ".cache" / "sbs_interactive"
-    return MANIFEST_PATH, OUTPUT_DIR, headless
-
-
-@app.cell
-def load(MANIFEST_PATH, emit_failure, headless, load_manifest, sys):
-    if not MANIFEST_PATH.exists():
-        if headless:
-            sys.exit(emit_failure(f"manifest not found: {MANIFEST_PATH}"))
-        raise FileNotFoundError(MANIFEST_PATH)
-    try:
-        manifest = load_manifest(MANIFEST_PATH)
-    except Exception as e:
-        if headless:
-            sys.exit(emit_failure(f"load_manifest({MANIFEST_PATH}) failed: {e}"))
-        raise
-    sbs_m = manifest.get("sbs", {}) or {}
-    return manifest, sbs_m
-
-
-@app.cell
-def derive_indices(emit_failure, headless, sbs_m, sys):
-    """Derive channel + cycle indices from manifest names."""
-    channel_names = sbs_m.get("channel_names")
-    if not channel_names:
-        _msg = "manifest.sbs.channel_names required (list of channel labels)"
-        if headless:
-            sys.exit(emit_failure(_msg))
-        raise ValueError(_msg)
-
-    def _ch_idx(name, label):
-        if name is None:
-            return None
-        if name not in channel_names:
-            raise ValueError(
-                f"manifest.sbs.{label}={name!r} not in channel_names={channel_names}"
-            )
-        return channel_names.index(name)
-
-    try:
-        dapi_index = _ch_idx(sbs_m.get("dapi_channel", "DAPI"), "dapi_channel")
-        cyto_index = _ch_idx(sbs_m.get("cyto_channel"), "cyto_channel")
-    except ValueError as e:
-        if headless:
-            sys.exit(emit_failure(str(e)))
-        raise
-
-    # Per .ipynb cell-16: when skip_cycles is set, the cycle→index mapping is
-    # not just (cycle - 1) — skipped cycles compress the index space. Mirror
-    # the .ipynb's skip-aware derivation:
-    #   SBS_CYCLES.index(DAPI_CYCLE) - len([s for s in SKIP_CYCLES if s < DAPI_CYCLE])
-    # SBS_CYCLES is the full per-screen cycle list (1..N); skip_cycles_indices
-    # is the 0-based indices of cycles to skip. Without skips, this collapses
-    # back to (cycle - 1).
-    dapi_cycle = sbs_m.get("dapi_cycle", 1)
-    cyto_cycle = sbs_m.get("cyto_cycle")
-    _skip = sbs_m.get("skip_cycles_indices") or []
-
-    def _cycle_to_index(cycle):
-        if cycle is None:
-            return None
-        base = cycle - 1
-        # 0-based skip indices that are strictly before this cycle's 0-based position
-        compress = sum(1 for s in _skip if s < base)
-        return base - compress
-
-    dapi_cycle_index = _cycle_to_index(dapi_cycle)
-    cyto_cycle_index = _cycle_to_index(cyto_cycle)
-    return cyto_cycle_index, cyto_index, dapi_cycle_index, dapi_index
-
-
-@app.cell
-def build_config(
-    cyto_cycle_index, cyto_index, dapi_cycle_index, dapi_index, sbs_m
+def _(
+    ALIGNMENT_METHOD,
+    CHANNEL_CMAPS,
+    CHANNEL_NAMES,
+    CONFIG_FILE_PATH,
+    MANUAL_BACKGROUND_CYCLE,
+    MANUAL_CHANNEL_MAPPING,
+    Microimage,
+    Path,
+    SKIP_CYCLES,
+    TEST_PLATE,
+    TEST_TILE,
+    TEST_WELL,
+    UPSAMPLE_FACTOR,
+    WINDOW,
+    align_cycles,
+    create_micropanel,
+    expand,
+    get_filename,
+    get_hcs_nested_path,
+    pd,
+    plt,
+    read_image,
+    yaml,
 ):
-    """Mirror cell-46 of the .ipynb: assemble sbs section."""
-    sbs_section = {
-        "alignment_method": sbs_m.get("alignment_method"),
-        "channel_names": sbs_m.get("channel_names"),
-        "upsample_factor": sbs_m.get("upsample_factor", 2),
-        "window": sbs_m.get("window", 2),
-        "skip_cycles_indices": sbs_m.get("skip_cycles_indices"),
-        "manual_background_cycle_index": sbs_m.get("manual_background_cycle_index"),
-        "manual_channel_mapping": sbs_m.get("manual_channel_mapping"),
-        "extra_channel_indices": sbs_m.get("extra_channel_indices", [0]),
-        "max_filter_width": sbs_m.get("max_filter_width", 3),
-        "spot_detection_method": sbs_m.get("spot_detection_method", "standard"),
-        "dapi_cycle": sbs_m.get("dapi_cycle", 1),
-        "dapi_cycle_index": dapi_cycle_index,
-        "cyto_cycle": sbs_m.get("cyto_cycle"),
-        "cyto_cycle_index": cyto_cycle_index,
-        "dapi_index": dapi_index,
-        "cyto_index": cyto_index,
-        "segmentation_method": sbs_m.get("segmentation_method", "cellpose"),
-        "gpu": sbs_m.get("gpu", False),
-        "reconcile": sbs_m.get("reconcile", "contained_in_cells"),
-        "segment_cells": sbs_m.get("segment_cells", True),
-        "df_barcode_library_fp": sbs_m.get("df_barcode_library_fp"),
-        "threshold_peaks": sbs_m.get("threshold_peaks"),
-        "call_reads_method": sbs_m.get("call_reads_method", "median"),
-        "bases": sbs_m.get("bases", ["G", "T", "A", "C"]),
-        "q_min": sbs_m.get("q_min", 0),
-        "error_correct": sbs_m.get("error_correct", False),
-        "sort_calls": sbs_m.get("sort_calls"),
-        "barcode_type": sbs_m.get("barcode_type", "simple"),
-        "heatmap_plate": sbs_m.get("heatmap_plate", "6W"),
-        "heatmap_shape": sbs_m.get("heatmap_shape", "6W_sbs"),
-    }
+    # Load config file
+    with open(CONFIG_FILE_PATH, 'r') as _config_file:
+        config = yaml.safe_load(_config_file)
+    SBS_SAMPLES_FP = Path(config['preprocess']['sbs_samples_fp'])
+    # Get paths to the sample files dfs
+    sbs_samples = pd.read_csv(SBS_SAMPLES_FP, sep='\t')
+    # Load the sample TSV files
+    SBS_CYCLES = sorted(list(sbs_samples['cycle'].unique()))
+    SKIP_CYCLES_INDICES = [SBS_CYCLES.index(c) for c in SKIP_CYCLES] if SKIP_CYCLES is not None else None
+    # Define cycles for testing if not None
+    MANUAL_BACKGROUND_CYCLE_INDEX = SBS_CYCLES.index(MANUAL_BACKGROUND_CYCLE) if MANUAL_BACKGROUND_CYCLE is not None else None
+    print('Loading test images...')
+    ROOT_FP = Path(config['all']['root_fp'])
+    # Load test image data
+    PREPROCESS_FP = ROOT_FP / 'preprocess'
+    IMAGE_FORMAT = config['all'].get('image_format', 'tiff')
+    if IMAGE_FORMAT == 'zarr':
+        sbs_test_image_paths = expand(PREPROCESS_FP / 'images' / 'sbs' / get_hcs_nested_path({'plate': TEST_PLATE, 'row': TEST_WELL[0], 'col': TEST_WELL[1:], 'tile': TEST_TILE, 'cycle': '{cycle}'}, 'image'), cycle=SBS_CYCLES)
+    else:
+        sbs_test_image_paths = expand(PREPROCESS_FP / 'images' / 'sbs' / get_filename({'plate': TEST_PLATE, 'well': TEST_WELL, 'tile': TEST_TILE, 'cycle': '{cycle}'}, 'image', 'tiff'), cycle=SBS_CYCLES)
+    sbs_test_images = [read_image(file_path) for file_path in sbs_test_image_paths]
+    print('Aligning test images...')
+    aligned = align_cycles(sbs_test_images, channel_order=CHANNEL_NAMES, method=ALIGNMENT_METHOD, upsample_factor=UPSAMPLE_FACTOR, window=WINDOW, skip_cycles=SKIP_CYCLES_INDICES, manual_background_cycle=MANUAL_BACKGROUND_CYCLE_INDEX, manual_channel_mapping=MANUAL_CHANNEL_MAPPING)
+    print('Example aligned image for first cycle:')
+    aligned_microimages = [Microimage(aligned[0, i, :, :], channel_names=CHANNEL_NAMES[i], cmaps=CHANNEL_CMAPS[i]) for i in range(aligned.shape[1])]
+    aligned_panel = create_micropanel(aligned_microimages, add_channel_label=True)
+    # Align cycles
+    # Create and display micropanel of aligned images
+    # NOTE: You can also loop through all your cycles to display micropanels to be sure of alignment by uncommenting the following lines:
+    # for cycle_idx in range(aligned.shape[0]):  # Adjust this range if you have a different number of cycles
+    #     print(f"Example aligned image for cycle {cycle_idx + 1}:")
+    #     aligned_microimages = [
+    #         Microimage(
+    #             aligned[cycle_idx, i, :, :], channel_names=CHANNEL_NAMES[i], cmaps=CHANNEL_CMAPS[i]
+    #         )
+    #         for i in range(aligned.shape[1])
+    #     ]
+    #     aligned_panel = create_micropanel(aligned_microimages, add_channel_label=True)
+    #     plt.show()
+    plt.show()
+    return (
+        MANUAL_BACKGROUND_CYCLE_INDEX,
+        PREPROCESS_FP,
+        SBS_CYCLES,
+        SKIP_CYCLES_INDICES,
+        aligned,
+        config,
+    )
 
-    # Cellpose-specific (if segmentation_method == "cellpose")
-    # Note: cyto_model dropped — .ipynb cell-46 does NOT write it (only cellpose_model).
-    if sbs_section["segmentation_method"] == "cellpose":
-        sbs_section.update(
-            {
-                "cellpose_model": sbs_m.get("cellpose_model", "cyto3"),
-                "nuclei_diameter": sbs_m.get("nuclei_diameter"),
-                "cell_diameter": sbs_m.get("cell_diameter"),
-                "nuclei_flow_threshold": sbs_m.get("nuclei_flow_threshold", 0.4),
-                "nuclei_cellprob_threshold": sbs_m.get("nuclei_cellprob_threshold", 0.0),
-                "cell_flow_threshold": sbs_m.get("cell_flow_threshold", 1),
-                "cell_cellprob_threshold": sbs_m.get("cell_cellprob_threshold", 0),
-            }
-        )
 
-    if sbs_m.get("peak_width") is not None:
-        sbs_section["peak_width"] = sbs_m.get("peak_width")
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ### Visualize Alignment (Optional)
 
-    if sbs_m.get("max_distance") is not None:
-        sbs_section["max_distance"] = sbs_m.get("max_distance")
+    #### Within-Cycle
+    Verify that all channels are properly structured for a given cycle.
+    - `VIZ_CYCLE`: Cycle index to display (0-indexed). Shows all channels as a micropanel.
 
-    # Barcode mode specifics
-    if sbs_section["barcode_type"] == "simple":
-        sbs_section.update(
-            {
-                "barcode_col": sbs_m.get("barcode_col"),
-                "prefix_col": sbs_m.get("prefix_col"),
-            }
-        )
-    elif sbs_section["barcode_type"] == "multi":
-        for _k in ("map_start", "map_end", "map_col", "recomb_start", "recomb_end", "recomb_col"):
-            sbs_section[_k] = sbs_m.get(_k)
-        for _k in ("recomb_filter_col", "recomb_q_thresh", "barcode_info_cols"):
-            if sbs_m.get(_k) is not None:
-                sbs_section[_k] = sbs_m.get(_k)
-
-    return (sbs_section,)
+    #### Between-Cycle
+    Verify base channels are properly aligned across cycles. Shows 3 locations (corner, center, random) with DAPI reference (grayscale) and base channels from different cycles (RGB overlay). Color fringing indicates misalignment.
+    - `DAPI_REFERENCE_CYCLE`: Cycle index for DAPI anatomical reference (shown as grayscale)
+    - `VIZ_CHANNELS`: List of 3 `(cycle_idx, channel_name)` tuples for RGB overlay (e.g., `[(0, "G"), (5, "T"), (10, "A")]`)
+    """)
+    return
 
 
 @app.cell
-def finalize(GenResult, emit, headless, mo, sbs_section, sys):
-    result = GenResult(
-        status="needs_review",
-        outputs={"sbs": sbs_section},
-        metrics={
-            "n_channels": len(sbs_section.get("channel_names", [])),
-            "dapi_index": sbs_section.get("dapi_index"),
-            "cyto_index": sbs_section.get("cyto_index"),
-            "dapi_cycle": sbs_section.get("dapi_cycle"),
-            "cyto_cycle": sbs_section.get("cyto_cycle"),
-            "barcode_type": sbs_section.get("barcode_type"),
-            "segmentation_method": sbs_section.get("segmentation_method"),
-            "cellpose_model": sbs_section.get("cellpose_model"),
-            "nuclei_diameter": sbs_section.get("nuclei_diameter"),
-            "cell_diameter": sbs_section.get("cell_diameter"),
-            "threshold_peaks": sbs_section.get("threshold_peaks"),
-            "call_reads_method": sbs_section.get("call_reads_method"),
-        },
-        review_required=True,
-        review_prompt=(
-            "Confirm SBS spot detection, segmentation, and barcode calling. "
-            "9 tuned sbs params (cell/nuclei diameter, threshold_peaks, "
-            "call_reads_method, q_min, max_filter_width, peak_width, "
-            "upsample_factor, window) carry manifest values in v1; real auto-"
-            "derivation (estimate_diameters, background threshold from image "
-            "statistics, peak-distribution-based call_reads_method) lands when "
-            "test-tile images are available at gen time."
-        ),
-    )
-    if headless:
-        sys.exit(emit(result))
-    else:
-        mo.md(
-            f"""
-            ### Result
-            Status: **{result.status}** (review={result.review_required})
+def _():
+    # === OPERATOR PARAMETERS ===
+    VIZ_CYCLE = 0
+    DAPI_REFERENCE_CYCLE = 0
+    VIZ_CHANNELS = None                # e.g., [(0, "G"), (5, "T"), (10, "A")]
+    # === END OPERATOR PARAMETERS ===
+    return DAPI_REFERENCE_CYCLE, VIZ_CHANNELS, VIZ_CYCLE
 
-            ```json
-            {result.to_json()}
-            ```
-            """
+
+@app.cell
+def _(
+    CHANNEL_CMAPS,
+    CHANNEL_NAMES,
+    Microimage,
+    VIZ_CYCLE,
+    aligned,
+    create_micropanel,
+    plt,
+):
+    if VIZ_CYCLE is not None:
+        print(f"Aligned image for cycle {VIZ_CYCLE + 1}:")
+        aligned_microimages = [
+            Microimage(
+                aligned[VIZ_CYCLE, i, :, :], channel_names=CHANNEL_NAMES[i], cmaps=CHANNEL_CMAPS[i]
+            )
+            for i in range(aligned.shape[1])
+        ]
+        aligned_panel = create_micropanel(aligned_microimages, add_channel_label=True)
+        plt.show()
+    return
+
+
+@app.cell
+def _(CHANNEL_NAMES, DAPI_REFERENCE_CYCLE, VIZ_CHANNELS, aligned, plt, visualize_sbs_alignment):
+    if VIZ_CHANNELS is not None:
+        print("Visualizing alignment...")
+        alignment_fig = visualize_sbs_alignment(
+            aligned,
+            CHANNEL_NAMES,
+            DAPI_REFERENCE_CYCLE,
+            VIZ_CHANNELS,
+            crop_size=300
         )
-    return (result,)
+        plt.show()
+    else:
+        print("Skipping visualization (VIZ_CHANNELS not set)")
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## <font color='red'>SET PARAMETERS</font>
+
+    ### Spot detection
+
+    - `MAX_FILTER_WIDTH`: Width parameter used for determining the neighborhood size for finding local maxima. No default value, but `3` is suggested
+    - `SPOT_DETECTION_METHOD`: Methodology for calling spots:
+        - `STANDARD`: Standard method for calling spots, involving Laplacian of Gaussian correction, and computation of spots across cycles. Spots are identified based on signal intensity and consistency across cycles.
+            - `PEAK_WIDTH`: Width parameter used for peak detection, sets neighborhood size for finding local maxima of base channels standard deviation. Defaults to `5`
+        - `SPOTIFLOW`: Deep learning based methodology for calling spots. Spots are called independently on all 4 bases of a selected cycle, and then coalesced to ensure minimum distance between spots. If this method is selected, the following parameters are required:
+            - `SPOTIFLOW_CYCLE_INDEX`: Cycle to use for spot detection
+            - `SPOTIFLOW_MODEL`: Model to use for spot detection (e.g., "general", "hybiss")
+            - `SPOTIFLOW_THRESHOLD`: Probability threshold for confidence in spot detection
+            - `SPOTIFLOW_MIN_DISTANCE`: Minimum distance (in pixels) required between detected spots
+
+    **Note on Spotiflow:** Spotiflow returns binary spot locations (present/absent) rather than continuous intensity values. As a result, `THRESHOLD_READS` should be set to `0` when using Spotiflow, and the "Mapping rate vs. peak threshold" QC plot will not provide meaningful threshold optimization (all spots have the same binary value).
+    """)
+    return
+
+
+@app.cell
+def _(CHANNEL_NAMES, EXTRA_CHANNELS):
+    # === OPERATOR PARAMETERS ===
+    MAX_FILTER_WIDTH = 3              # library default
+    SPOT_DETECTION_METHOD = "standard"   # "standard" | "spotiflow"
+    # === END OPERATOR PARAMETERS ===
+
+    if SPOT_DETECTION_METHOD == "standard":
+       PEAK_WIDTH = 5
+
+    elif SPOT_DETECTION_METHOD == "spotiflow":
+       SPOTIFLOW_CYCLE_INDEX = 0
+       SPOTIFLOW_MODEL = "general"
+       SPOTIFLOW_THRESHOLD = 0.3
+       SPOTIFLOW_MIN_DISTANCE = 1
+
+    # Derive extra channel indices
+    EXTRA_CHANNEL_INDICES = [CHANNEL_NAMES.index(channel) for channel in EXTRA_CHANNELS]
+    return (
+        EXTRA_CHANNEL_INDICES,
+        MAX_FILTER_WIDTH,
+        PEAK_WIDTH,
+        SPOTIFLOW_CYCLE_INDEX,
+        SPOTIFLOW_MIN_DISTANCE,
+        SPOTIFLOW_MODEL,
+        SPOTIFLOW_THRESHOLD,
+        SPOT_DETECTION_METHOD,
+    )
+
+
+@app.cell
+def _(
+    BASES,
+    CHANNEL_CMAPS,
+    EXTRA_CHANNEL_INDICES,
+    MAX_FILTER_WIDTH,
+    Microimage,
+    PEAK_WIDTH,
+    SPOTIFLOW_CYCLE_INDEX,
+    SPOTIFLOW_MIN_DISTANCE,
+    SPOTIFLOW_MODEL,
+    SPOTIFLOW_THRESHOLD,
+    SPOT_DETECTION_METHOD,
+    aligned,
+    compute_standard_deviation,
+    create_micropanel,
+    find_peaks,
+    find_peaks_spotiflow,
+    log_filter,
+    max_filter,
+    plot_channels_with_peaks,
+    plt,
+):
+    print("Detecting candidate reads...")
+
+    print("Applying Laplacian-of-Gaussian (LoG) filter...")
+    loged = log_filter(aligned, skip_index=EXTRA_CHANNEL_INDICES)
+
+    print("Applying max filter...")
+    maxed = max_filter(loged, width=MAX_FILTER_WIDTH, remove_index=EXTRA_CHANNEL_INDICES)
+
+    if SPOT_DETECTION_METHOD == "standard":
+        print("Computing standard deviation over cycles...")
+        standard_deviation = compute_standard_deviation(loged, remove_index=EXTRA_CHANNEL_INDICES)
+    
+        print("Finding peaks using standard method...")
+        peaks = find_peaks(standard_deviation, width=PEAK_WIDTH)
+    
+    elif SPOT_DETECTION_METHOD == "spotiflow":
+        print(f"Finding peaks using Spotiflow (model: {SPOTIFLOW_MODEL})...")
+        peaks, _ = find_peaks_spotiflow(
+            aligned_images=aligned, 
+            cycle_idx=SPOTIFLOW_CYCLE_INDEX,
+            model=SPOTIFLOW_MODEL,
+            prob_thresh=SPOTIFLOW_THRESHOLD,
+            min_distance=SPOTIFLOW_MIN_DISTANCE,
+            remove_index=EXTRA_CHANNEL_INDICES,
+            verbose=True
+        )
+
+    # Create and display micropanel of max filtered datas
+    print("Example max filtered image for first cycle:")
+    maxed_microimages = [
+        Microimage(maxed[1, i, :, :], channel_names=BASES[i], cmaps=CHANNEL_CMAPS[i + 1])
+        for i in range(maxed.shape[1])
+    ]
+    maxed_panel = create_micropanel(maxed_microimages, add_channel_label=True)
+    plt.show()
+
+    # Plot spots on base channels
+    fig, axes = plot_channels_with_peaks(
+        maxed,                 
+        peaks,
+        BASES,        
+        cycle_number=0,   
+        threshold_peaks=200 if SPOT_DETECTION_METHOD == "standard" else None,
+        peak_colors=['orange'],
+        peak_labels=['Detected Peaks']
+    )
+    plt.show()
+    return maxed, peaks
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## <font color='red'>SET PARAMETERS</font>
+
+    ### Illumination Correction and Segmentation
+
+    These parameters specify which cycle and channels to use for cell segmentation. All three are required.
+
+    - `DAPI_CYCLE`: Cycle number containing DAPI. This cycle must also contain any cellular stain you want to use for segmentation (e.g., Vimentin, GFP, Phalloidin).
+    - `CYTO_CYCLE`: Cycle number for the cytoplasmic channel. Set equal to `DAPI_CYCLE` when using a cellular stain.
+    - `CYTO_CHANNEL`: Name of the channel used for cell boundary detection.
+
+    **Common Configurations:**
+
+    1. **Using a cellular stain** (recommended): Set `DAPI_CYCLE = CYTO_CYCLE` to the cycle containing both DAPI and your stain.
+       - Example: `DAPI_CYCLE = 1`, `CYTO_CYCLE = 1`, `CYTO_CHANNEL = "Vimentin"`
+
+    2. **No cellular stain available**: Set `CYTO_CYCLE` to any cycle and use a base channel (G, T, A, or C) for cytoplasm detection.
+       - Example: `DAPI_CYCLE = 1`, `CYTO_CYCLE = 5`, `CYTO_CHANNEL = "G"`
+
+    **Note:** If you don't need cell segmentation (nuclei-only), use configuration 1 and set `SEGMENT_CELLS = False` in the Segmentation section below.
+    """)
+    return
+
+
+@app.cell
+def _(BASES, CHANNEL_NAMES, SBS_CYCLES, SKIP_CYCLES):
+    # === OPERATOR PARAMETERS ===
+    DAPI_CYCLE = None
+    CYTO_CYCLE = None
+    CYTO_CHANNEL = None
+    # === END OPERATOR PARAMETERS ===
+
+    # Derive DAPI and CYTO indexes
+    DAPI_INDEX = CHANNEL_NAMES.index("DAPI")
+    CYTO_INDEX = CHANNEL_NAMES.index(CYTO_CHANNEL)
+    DAPI_CYCLE_INDEX = SBS_CYCLES.index(DAPI_CYCLE) - len([skip for skip in (SKIP_CYCLES or []) if skip < SBS_CYCLES.index(DAPI_CYCLE)])
+    CYTO_CYCLE_INDEX = SBS_CYCLES.index(CYTO_CYCLE) - len([skip for skip in (SKIP_CYCLES or []) if skip < SBS_CYCLES.index(CYTO_CYCLE)])
+
+    # Validate DAPI and CYTO cycles and channels
+    if DAPI_CYCLE != CYTO_CYCLE and CYTO_CHANNEL not in BASES:
+        raise ValueError(
+            f"When DAPI_CYCLE ({DAPI_CYCLE}) != CYTO_CYCLE ({CYTO_CYCLE}), "
+            f"CYTO_CHANNEL should be a base channel {BASES}, but got '{CYTO_CHANNEL}'. "
+            f"If using a cellular stain, set DAPI_CYCLE = CYTO_CYCLE."
+        )
+    return (
+        CYTO_CYCLE,
+        CYTO_CYCLE_INDEX,
+        CYTO_INDEX,
+        DAPI_CYCLE,
+        DAPI_CYCLE_INDEX,
+        DAPI_INDEX,
+    )
+
+
+@app.cell
+def _(
+    CYTO_CYCLE,
+    CYTO_CYCLE_INDEX,
+    CYTO_INDEX,
+    DAPI_CYCLE,
+    DAPI_CYCLE_INDEX,
+    DAPI_INDEX,
+    EXTRA_CHANNEL_INDICES,
+    Microimage,
+    PREPROCESS_FP,
+    TEST_PLATE,
+    TEST_WELL,
+    aligned,
+    apply_ic_field,
+    combine_ic_images,
+    create_micropanel,
+    get_filename,
+    plt,
+    prepare_cellpose,
+    read_image,
+):
+    # Logic based on whether DAPI and CYTO come from same or different cycles
+    if DAPI_CYCLE != CYTO_CYCLE:
+        # Different cycles - need to combine image data AND IC fields from both cycles
+        print(f"DAPI cycle ({DAPI_CYCLE}) != CYTO cycle ({CYTO_CYCLE})")
+        print("Combining image data and IC fields from both cycles...")
+    
+        # Combine image data from both cycles (DAPI channels from DAPI cycle, base channels from CYTO cycle)
+        aligned_image_data_segmentation_cycle = combine_ic_images(
+            [aligned[DAPI_CYCLE_INDEX], aligned[CYTO_CYCLE_INDEX]],
+            [EXTRA_CHANNEL_INDICES, None],
+        )
+    
+        # Load and combine IC fields
+        ic_field_dapi = read_image(
+            PREPROCESS_FP / "ic_fields" / "sbs" / 
+            get_filename({"plate": TEST_PLATE, "well": TEST_WELL, "cycle": DAPI_CYCLE}, "ic_field", "tiff")
+        )
+        ic_field_cyto = read_image(
+            PREPROCESS_FP / "ic_fields" / "sbs" / 
+            get_filename({"plate": TEST_PLATE, "well": TEST_WELL, "cycle": CYTO_CYCLE}, "ic_field", "tiff")
+        )
+        ic_field = combine_ic_images([ic_field_dapi, ic_field_cyto], [EXTRA_CHANNEL_INDICES, None])
+    else:
+        # Same cycle - use single cycle for both image data and IC field
+        aligned_image_data_segmentation_cycle = aligned[CYTO_CYCLE_INDEX]
+        ic_field = read_image(
+            PREPROCESS_FP / "ic_fields" / "sbs" / 
+            get_filename({"plate": TEST_PLATE, "well": TEST_WELL, "cycle": DAPI_CYCLE}, "ic_field", "tiff")
+        )
+
+    print("Applying illumination correction to segmentation cycle image...")
+    # Apply illumination correction field
+    corrected_image = apply_ic_field(
+        aligned_image_data_segmentation_cycle, correction=ic_field
+    )
+
+    # Prepare corrected image for CellPose segmentation
+    # NOTE: this process is done during the `segment_cellpose`` method below as well
+    # Use the prepared_cellpose image to test CellPose (see below)
+    print("Preparing IC segmentation image for CellPose...")
+    cellpose_rgb = prepare_cellpose(
+        corrected_image,
+        DAPI_INDEX,
+        CYTO_INDEX,
+    )
+
+    # show max filtered data for one round
+    print("Pre-segmentation images:")
+    pre_seg_microimages = [
+        Microimage(cellpose_rgb[2], channel_names="Dapi"),
+        Microimage(cellpose_rgb[1], channel_names="Cyto"),
+    ]
+    pre_seg_panel = create_micropanel(pre_seg_microimages, add_channel_label=True)
+    plt.show()
+    return cellpose_rgb, corrected_image
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## <font color='red'>SET PARAMETERS</font>
+
+    ### Segmentation
+
+    **IMPORTANT: GPU Recommendation for CPSAM**
+    If testing the CPSAM model (`cellpose_model="cpsam"`), we strongly recommend:
+    - Using a GPU-enabled machine (`GPU=True`)
+    - Allocating sufficient time (segmentation can take 30+ minutes per tile)
+    - Consider running this notebook in a GPU-enabled environment or testing on a smaller region
+
+    #### Select Segmentation Method
+    - `SEGMENTATION_METHOD`: Choose from "cellpose", "stardist", or "watershed" for cell segmentation.
+
+    #### Common Parameters
+    - `GPU`: Set to True to use GPU acceleration (if available).
+    - `RECONCILE`: Method for reconciling nuclei and cell masks (typically "contained_in_cells", which allows more than one nucleus per cell and is useful for cells that are dividing).
+    - `SEGMENT_CELLS`: Whether to segment cells, or only segment nuclei. If spots are contained in nuclei, there is no need to segment cell bodies. This may speed up analysis.
+
+    #### Cellpose Parameters (if using "cellpose")
+    - `CELLPOSE_MODEL`: CellPose model to use. Options: "cyto3" (default), "cyto2", "cyto", "nuclei", or "cpsam" (requires Cellpose 4.x).
+      - When `SEGMENT_CELLS = True`: The "nuclei" model is always used for nuclei segmentation, and `CELLPOSE_MODEL` is used for cell segmentation.
+      - When `SEGMENT_CELLS = False`: `CELLPOSE_MODEL` is used directly for nuclei segmentation. The default "cyto3" works well, but you can set to "nuclei" if preferred.
+      - For CPSAM: The "cpsam" model is used for both nuclei and cells regardless of `SEGMENT_CELLS`.
+    - `CELL_FLOW_THRESHOLD` & `NUCLEI_FLOW_THRESHOLD`: Flow threshold for Cellpose segmentation. Default is 0.4.
+    - `CELL_CELLPROB_THRESHOLD` & `NUCLEI_CELLPROB_THRESHOLD`: Cell probability threshold for Cellpose. Default is 0.
+    - `HELPER_INDEX`: (Optional) Index of additional channel to help with CPSAM segmentation. Only used with `cellpose_model="cpsam"`. Default is None.
+    - Note: For Cellpose 3.x models (cyto3, cyto2), nuclei and cell diameters will be estimated automatically. For CPSAM (Cellpose 4.x), diameters can be left as None and will be estimated from initial segmentation results.
+
+    #### StarDist Parameters (if using "stardist")
+    - `STARDIST_MODEL`: StarDist model type. Default is "2D_versatile_fluo".
+    - `CELL_PROB_THRESHOLD` & `NUCLEI_PROB_THRESHOLD`: Probability threshold for segmentation. Default is 0.479071.
+    - `CELL_NMS_THRESHOLD` & `NUCLEI_NMS_THRESHOLD`: Non-maximum suppression threshold. Default is 0.3.
+
+    #### Watershed Parameters (if using "watershed")
+    - `THRESHOLD_DAPI`: Threshold for nuclei segmentation.
+    - `THRESHOLD_CELL`: Threshold for cell boundary segmentation.
+    - `NUCLEUS_AREA`: Range for filtering nuclei by area as a tuple (min, max).
+    """)
+    return
+
+
+@app.cell
+def _(CYTO_INDEX, DAPI_INDEX, corrected_image):
+    # === OPERATOR PARAMETERS ===
+    SEGMENTATION_METHOD = "cellpose"     # "cellpose" | "stardist"
+    GPU = False
+    RECONCILE = "contained_in_cells"
+    SEGMENT_CELLS = True
+    # === END OPERATOR PARAMETERS ===
+
+    if SEGMENTATION_METHOD == "cellpose":
+        # Parameters for CellPose method
+        CELLPOSE_MODEL = "cyto3"
+        NUCLEI_FLOW_THRESHOLD = 0.4
+        NUCLEI_CELLPROB_THRESHOLD = 0.0
+        CELL_FLOW_THRESHOLD = 1 
+        CELL_CELLPROB_THRESHOLD = 0
+        HELPER_INDEX = None  # Optional: channel index to help with CPSAM segmentation
+
+        # Only estimate diameters for non-CPSAM models
+        if CELLPOSE_MODEL != "cpsam":
+            from lib.shared.segment_cellpose import estimate_diameters
+            print("Estimating optimal cell and nuclei diameters...")
+            NUCLEI_DIAMETER, CELL_DIAMETER = estimate_diameters(
+                corrected_image,
+                dapi_index=DAPI_INDEX,
+                cyto_index=CYTO_INDEX,
+                cellpose_model=CELLPOSE_MODEL,
+            )
+        else:
+            print("CPSAM model selected. Initial diameters set to None.")
+            print("Note: Diameters will be estimated automatically from segmentation results in the next cell.")
+            NUCLEI_DIAMETER = None  # Will be estimated from segmentation
+            CELL_DIAMETER = None    # Will be estimated from segmentation
+
+    elif SEGMENTATION_METHOD == "stardist":
+        # Parameters for StarDist method
+        STARDIST_MODEL = "2D_versatile_fluo"
+        NUCLEI_PROB_THRESHOLD = 0.479071
+        NUCLEI_NMS_THRESHOLD = 0.3
+        CELL_PROB_THRESHOLD = 0.479071
+        CELL_NMS_THRESHOLD = 0.3
+
+    elif SEGMENTATION_METHOD == "watershed":
+        # Parameters for Watershed method
+        THRESHOLD_DAPI = 4260 
+        THRESHOLD_CELL = 1300
+        NUCLEUS_AREA = (45,450)
+    return (
+        CELLPOSE_MODEL,
+        CELL_CELLPROB_THRESHOLD,
+        CELL_DIAMETER,
+        CELL_FLOW_THRESHOLD,
+        CELL_NMS_THRESHOLD,
+        CELL_PROB_THRESHOLD,
+        GPU,
+        HELPER_INDEX,
+        NUCLEI_CELLPROB_THRESHOLD,
+        NUCLEI_DIAMETER,
+        NUCLEI_FLOW_THRESHOLD,
+        NUCLEI_NMS_THRESHOLD,
+        NUCLEI_PROB_THRESHOLD,
+        NUCLEUS_AREA,
+        RECONCILE,
+        SEGMENTATION_METHOD,
+        SEGMENT_CELLS,
+        STARDIST_MODEL,
+        THRESHOLD_CELL,
+        THRESHOLD_DAPI,
+    )
+
+
+@app.cell
+def _(
+    CELLPOSE_MODEL,
+    CELL_CELLPROB_THRESHOLD,
+    CELL_DIAMETER,
+    CELL_FLOW_THRESHOLD,
+    CELL_NMS_THRESHOLD,
+    CELL_PROB_THRESHOLD,
+    CYTO_INDEX,
+    DAPI_INDEX,
+    GPU,
+    HELPER_INDEX,
+    Microimage,
+    NUCLEI_CELLPROB_THRESHOLD,
+    NUCLEI_DIAMETER,
+    NUCLEI_FLOW_THRESHOLD,
+    NUCLEI_NMS_THRESHOLD,
+    NUCLEI_PROB_THRESHOLD,
+    NUCLEUS_AREA,
+    RECONCILE,
+    SEGMENTATION_METHOD,
+    SEGMENT_CELLS,
+    STARDIST_MODEL,
+    THRESHOLD_CELL,
+    THRESHOLD_DAPI,
+    cellpose_rgb,
+    corrected_image,
+    create_micropanel,
+    image_segmentation_annotations,
+    np,
+    plt,
+    random_cmap,
+):
+    print(f'Segmenting image with {SEGMENTATION_METHOD}...')
+    if SEGMENTATION_METHOD == 'cellpose':
+        from lib.shared.segment_cellpose import segment_cellpose
+        result = segment_cellpose(corrected_image, dapi_index=DAPI_INDEX, cyto_index=CYTO_INDEX, nuclei_diameter=NUCLEI_DIAMETER, cell_diameter=CELL_DIAMETER, cellpose_kwargs=dict(nuclei_flow_threshold=NUCLEI_FLOW_THRESHOLD, nuclei_cellprob_threshold=NUCLEI_CELLPROB_THRESHOLD, cell_flow_threshold=CELL_FLOW_THRESHOLD, cell_cellprob_threshold=CELL_CELLPROB_THRESHOLD), cellpose_model=CELLPOSE_MODEL, helper_index=HELPER_INDEX, gpu=GPU, reconcile=RECONCILE, cells=SEGMENT_CELLS)
+    elif SEGMENTATION_METHOD == 'stardist':
+        from lib.shared.segment_stardist import segment_stardist
+        result = segment_stardist(corrected_image, dapi_index=DAPI_INDEX, cyto_index=CYTO_INDEX, model_type=STARDIST_MODEL, stardist_kwargs=dict(nuclei_prob_threshold=NUCLEI_PROB_THRESHOLD, nuclei_nms_threshold=NUCLEI_NMS_THRESHOLD, cell_prob_threshold=CELL_PROB_THRESHOLD, cell_nms_threshold=CELL_NMS_THRESHOLD), gpu=GPU, reconcile=RECONCILE, cells=SEGMENT_CELLS)
+    elif SEGMENTATION_METHOD == 'watershed':
+        from lib.shared.segment_watershed import segment_watershed
+        result = segment_watershed(corrected_image, nuclei_threshold=THRESHOLD_DAPI, nuclei_area_min=NUCLEUS_AREA[0], nuclei_area_max=NUCLEUS_AREA[1], cell_threshold=THRESHOLD_CELL, cells=SEGMENT_CELLS)
+    if SEGMENT_CELLS:
+        nuclei, cells = result
+    else:
+        nuclei = result
+        cells = nuclei
+    print('Example microplots for DAPI channel and nuclei segmentation:')
+    nuclei_cmap = random_cmap(num_colors=len(np.unique(nuclei)))
+    nuclei_seg_microimages = [Microimage(cellpose_rgb[2], channel_names='Dapi'), Microimage(nuclei, cmaps=nuclei_cmap, channel_names='Nuclei')]
+    nuclei_seg_panel = create_micropanel(nuclei_seg_microimages, add_channel_label=True)
+    plt.show()
+    print(f"Example microplots for merged channels and {('cells' if SEGMENT_CELLS else 'nuclei')} segmentation:")
+    cells_cmap = random_cmap(num_colors=len(np.unique(cells if SEGMENT_CELLS else nuclei)))
+    cells_seg_microimages = [Microimage(cellpose_rgb, channel_names='Merged'), Microimage(cells if SEGMENT_CELLS else nuclei, cmaps=cells_cmap, channel_names='Cells' if SEGMENT_CELLS else 'Nuclei')]
+    cells_seg_panel = create_micropanel(cells_seg_microimages, add_channel_label=True)
+    plt.show()
+    print('Example microplot for sequencing data annotated with segmentation:')
+    annotated_data = image_segmentation_annotations(cellpose_rgb[1:], nuclei, cells if SEGMENT_CELLS else nuclei)
+    annotated_microimage = [Microimage(annotated_data, channel_names='Merged', cmaps=['pure_blue', 'pure_red', 'pure_green'])]
+    annotated_panel = create_micropanel(annotated_microimage, num_cols=1, figscaling=10, add_channel_label=False)
+    plt.show()
+    if SEGMENTATION_METHOD == 'cellpose' and CELLPOSE_MODEL == 'cpsam':
+        from skimage.measure import regionprops
+        nuclei_props = regionprops(nuclei)
+        nuclei_diameters = [prop.equivalent_diameter for prop in nuclei_props]
+        estimated_nuclei_diameter = np.mean(nuclei_diameters)
+        print(f'Nuclei - Average diameter: {estimated_nuclei_diameter:.2f} pixels')
+        cells_props = regionprops(cells)
+        cells_diameters = [prop.equivalent_diameter for prop in cells_props]
+        estimated_cell_diameter = np.mean(cells_diameters)
+        print(f'Cells - Average diameter: {estimated_cell_diameter:.2f} pixels')
+        NUCLEI_DIAMETER_1 = estimated_nuclei_diameter
+        CELL_DIAMETER_1 = estimated_cell_diameter
+        print(f'\nUpdated NUCLEI_DIAMETER to {NUCLEI_DIAMETER_1:.2f} pixels')
+    # Handle unpacking based on SEGMENT_CELLS
+    # Create and display micropanel of nuclei segmention
+    # Create and display micropanel of segmented cells
+    # Create and display micropanel of annotated data
+        print(f'Updated CELL_DIAMETER to {CELL_DIAMETER_1:.2f} pixels')  # Use nuclei as cells for downstream code compatibility  # Calculate nuclei diameters  # Calculate cell diameters  # Update the diameter variables for config
+    return CELL_DIAMETER_1, NUCLEI_DIAMETER_1, cells, nuclei
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    Note: You may want to adjust these parameters and run segmentation tests if you feel you are capturing too little or too much area for the masks. For cellpose, the nuclei and cell diameters will be automatically estimated, but can be manually adjusted if needed. You manually can set `NUCLEI_DIAMETER` and `CELL_DIAMETER` and rerun the above blocks as many times as needed.
+    """)
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## <font color='red'>SET PARAMETERS</font>
+
+    ### Barcode design table standardization
+
+    Raw barcode design tables from different sources often have inconsistent formatting, column names, and gene annotations that need to be cleaned and validated before analysis. This standardization step transforms your raw design file into a consistent format with validated gene symbols, standardized column names, and proper barcode prefixes for read mapping.
+
+    **Barcode Type Selection:**
+    - `BARCODE_TYPE`: Choose "simple" (single-barcode protocol) or "multi" (multi-barcode with MAP/RECOMB regions)
+    - **Default**: "simple" for standard protocols
+    - See Cell 32 for detailed explanation of barcode types and when to use each mode
+
+    **Essential Parameters:**
+    - `DF_DESIGN_FP`: File path to your raw guide RNA design file (TSV format)
+    - `DF_BARCODE_LIBRARY_FP`: File path where the cleaned, standardized barcode library will be saved
+    - `UNIPROT_DATA_FP`: File path for temporary UniProt annotation data (automatically generated and deleted)
+    - `GENE_SYMBOL_COL`: Column name containing gene symbols (e.g., "gene_symbol", "target_gene"). Set to `None` if unavailable
+    - `GENE_ID_COL`: Column name containing gene IDs (e.g., "gene_id", "ensembl_id"). Set to `None` if not needed
+
+    **Simple Mode Parameters:**
+    - `BARCODE_COL`: Column containing full barcode sequences (e.g., "sgRNA", "guide_sequence")
+    - `PREFIX_LENGTH`: Total barcode length BEFORE skipping cycles
+      - Final length = PREFIX_LENGTH - number of skipped cycles
+      - Example: 13 bases → skip [2,3,4] → 10 final bases
+    - `SKIP_CYCLES_MAP`: 1-based cycle positions to skip (e.g., `[2, 3, 4]`)
+      - **IMPORTANT**: Must match `SKIP_CYCLES` from Cell 8 (imaging alignment)
+      - Set to `None` if no cycles were skipped
+
+    **Multi Mode Parameters:**
+    - `PREFIX_MAP`: Column with MAP region barcode sequences (e.g., "iBAR2")
+    - `PREFIX_RECOMB`: Column with RECOMB region barcode sequences (optional)
+    - `MAP_PREFIX_LENGTH`: Total bases BEFORE skipping for MAP region
+      - Final length = MAP_PREFIX_LENGTH - len(SKIP_CYCLES_MAP)
+    - `RECOMB_PREFIX_LENGTH`: Total bases BEFORE skipping for RECOMB region
+      - Final length = RECOMB_PREFIX_LENGTH - len(SKIP_CYCLES_RECOMB)
+    - `SKIP_CYCLES_MAP`: 1-based positions to skip in MAP region (optional)
+    - `SKIP_CYCLES_RECOMB`: 1-based positions to skip in RECOMB region (optional)
+    - `SEQUENCING_ORDER`: Order of barcode regions during sequencing. Options are:
+        - `"map_recomb"`: MAP region sequenced first, then RECOMB region
+        - `"recomb_map"`: RECOMB region sequenced first, then MAP region
+
+    **Non-Targeting Control Parameters:**
+    - `NONTARGETING_FORMAT`: Format string for standardized non-targeting names (default: "nontargeting_{prefix}")
+      - Use `{prefix}` for barcode prefix, `{original}` for original name
+    - `NONTARGETING_PATTERNS`: List of patterns to identify non-targeting controls (default: ["nontargeting", "sg_nt", "non-targeting"])
+
+    **Note:** For complex scenarios (custom prefix generation), you can use custom prefix functions (`prefix_map_func`, `prefix_recomb_func`). See function documentation for details.
+    """)
+    return
+
+
+@app.cell
+def _():
+    # === OPERATOR PARAMETERS ===
+    BARCODE_TYPE = "simple"              # "simple" | "multi"
+    DF_DESIGN_FP = None
+    DF_BARCODE_LIBRARY_FP = "config/barcode_library.tsv"
+    UNIPROT_DATA_FP = "config/uniprot_data.tsv"
+    GENE_SYMBOL_COL = None
+    GENE_ID_COL = None
+    NONTARGETING_FORMAT = "nontargeting_{prefix}"
+    NONTARGETING_PATTERNS = ["nontargeting", "sg_nt", "non-targeting"]
+    # === END OPERATOR PARAMETERS ===
+
+    # Mode-specific barcode parameters
+    if BARCODE_TYPE == "simple":
+        # Simple mode: single barcode column and prefix length
+        BARCODE_COL = None  # Column with full barcode sequences
+    
+        # IMPORTANT: PREFIX_LENGTH should be the FULL barcode length in your design library
+        # If you skipped cycles during imaging (Cell 8: SKIP_CYCLES), use SKIP_CYCLES_MAP below
+        PREFIX_LENGTH = None  # Full barcode length (e.g., 12 for 12-base barcodes)
+    
+        # If you skipped cycles during imaging, set this to match SKIP_CYCLES from Cell 8
+        # Example: SKIP_CYCLES = [1, 6] in Cell 8 → SKIP_CYCLES_MAP = [1, 6] here
+        SKIP_CYCLES_MAP = None  # Set to list of 1-based cycle numbers to skip, or None if no cycles skipped
+    
+        # Multi-mode parameters set to None
+        PREFIX_MAP = None
+        PREFIX_RECOMB = None
+        MAP_PREFIX_LENGTH = None
+        RECOMB_PREFIX_LENGTH = None
+        SKIP_CYCLES_RECOMB = None
+        SEQUENCING_ORDER = None
+
+    elif BARCODE_TYPE == "multi":
+        # Multi mode: separate columns for MAP and RECOMB regions
+        PREFIX_MAP = None  # Column with MAP region barcode sequences (e.g., "iBAR2")
+        PREFIX_RECOMB = None  # Column with RECOMB region barcode sequences (optional)
+        MAP_PREFIX_LENGTH = None  # Length of MAP prefix to extract (e.g., 6 for cycles 0-5)
+        RECOMB_PREFIX_LENGTH = None  # Length of RECOMB prefix to extract (e.g., 6 for cycles 6-11)
+        SKIP_CYCLES_MAP = None  # Optional: list of 1-based cycles to skip in MAP region
+        SKIP_CYCLES_RECOMB = None  # Optional: list of 1-based cycles to skip in RECOMB region
+        SEQUENCING_ORDER = "map_recomb"  # Options: "map_recomb" or "recomb_map"
+    
+        # Simple mode parameters set to None
+        BARCODE_COL = None
+        PREFIX_LENGTH = None
+    return (
+        BARCODE_COL,
+        BARCODE_TYPE,
+        DF_BARCODE_LIBRARY_FP,
+        DF_DESIGN_FP,
+        GENE_ID_COL,
+        GENE_SYMBOL_COL,
+        MAP_PREFIX_LENGTH,
+        NONTARGETING_FORMAT,
+        NONTARGETING_PATTERNS,
+        PREFIX_LENGTH,
+        PREFIX_MAP,
+        PREFIX_RECOMB,
+        RECOMB_PREFIX_LENGTH,
+        SEQUENCING_ORDER,
+        SKIP_CYCLES_MAP,
+        SKIP_CYCLES_RECOMB,
+        UNIPROT_DATA_FP,
+    )
+
+
+@app.cell
+def _(
+    BARCODE_COL,
+    BARCODE_TYPE,
+    DF_BARCODE_LIBRARY_FP,
+    DF_DESIGN_FP,
+    GENE_ID_COL,
+    GENE_SYMBOL_COL,
+    MAP_PREFIX_LENGTH,
+    NONTARGETING_FORMAT,
+    NONTARGETING_PATTERNS,
+    PREFIX_LENGTH,
+    PREFIX_MAP,
+    PREFIX_RECOMB,
+    Path,
+    RECOMB_PREFIX_LENGTH,
+    SEQUENCING_ORDER,
+    SKIP_CYCLES_MAP,
+    SKIP_CYCLES_RECOMB,
+    UNIPROT_DATA_FP,
+    mo,
+    get_barcode_list,
+    get_uniprot_data,
+    pd,
+    standardize_barcode_design,
+):
+    # Get uniprot data and save it temporarily
+    uniprot_data = get_uniprot_data()
+    uniprot_data.to_csv(UNIPROT_DATA_FP, sep="\t", index=False)
+    uniprot_data = pd.read_csv(UNIPROT_DATA_FP, sep="\t")
+
+    # Read design table
+    print("Loading and standardizing barcode design table...")
+    df_design = pd.read_csv(DF_DESIGN_FP, sep="\t")
+
+    # Call standardize_barcode_design with mode-specific parameters
+    if BARCODE_TYPE == "simple":
+        # Simple mode: use barcode_col and prefix_length (legacy parameter names)
+        df_barcode_library = standardize_barcode_design(
+            df_design,
+            prefix_map=BARCODE_COL,  # In simple mode, this is the barcode column
+            gene_symbol_col=GENE_SYMBOL_COL,
+            gene_id_col=GENE_ID_COL,
+            map_prefix_length=PREFIX_LENGTH,  # In simple mode, this is the prefix length
+            skip_cycles_map=SKIP_CYCLES_MAP,  # Pass skip_cycles for simple mode
+            uniprot_data_path=UNIPROT_DATA_FP,
+            nontargeting_format=NONTARGETING_FORMAT,
+            nontargeting_patterns=NONTARGETING_PATTERNS,
+        )
+    
+    elif BARCODE_TYPE == "multi":
+        # Multi mode: use prefix_map, prefix_recomb, and region-specific lengths
+        df_barcode_library = standardize_barcode_design(
+            df_design,
+            prefix_map=PREFIX_MAP,
+            prefix_recomb=PREFIX_RECOMB,
+            gene_symbol_col=GENE_SYMBOL_COL,
+            gene_id_col=GENE_ID_COL,
+            map_prefix_length=MAP_PREFIX_LENGTH,
+            recomb_prefix_length=RECOMB_PREFIX_LENGTH,
+            skip_cycles_map=SKIP_CYCLES_MAP,
+            skip_cycles_recomb=SKIP_CYCLES_RECOMB,
+            uniprot_data_path=UNIPROT_DATA_FP,
+            nontargeting_format=NONTARGETING_FORMAT,
+            nontargeting_patterns=NONTARGETING_PATTERNS,
+        )
+
+    # Delete uniprot data file
+    Path(UNIPROT_DATA_FP).unlink(missing_ok=True)
+
+    # Save standardized design table
+    df_barcode_library.to_csv(DF_BARCODE_LIBRARY_FP, sep="\t", index=False)
+    print(f"Standardized barcode design saved to: {DF_BARCODE_LIBRARY_FP}")
+    mo.ui.table(df_barcode_library)
+
+    # Extract barcodes (prefixes) for mapping - conditional based on barcode type
+    if BARCODE_TYPE == "multi":
+        barcodes = get_barcode_list(df_barcode_library, sequencing_order=SEQUENCING_ORDER)
+    else:
+        barcodes = get_barcode_list(df_barcode_library)
+    
+    print(f"Extracted {len(barcodes)} barcode prefixes for read mapping")
+    return barcodes, df_barcode_library
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## <font color='red'>SET PARAMETERS</font>
+
+    ### Extract base intensity, call reads, assign to cells
+    - `THRESHOLD_READS`: Initial threshold for detecting sequencing reads, set to ~50 for preliminary analysis. This parameter will be optimized based on the mapping rate vs. peak threshold plot generated below. A higher threshold increases confidence in read calls but reduces the total number of detected reads.
+    - `CALL_READS_METHOD`: Method to use for correcting base intensity across channels. The below `plot_normalization_comparison` function will help you assess what method to use. Options are:
+        - `MEDIAN`: Uses median-based correction, performed independently for each tile. This is the default method.
+        - `PERCENTILE`: Uses percentile-based correction, performed independently for each tile.
+    """)
+    return
+
+
+@app.cell
+def _():
+    # === OPERATOR PARAMETERS ===
+    THRESHOLD_READS = 50                 # library default; raise to be stricter
+    CALL_READS_METHOD = "median"         # "median" | "max"
+    # === END OPERATOR PARAMETERS ===
+    return CALL_READS_METHOD, THRESHOLD_READS
+
+
+@app.cell
+def _(
+    BASES,
+    CALL_READS_METHOD,
+    SEGMENT_CELLS,
+    THRESHOLD_READS,
+    WILDCARDS,
+    call_reads,
+    cells,
+    extract_bases,
+    maxed,
+    nuclei,
+    peaks,
+):
+    # Run extract_bases and call_reads with the default threshold
+    df_bases = extract_bases(
+        peaks, maxed, cells if SEGMENT_CELLS else nuclei, THRESHOLD_READS, wildcards=WILDCARDS, bases=BASES
+    )
+    df_reads = call_reads(df_bases, peaks_data=peaks, method=CALL_READS_METHOD)
+    return (df_reads,)
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ### Determine Optimal Read Threshold
+
+    **These plots show READ-LEVEL metrics** (not final cell-level mapping):
+    - **Blue line**: Fraction of reads matching expected barcodes
+    - **Orange solid**: Total reads with valid barcodes
+    - **Orange dotted**: Unique cells with ≥1 valid barcode (not necessarily singlets)
+
+    Use these to set `THRESHOLD_READS` to maximize clean reads. Final cell-level QC comes later.
+    """)
+    return
+
+
+@app.cell
+def _(barcodes, df_reads, plot_mapping_vs_threshold, plt):
+    print("Mapping rate vs. peak threshold for determining optimal peak cutoff:")
+    plot_mapping_vs_threshold(df_reads, barcodes, "peak")
+    plt.show()
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    **How to read these plots:**
+    - **Left**: All reads (including background noise)
+    - **Right**: Cell-associated reads only (cell > 0)
+
+    **Goal**: Find threshold where mapping rate plateaus (~70-80%) while retaining enough reads/cells for analysis.
+
+    **Note**: High read mapping ≠ high cell mapping. Many reads might cluster in few cells, or cells might have mixed barcodes. See cell-level QC below for final mapping quality.
+    """)
+    return
+
+
+@app.cell
+def _():
+    THRESHOLD_READS_1 = None
+    return (THRESHOLD_READS_1,)
+
+
+@app.cell
+def _(
+    BASES,
+    SEGMENT_CELLS,
+    THRESHOLD_READS_1,
+    WILDCARDS,
+    cells,
+    mo,
+    extract_bases,
+    maxed,
+    nuclei,
+    peaks,
+    plot_normalization_comparison,
+    plt,
+    sns,
+):
+    # Re-run extract_bases and call_reads with the new threshold
+    print('Extracted bases:')
+    df_bases_1 = extract_bases(peaks, maxed, cells if SEGMENT_CELLS else nuclei, THRESHOLD_READS_1, wildcards=WILDCARDS, bases=BASES)
+    mo.ui.table(df_bases_1)
+    print('Base intensity across cycles:')
+    ax = sns.pointplot(x='cycle', y='intensity', hue='channel', data=df_bases_1)
+    plt.show()
+    print('Intensity for each base:')
+    ax = sns.boxplot(x='channel', y='intensity', hue='channel', data=df_bases_1, showfliers=False)
+    plt.show()
+    print('Different normalization methods')
+    plot_normalization_comparison(df_bases_1, base_order=BASES)
+    return (df_bases_1,)
+
+
+@app.cell
+def _(
+    BARCODE_TYPE,
+    SEQUENCING_ORDER,
+    call_reads,
+    df_barcode_library,
+    df_bases_1,
+    mo,
+    peaks,
+    plot_barcode_prefix_matching,
+    plt,
+):
+    print('Called reads:')
+    df_reads_1 = call_reads(df_bases_1, peaks_data=peaks)
+    mo.ui.table(df_reads_1)
+    print('Barcode prefix matching (actual vs random):')
+    if BARCODE_TYPE == 'simple':
+    # Use appropriate library column and parameters based on barcode type
+        _, _ = plot_barcode_prefix_matching(df_reads_1, df_barcode_library, library_col='prefix')
+    else:
+        _, _ = plot_barcode_prefix_matching(df_reads_1, df_barcode_library, library_col='prefix_map', library_col_recomb='prefix_recomb', sequencing_order=SEQUENCING_ORDER)
+    plt.show()  # Default column from standardize_barcode_design  # Multi-mode: include recombination column and sequencing order  # Note: standardize_barcode_design always outputs "prefix_map" and "prefix_recomb" columns
+    return (df_reads_1,)
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## <font color='red'>SET PARAMETERS</font>
+
+    ### Read Prioritization Method: Peak vs. Count
+
+    The `SORT_CALLS` parameter determines how barcodes are prioritized when assigning reads to cells. This choice depends on your sequencing protocol:
+
+    **Count Prioritization (`SORT_CALLS = "count"`):**
+    - Prioritizes barcodes based on the **number of spots** detected per cell
+    - **Recommended for mRNA barcode protocols** (e.g., IVT-based perturbations)
+    - Why: mRNA barcodes produce multiple spots per cell, so more spots = more confident call
+    - Best for protocols where barcode signal is distributed throughout the cell
+
+    **Peak Prioritization (`SORT_CALLS = "peak"`):**
+    - Prioritizes barcodes based on the **peak intensity** of spots
+    - **Recommended for DNA barcode protocols** (e.g., Zombie, T7 amplification)
+    - Why: DNA barcodes typically produce a singular, bright spot per cell
+    - Best for protocols with focused, high-intensity signal
+
+    **Default**: `"count"` is the default and works well for most applications.
+
+    ### Read Mapping Parameters
+
+    **Common to both barcode modes:**
+    - `Q_MIN`: Minimum quality score for base reads (default: 0)
+    - `ERROR_CORRECT`: Enable read error correction (default: False)
+    - `SORT_CALLS`: Method for prioritizing barcodes - 'count' for mRNA protocols, 'peak' for DNA protocols
+    - `MAX_DISTANCE`: Maximum edit distance for barcode matching (optional)
+
+    **Simple mode specific:**
+    - `BARCODE_COL`: Column in barcode library with full sequences (defined upstream in the barcode design cell)
+    - `PREFIX_COL`: standardize_barcode_design output column for prefixes (default `"prefix"`)
+    - `N_BARCODES`: Number of ranked barcodes to store per cell (default 2)
+
+    **Multi mode specific:**
+    - `MAP_START`, `MAP_END`: Cycle positions defining MAP region for first barcode
+    - `RECOMB_START`, `RECOMB_END`: Cycle positions defining RECOMB region
+    - `PREFIX_MAP`, `PREFIX_RECOMB`: standardize_barcode_design output column names (defaults `"prefix_map"`, `"prefix_recomb"`)
+
+    **Recombination Quality Filtering (Multi-mode only):**
+    - `RECOMB_FILTER_COL`: Quality column in the reads data to use for filtering recombination calls. Set to `"Q_recomb"` to filter based on the minimum quality score across recombination cycles (computed by `prep_multi_reads`). Set to `None` to disable quality filtering.
+    - `RECOMB_Q_THRESH`: Quality score threshold for accepting recombination barcode calls. Reads with `RECOMB_FILTER_COL` below this threshold will have their recombination status set to undetermined. Default is 0.1.
+
+    **Note**: The output will include `no_recomb_0` and `no_recomb_1` columns indicating whether each cell's barcodes show recombination (True = no recombination detected, barcodes match library expectations).
+
+    The Q_min plot below helps determine optimal sequence quality cutoff:
+    """)
+    return
+
+
+@app.cell
+def _(barcodes, df_reads_1, plot_mapping_vs_threshold, plt):
+    print('Mapping rate vs. Q_min for determining optimal sequence quality cutoff:')
+    plot_mapping_vs_threshold(df_reads_1, barcodes, 'Q_min')
+    plt.show()
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    #### Left Plot (All Reads):
+    - Shows how Q_min threshold affects all detected reads
+    - Blue line: Mapping rate (fraction of reads matching expected barcodes)
+    - Solid red line: Total number of mapped spots (reads with valid barcodes)
+    - Dotted red line: Number of unique cells with at least one mapped read
+
+    #### Right Plot (Cell-Associated Reads Only):
+    - Shows the same metrics but only for reads associated with cells
+
+    #### Interpreting Q_min Results:
+    With our optimized peak threshold, these plots confirm that adjusting Q_min provides little benefit:
+    - The mapping rate (blue line) is already very high at Q_min = 0
+    - Increasing Q_min only marginally improves mapping rate
+    - However, this comes at a significant cost:
+      - Total mapped spots and mapped cells decreases substantially
+    - The small gain in mapping rate doesn't justify the large loss of data
+    """)
+    return
+
+
+@app.cell
+def _():
+    # === OPERATOR PARAMETERS ===
+    Q_MIN = 0                            # library default
+    ERROR_CORRECT = False
+    SORT_CALLS = 'count'                 # "count" | "peak"
+    MAX_DISTANCE = None                  # max edit distance for barcode matching
+    # Multi-mode cycle positions (only used when BARCODE_TYPE == "multi")
+    MAP_START = None                     # e.g., 0
+    MAP_END = None                       # e.g., 5
+    RECOMB_START = None                  # e.g., 6
+    RECOMB_END = None                    # e.g., 11
+    BARCODE_INFO_COLS = None             # optional additional barcode info cols
+    # === END OPERATOR PARAMETERS ===
+
+    # Library defaults (auto bucket)
+    N_BARCODES = 2                       # number of ranked barcodes to store per cell
+    PREFIX_COL = "prefix"                # simple mode: standardize_barcode_design output col
+    PREFIX_MAP = "prefix_map"            # multi mode: MAP region output col
+    PREFIX_RECOMB = "prefix_recomb"      # multi mode: RECOMB region output col
+    RECOMB_FILTER_COL = "Q_recomb"       # multi mode: quality col for recomb filtering
+    RECOMB_Q_THRESH = 0.1                # multi mode: quality threshold for recomb calls
+    return (
+        BARCODE_INFO_COLS,
+        ERROR_CORRECT,
+        MAP_END,
+        MAP_START,
+        MAX_DISTANCE,
+        N_BARCODES,
+        PREFIX_COL,
+        PREFIX_MAP,
+        PREFIX_RECOMB,
+        Q_MIN,
+        RECOMB_END,
+        RECOMB_FILTER_COL,
+        RECOMB_Q_THRESH,
+        RECOMB_START,
+        SORT_CALLS,
+    )
+
+
+@app.cell
+def _(BARCODE_TYPE, ERROR_CORRECT, MAX_DISTANCE, PREFIX_COL, df_barcode_library):
+    if ERROR_CORRECT:
+        import math
+        d = MAX_DISTANCE if MAX_DISTANCE is not None else 1
+        prefix_col_to_use = PREFIX_COL if BARCODE_TYPE == "simple" else "prefix_map"
+        prefix_length = len(df_barcode_library[prefix_col_to_use].dropna().iloc[0])
+        recommended_d = prefix_length - math.ceil(math.log(len(df_barcode_library), 4))
+
+        if recommended_d <= 0:
+            print("WARNING: Error correction not recommended — library too complex relative to cycles sequenced.")
+        elif d > recommended_d:
+            print(f"WARNING: MAX_DISTANCE={d} may be too aggressive. Recommended max edit distance: {recommended_d}.")
+        else:
+            print(f"Error correction parameters look appropriate (recommended max edit distance: {recommended_d}).")
+    return
+
+
+@app.cell
+def _(
+    BARCODE_COL,
+    BARCODE_INFO_COLS,
+    BARCODE_TYPE,
+    ERROR_CORRECT,
+    MAP_END,
+    MAP_START,
+    MAX_DISTANCE,
+    N_BARCODES,
+    PREFIX_COL,
+    PREFIX_MAP,
+    PREFIX_RECOMB,
+    Q_MIN,
+    RECOMB_END,
+    RECOMB_FILTER_COL,
+    RECOMB_Q_THRESH,
+    RECOMB_START,
+    SORT_CALLS,
+    WILDCARDS,
+    barcodes,
+    call_cells,
+    df_barcode_library,
+    df_reads_1,
+    mo,
+    extract_phenotype_minimal,
+    nuclei,
+    plot_cell_mapping_heatmap,
+    plot_cell_metric_histogram,
+    plot_gene_symbol_histogram,
+    plt,
+):
+    print('Calling cells with barcode mapping...')
+    if BARCODE_TYPE == 'simple':
+        df_cells = call_cells(df_reads_1, df_barcode_library=df_barcode_library, q_min=Q_MIN, barcode_col=BARCODE_COL, prefix_col=PREFIX_COL, error_correct=ERROR_CORRECT, sort_calls=SORT_CALLS, max_distance=MAX_DISTANCE, n_barcodes=N_BARCODES)
+    elif BARCODE_TYPE == 'multi':
+        from lib.sbs.call_cells import prep_multi_reads
+        print('Preparing multi-barcode reads...')
+        df_reads_prepped = prep_multi_reads(df_reads_1, map_start=MAP_START, map_end=MAP_END, recomb_start=RECOMB_START, recomb_end=RECOMB_END, prefix_map=PREFIX_MAP, prefix_recomb=PREFIX_RECOMB)
+        print('Calling cells with multi-barcode detection...')
+        df_cells = call_cells(reads_data=df_reads_prepped, df_barcode_library=df_barcode_library, q_min=Q_MIN, map_start=MAP_START, map_end=MAP_END, prefix_map=PREFIX_MAP, recomb_start=RECOMB_START, recomb_end=RECOMB_END, prefix_recomb=PREFIX_RECOMB, recomb_filter_col=RECOMB_FILTER_COL, recomb_q_thresh=RECOMB_Q_THRESH, error_correct=ERROR_CORRECT, sort_calls=SORT_CALLS, max_distance=MAX_DISTANCE, n_barcodes=N_BARCODES, barcode_info_cols=BARCODE_INFO_COLS)
+    print(f'Called {len(df_cells)} cells using {BARCODE_TYPE} mode')
+    mo.ui.table(df_cells)
+    if BARCODE_TYPE == 'multi':
+        total_mapped_cells = len(df_cells)
+        if 'no_recomb_0' in df_cells.columns:
+            cells_no_recomb = df_cells['no_recomb_0'].sum()
+            no_recomb_percent = cells_no_recomb / total_mapped_cells * 100 if total_mapped_cells > 0 else 0
+            print(f'\nRecombination Statistics:')  # Multi mode: prep reads first, then call cells
+            print(f'  Total mapped cells: {total_mapped_cells}')
+            print(f'  Cells with no recombination detected: {cells_no_recomb} ({no_recomb_percent:.1f}%)')
+    print('Minimal phenotype features:')
+    df_sbs_info = extract_phenotype_minimal(phenotype_data=nuclei, nuclei_data=nuclei, wildcards=WILDCARDS)
+    mo.ui.table(df_sbs_info)
+    print('Summary of the fraction of cells mapping to one barcode:')
+    one_barcode_mapping = plot_cell_mapping_heatmap(df_cells, df_sbs_info, barcodes, mapping_to='one', mapping_strategy='gene symbols', return_plot=False, return_summary=True)
+    mo.ui.table(one_barcode_mapping)
+    print('Summary of the fraction of cells mapping to any barcode:')
+    any_barcode_mapping = plot_cell_mapping_heatmap(df_cells, df_sbs_info, barcodes, mapping_to='any', mapping_strategy='gene symbols', return_plot=False, return_summary=True)
+    mo.ui.table(any_barcode_mapping)
+    print('Histogram of the number of reads per cell:')
+    outliers = plot_cell_metric_histogram(df_cells, sort_by=SORT_CALLS)
+    plt.show()
+    print('Histogram of the number of counts of each unique gene symbols:')
+    outliers = plot_gene_symbol_histogram(df_cells)
+    # Show recombination statistics for multi-mode
+    plt.show()  # Count cells where no_recomb_0 = True (no recombination detected)
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## Automated Parameter Optimization (Optional)
+
+    This section provides an automated way to optimize SBS parameters by testing multiple parameter combinations and evaluating their performance. This is particularly useful when you're unsure about the optimal values for `PEAK_WIDTH` and `THRESHOLD_READS`.
+
+    **How it works:**
+    1. Define a grid of parameters to test (e.g., different peak widths and threshold values)
+    2. For each combination, the full SBS pipeline is run automatically
+    3. Results are evaluated using a metric function
+    4. Multi-panel visualizations show the primary optimization metric alongside secondary metrics to help you understand trade-offs
+    5. After identifying optimal parameters, subset the results and re-evaluate with detailed plots
+
+    **Available metrics:**
+    - `metric_specificity`: (Recommended) Ratio of cells with exactly one barcode to cells with any barcode. Higher is better (1.0 = perfect, all mapped cells have exactly one barcode).
+    - `metric_one_barcode_fraction`: Fraction of all cells that map to exactly one barcode. Useful when maximizing total mapped cells is a priority.
+    - `metric_any_barcode_fraction`: Fraction of all cells that map to any barcode (one or more). Useful for understanding overall mapping coverage.
+
+    **Note:** This can take several minutes depending on the number of combinations tested. Start with a small grid for initial exploration.
+    """)
+    return
+
+
+@app.cell
+def _():
+    # # Uncomment to run automated parameter search
+
+    # from lib.sbs.automated_parameter_search import (
+    #     automated_parameter_search,
+    #     visualize_parameter_results,
+    #     get_best_parameters,
+    #     metric_one_barcode_fraction,
+    #     metric_any_barcode_fraction,
+    #     metric_specificity,
+    # )
+
+    # # Define parameter grid to test
+    # # This is the primary input you'll customize for your analysis
+    # param_grid = {
+    #     'peak_width': [5, 10, 15, 20],           # Test different peak detection widths
+    #     'threshold_reads': [50, 100, 150, 200],  # Test different intensity thresholds
+    # }
+    return
+
+
+@app.cell
+def _():
+    # # Select optimization metric
+    # # metric_specificity is recommended as it balances quality (one barcode per cell) with coverage
+    # OPTIMIZATION_METRIC = metric_specificity
+
+    # # Define parameters that stay constant across all tests
+    # fixed_params = {
+    #     'max_filter_width': MAX_FILTER_WIDTH,
+    #     'call_reads_method': CALL_READS_METHOD,
+    #     'q_min': Q_MIN,
+    #     'error_correct': ERROR_CORRECT,
+    #     'sort_calls': SORT_CALLS,
+    # }
+
+    # # Add mode-specific parameters to fixed_params
+    # if BARCODE_TYPE == "simple":
+    #     fixed_params.update({
+    #         'barcode_col': BARCODE_COL,
+    #         'prefix_col': PREFIX_COL,
+    #     })
+    #     if MAX_DISTANCE is not None:
+    #         fixed_params['max_distance'] = MAX_DISTANCE
+        
+    # elif BARCODE_TYPE == "multi":
+    #     fixed_params.update({
+    #         'map_start': MAP_START,
+    #         'map_end': MAP_END,
+    #         'map_col': MAP_COL,
+    #         'recomb_start': RECOMB_START,
+    #         'recomb_end': RECOMB_END,
+    #         'recomb_col': RECOMB_COL,
+    #         'recomb_filter_col': RECOMB_FILTER_COL,
+    #         'recomb_q_thresh': RECOMB_Q_THRESH,
+    #     })
+    #     if MAX_DISTANCE is not None:
+    #         fixed_params['max_distance'] = MAX_DISTANCE
+    #     if BARCODE_INFO_COLS is not None:
+    #         fixed_params['barcode_info_cols'] = BARCODE_INFO_COLS
+    return
+
+
+@app.cell
+def _():
+    # # Run automated parameter search and evaluation
+    # print(f"Testing {len(param_grid['peak_width']) * len(param_grid['threshold_reads'])} parameter combinations...")
+    # results_df, df_cells_all = automated_parameter_search(
+    #     aligned_images=aligned,
+    #     mask=cells if SEGMENT_CELLS else nuclei,  # Use 'cells' if spots are in cell bodies, 'nuclei' if spots are nuclear
+    #     barcodes=barcodes,
+    #     df_barcode_library=df_barcode_library,
+    #     wildcards=WILDCARDS,
+    #     bases=BASES,
+    #     extra_channel_indices=EXTRA_CHANNEL_INDICES,
+    #     param_grid=param_grid,
+    #     fixed_params=fixed_params,
+    #     metric_fn=OPTIMIZATION_METRIC,
+    #     barcode_type=BARCODE_TYPE,  # Pass the barcode type
+    #     verbose=True
+    # )
+
+    # # Visualize results with multiple metrics
+    # # This will show the primary metric (specificity) plus secondary metrics
+    # # (one-barcode mapping, any-barcode mapping) to understand trade-offs
+    # visualize_parameter_results(
+    #     results_df, 
+    #     df_cells=df_cells_all,  # Pass df_cells_all to compute secondary metrics
+    #     metric_name='metric_score',
+    #     show_secondary_metrics=True  # Show multiple metric panels
+    # )
+
+    # # Get best parameters based on the optimization metric
+    # best_params = get_best_parameters(results_df, metric_name='metric_score', maximize=True)
+
+    # # Subset df_cells_all to the best parameter combination for detailed evaluation
+    # print("\n" + "="*60)
+    # print("Evaluating best parameter combination in detail")
+    # print("="*60)
+    # df_cells_best = df_cells_all[
+    #     (df_cells_all['peak_width'] == best_params['peak_width']) &
+    #     (df_cells_all['threshold_reads'] == best_params['threshold_reads'])
+    # ].copy()
+
+    # # Remove parameter tracking columns for cleaner display
+    # df_cells_best = df_cells_best.drop(columns=['peak_width', 'threshold_reads'], errors='ignore')
+
+    # print(f"\nBest parameters produce {len(df_cells_best)} called cells")
+    # display(df_cells_best)
+
+    # # Re-run all evaluation plots with the best parameter set
+    # print("\nSummary of the fraction of cells mapping to one barcode:")
+    # one_barcode_mapping_best = plot_cell_mapping_heatmap(
+    #     df_cells_best,
+    #     df_sbs_info,
+    #     barcodes,
+    #     mapping_to="one",
+    #     mapping_strategy="gene symbols",
+    #     shape="6W_sbs",
+    #     return_plot=False,
+    #     return_summary=True,
+    # )
+    # display(one_barcode_mapping_best)
+
+    # print("\nSummary of the fraction of cells mapping to any barcode:")
+    # any_barcode_mapping_best = plot_cell_mapping_heatmap(
+    #     df_cells_best,
+    #     df_sbs_info,
+    #     barcodes,
+    #     mapping_to="any",
+    #     mapping_strategy="gene symbols",
+    #     shape="6W_sbs",
+    #     return_plot=False,
+    #     return_summary=True,
+    # )
+    # display(any_barcode_mapping_best)
+
+    # print("\nHistogram of the number of reads per cell:")
+    # outliers_best = plot_cell_metric_histogram(df_cells_best, sort_by=SORT_CALLS)
+    # plt.show()
+
+    # print("\nHistogram of the number of counts of each unique gene symbols:")
+    # outliers_best = plot_gene_symbol_histogram(df_cells_best)
+    # plt.show()
+
+    # # Optionally: Update your parameters with the best values for use in the config
+    # # PEAK_WIDTH = int(best_params['peak_width'])
+    # # THRESHOLD_READS = int(best_params['threshold_reads'])
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## Add sbs process parameters to config file
+    """)
+    return
+
+
+@app.cell
+def _(
+    ALIGNMENT_METHOD,
+    BARCODE_COL,
+    BARCODE_INFO_COLS,
+    BARCODE_TYPE,
+    BASES,
+    CALL_READS_METHOD,
+    CELLPOSE_MODEL,
+    CELL_CELLPROB_THRESHOLD,
+    CELL_DIAMETER_1,
+    CELL_FLOW_THRESHOLD,
+    CELL_NMS_THRESHOLD,
+    CELL_PROB_THRESHOLD,
+    CHANNEL_NAMES,
+    CONFIG_FILE_HEADER,
+    CONFIG_FILE_PATH,
+    CYTO_CYCLE,
+    CYTO_CYCLE_INDEX,
+    CYTO_INDEX,
+    DAPI_CYCLE,
+    DAPI_CYCLE_INDEX,
+    DAPI_INDEX,
+    DF_BARCODE_LIBRARY_FP,
+    ERROR_CORRECT,
+    EXTRA_CHANNEL_INDICES,
+    GPU,
+    HELPER_INDEX,
+    MANUAL_BACKGROUND_CYCLE_INDEX,
+    MANUAL_CHANNEL_MAPPING,
+    MAP_END,
+    MAP_START,
+    MAX_DISTANCE,
+    MAX_FILTER_WIDTH,
+    N_BARCODES,
+    NUCLEI_CELLPROB_THRESHOLD,
+    NUCLEI_DIAMETER_1,
+    NUCLEI_FLOW_THRESHOLD,
+    NUCLEI_NMS_THRESHOLD,
+    NUCLEI_PROB_THRESHOLD,
+    NUCLEUS_AREA,
+    PEAK_WIDTH,
+    PREFIX_COL,
+    PREFIX_MAP,
+    PREFIX_RECOMB,
+    Q_MIN,
+    RECOMB_END,
+    RECOMB_FILTER_COL,
+    RECOMB_Q_THRESH,
+    RECOMB_START,
+    RECONCILE,
+    SEGMENTATION_METHOD,
+    SEGMENT_CELLS,
+    SKIP_CYCLES_INDICES,
+    SORT_CALLS,
+    SPOTIFLOW_CYCLE_INDEX,
+    SPOTIFLOW_MIN_DISTANCE,
+    SPOTIFLOW_MODEL,
+    SPOTIFLOW_THRESHOLD,
+    SPOT_DETECTION_METHOD,
+    STARDIST_MODEL,
+    THRESHOLD_CELL,
+    THRESHOLD_DAPI,
+    THRESHOLD_READS_1,
+    UPSAMPLE_FACTOR,
+    WINDOW,
+    config,
+    convert_tuples_to_lists,
+    yaml,
+):
+    config['sbs'] = {'alignment_method': ALIGNMENT_METHOD, 'channel_names': CHANNEL_NAMES, 'upsample_factor': UPSAMPLE_FACTOR, 'window': WINDOW, 'skip_cycles_indices': SKIP_CYCLES_INDICES, 'manual_background_cycle_index': MANUAL_BACKGROUND_CYCLE_INDEX, 'manual_channel_mapping': MANUAL_CHANNEL_MAPPING, 'extra_channel_indices': EXTRA_CHANNEL_INDICES, 'max_filter_width': MAX_FILTER_WIDTH, 'spot_detection_method': SPOT_DETECTION_METHOD, 'dapi_cycle': DAPI_CYCLE, 'dapi_cycle_index': DAPI_CYCLE_INDEX, 'cyto_cycle': CYTO_CYCLE, 'cyto_cycle_index': CYTO_CYCLE_INDEX, 'dapi_index': DAPI_INDEX, 'cyto_index': CYTO_INDEX, 'segmentation_method': SEGMENTATION_METHOD, 'gpu': GPU, 'reconcile': RECONCILE, 'segment_cells': SEGMENT_CELLS, 'df_barcode_library_fp': DF_BARCODE_LIBRARY_FP, 'threshold_peaks': THRESHOLD_READS_1, 'call_reads_method': CALL_READS_METHOD, 'bases': BASES, 'q_min': Q_MIN, 'error_correct': ERROR_CORRECT, 'sort_calls': SORT_CALLS, 'n_barcodes': N_BARCODES, 'barcode_type': BARCODE_TYPE}
+    if MAX_DISTANCE is not None:
+        config['sbs']['max_distance'] = MAX_DISTANCE
+    if BARCODE_TYPE == 'simple':
+        config['sbs'].update({'barcode_col': BARCODE_COL, 'prefix_col': PREFIX_COL})
+    elif BARCODE_TYPE == 'multi':
+        config['sbs'].update({'map_start': MAP_START, 'map_end': MAP_END, 'prefix_map': PREFIX_MAP, 'recomb_start': RECOMB_START, 'recomb_end': RECOMB_END, 'prefix_recomb': PREFIX_RECOMB})
+        if RECOMB_FILTER_COL is not None:
+            config['sbs']['recomb_filter_col'] = RECOMB_FILTER_COL
+        if RECOMB_Q_THRESH is not None:
+            config['sbs']['recomb_q_thresh'] = RECOMB_Q_THRESH
+        if BARCODE_INFO_COLS is not None:
+            config['sbs']['barcode_info_cols'] = BARCODE_INFO_COLS
+    if SPOT_DETECTION_METHOD == 'standard':
+        config['sbs'].update({'peak_width': PEAK_WIDTH})
+    elif SPOT_DETECTION_METHOD == 'spotiflow':
+        config['sbs'].update({'spotiflow_cycle_index': SPOTIFLOW_CYCLE_INDEX, 'spotiflow_model': SPOTIFLOW_MODEL, 'spotiflow_threshold': SPOTIFLOW_THRESHOLD, 'spotiflow_min_distance': SPOTIFLOW_MIN_DISTANCE, 'spotiflow_remove_index': EXTRA_CHANNEL_INDICES})
+    if SEGMENTATION_METHOD == 'cellpose':
+        config['sbs'].update({'nuclei_diameter': NUCLEI_DIAMETER_1, 'cell_diameter': CELL_DIAMETER_1, 'nuclei_flow_threshold': NUCLEI_FLOW_THRESHOLD, 'nuclei_cellprob_threshold': NUCLEI_CELLPROB_THRESHOLD, 'cell_flow_threshold': CELL_FLOW_THRESHOLD, 'cell_cellprob_threshold': CELL_CELLPROB_THRESHOLD, 'cellpose_model': CELLPOSE_MODEL})
+        if HELPER_INDEX is not None:
+            config['sbs']['helper_index'] = HELPER_INDEX
+    elif SEGMENTATION_METHOD == 'stardist':
+        config['sbs'].update({'stardist_model': STARDIST_MODEL, 'nuclei_prob_threshold': NUCLEI_PROB_THRESHOLD, 'nuclei_nms_threshold': NUCLEI_NMS_THRESHOLD, 'cell_prob_threshold': CELL_PROB_THRESHOLD, 'cell_nms_threshold': CELL_NMS_THRESHOLD})
+    elif SEGMENTATION_METHOD == 'watershed':
+        config['sbs'].update({'threshold_dapi': THRESHOLD_DAPI, 'nucleus_area_min': NUCLEUS_AREA[0], 'nucleus_area_max': NUCLEUS_AREA[1], 'threshold_cell': THRESHOLD_CELL})
+    safe_config = convert_tuples_to_lists(config)
+    with open(CONFIG_FILE_PATH, 'w') as _config_file:
+        _config_file.write(CONFIG_FILE_HEADER)
+        yaml.dump(safe_config, _config_file, default_flow_style=False, sort_keys=False)
+    return
 
 
 if __name__ == "__main__":

@@ -1,18 +1,13 @@
 # Screen Information
 experiment:
   id: "baker"  # Experiment identifier
-  notebook_entries: "MISSING"  # Links or references to lab notebook entries
-  dates: 
-    start: "MISSING"
-    end: "MISSING"
 
 # Cellular Conditions
 cellular:
   cell_line: "HeLa"
-  imaging_timepoint: "MISSING"
+  imaging_timepoint: "78 hours post-transfection"  # Timepoint
   treatment:
     summary: "400 pilot genes"
-    details: "MISSING"  # Detailed protocol or conditions
   plates: "1"  # Number of plates
   wells_per_plate: "6"  # Number of wells per plate
 
@@ -23,13 +18,11 @@ sbs:
   background_channel: "C, cycle 9"  # Suggested background channel
   library_details:
     number_of_genes: "400"
-    guides_per_gene: "MISSING"
     other_information: "Part of 400 pilot genes screening library"
 
 # Phenotype (PH) Steps
 phenotype:
   background_channel_cell: "WGA"  # For cell segmentation
-  background_channel_body: "MISSING"  # For body (e.g. parasite) segmentation
   
   # Rounds of staining/imaging (all stains in one round)
   rounds:
@@ -50,7 +43,7 @@ phenotype:
 
 # Data Generated
 data:
-  storage_format: "MISSING"  # e.g., .nd2, .tiff
-  location: "/archive/cheeseman/brieflow_screens/baker"  # Base path for data storage
-  
+  storage_format: "nd2"  # e.g., .nd2, .tiff
+  location: "/archive/cheeseman/ops_data/baker"  # Base path for data storage
+  conda-env: brieflow_zarr3_speed
   notes: "Part of 400 pilot genes screening library"

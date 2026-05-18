@@ -95,19 +95,117 @@ def add_arg_verbose_json(parser) -> None:
     )
 
 
-def load_manifest(manifest_path: Path) -> dict:
-    """Load the screen manifest YAML produced by brieflow-init."""
+def load_interview(interview_path: Path, notebook: str) -> tuple[dict, dict]:
+    """Read the screen's interview.json, filter to one notebook's rows.
+
+    Returns (interview, inputs):
+      - interview: the full interview dict (kept for write-back via write_interview_values)
+      - inputs:    flat dict mapping `param_name` → resolved value.
+
+    Resolution rule per row:
+      - If `value` is set (operator/auto-probe/tuned-confirmed/gen), use it.
+      - Else if bucket is `auto` or `override`, fall back to the parsed
+        `default` field from the CSV taxonomy (so e.g. `nuclei_flow_threshold`
+        gets 0.4 even when the operator didn't touch it).
+      - Else (bucket=user or tuned, with value=None): stays None. User-bucket
+        nulls become "required" errors; tuned-bucket nulls drive review_required.
+    """
+    with open(interview_path) as f:
+        interview = json.load(f)
+    inputs: dict = {}
+    for row in interview.get("params", []):
+        if row.get("notebook") != notebook:
+            continue
+        name = row["param_name"]
+        value = row.get("value")
+        if value is None and row.get("bucket") in ("auto", "override"):
+            value = _parse_csv_default(row.get("default"))
+        inputs[name] = value
+    return interview, inputs
+
+
+def _parse_csv_default(default_str):
+    """Parse the CSV `default` string into a Python value. Returns None for
+    sentinels that mean 'no literal default' (e.g. 'auto-derived', '—').
+    Handles numbers, bools, nulls, and simple list/dict literals via yaml."""
+    if default_str is None:
+        return None
+    s = str(default_str).strip()
+    if s == "" or s in ("—", "-", "auto-derived", "derived"):
+        return None
+    if s.lower() == "null":
+        return None
+    if s.lower() == "true":
+        return True
+    if s.lower() == "false":
+        return False
+    try:
+        import yaml
+        return yaml.safe_load(s)
+    except Exception:
+        return s
+
+
+def write_interview_values(
+    interview: dict,
+    interview_path: Path,
+    notebook: str,
+    updates: dict,
+    source: str = "gen",
+) -> None:
+    """Write back gen-derived values into interview.json (atomic).
+
+    `updates` maps param_name → value. For each param that exists in the
+    interview under the given notebook, sets `value`, `value_source`, and
+    `set_at`. Unknown param_names are silently skipped (the gen may compute
+    helper values that aren't in the taxonomy).
+    """
+    from datetime import datetime, timezone
+    import os
+
+    now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    updated = 0
+    for row in interview.get("params", []):
+        if row.get("notebook") != notebook:
+            continue
+        if row["param_name"] in updates:
+            row["value"] = updates[row["param_name"]]
+            row["value_source"] = source
+            row["set_at"] = now
+            updated += 1
+
+    tmp = interview_path.with_suffix(interview_path.suffix + ".tmp")
+    tmp.write_text(json.dumps(interview, indent=2) + "\n")
+    os.replace(tmp, interview_path)
+
+
+def write_config_section(config_path: Path, sections: dict) -> None:
+    """Merge `sections` into `config.yml` and atomic-write back.
+
+    `sections` is a dict of top-level config keys (e.g. {"all": {...},
+    "preprocess": {...}}) — each gen writes only the section(s) it owns; other
+    sections from prior gen runs are preserved. Last-write wins on key
+    conflicts within a section (so re-running a gen overwrites that section
+    cleanly).
+
+    This is what makes each gen self-sufficient: a standalone gen run produces
+    an in-place config.yml that's correct for that phase, and subsequent gens
+    layer their sections on top without clobbering.
+    """
+    import os
+
     import yaml
 
-    with open(manifest_path) as f:
-        return yaml.safe_load(f)
-
-
-def manifest_default(manifest: dict, *keys: str, default: Any = None) -> Any:
-    """Safely traverse a nested manifest dict; return default on any miss."""
-    cur: Any = manifest
-    for k in keys:
-        if not isinstance(cur, dict) or k not in cur:
-            return default
-        cur = cur[k]
-    return cur
+    existing: dict = {}
+    if config_path.exists():
+        with open(config_path) as f:
+            loaded = yaml.safe_load(f)
+            if isinstance(loaded, dict):
+                existing = loaded
+    for key, value in sections.items():
+        existing[key] = value
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = config_path.with_suffix(config_path.suffix + ".tmp")
+    with open(tmp, "w") as f:
+        yaml.safe_dump(existing, f, sort_keys=False, default_flow_style=False)
+    os.replace(tmp, config_path)
