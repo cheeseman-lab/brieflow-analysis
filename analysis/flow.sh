@@ -45,7 +45,7 @@ CONFIGFILE="config/config.yml"
 LOG_DIR="logs"
 SLURM_PROFILE="slurm/"
 SLURM_ARRAY_LIMIT=10
-LATENCY_WAIT=10
+LATENCY_WAIT=5
 MAX_STATUS_CHECKS=""
 
 # Rule groups per module (for slurm batching)
