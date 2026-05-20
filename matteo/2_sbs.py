@@ -429,8 +429,6 @@ def _(CHANNEL_NAMES, EXTRA_CHANNELS):
     # === OPERATOR PARAMETERS ===
     MAX_FILTER_WIDTH = 3              # library default
     SPOT_DETECTION_METHOD = "standard"   # "standard" | "spotiflow"
-    # === END OPERATOR PARAMETERS ===
-
     if SPOT_DETECTION_METHOD == "standard":
        PEAK_WIDTH = 5
 
@@ -439,6 +437,7 @@ def _(CHANNEL_NAMES, EXTRA_CHANNELS):
        SPOTIFLOW_MODEL = "general"
        SPOTIFLOW_THRESHOLD = 0.3
        SPOTIFLOW_MIN_DISTANCE = 1
+    # === END OPERATOR PARAMETERS ===
 
     # Derive extra channel indices
     EXTRA_CHANNEL_INDICES = [CHANNEL_NAMES.index(channel) for channel in EXTRA_CHANNELS]
@@ -713,33 +712,14 @@ def _(CYTO_INDEX, DAPI_INDEX, corrected_image):
     GPU = False
     RECONCILE = "contained_in_cells"
     SEGMENT_CELLS = True
-    # === END OPERATOR PARAMETERS ===
-
     if SEGMENTATION_METHOD == "cellpose":
         # Parameters for CellPose method
         CELLPOSE_MODEL = "cyto3"
         NUCLEI_FLOW_THRESHOLD = 0.4
         NUCLEI_CELLPROB_THRESHOLD = 0.0
-        CELL_FLOW_THRESHOLD = 1 
+        CELL_FLOW_THRESHOLD = 1
         CELL_CELLPROB_THRESHOLD = 0
         HELPER_INDEX = None  # Optional: channel index to help with CPSAM segmentation
-
-        # Only estimate diameters for non-CPSAM models
-        if CELLPOSE_MODEL != "cpsam":
-            from lib.shared.segment_cellpose import estimate_diameters
-            print("Estimating optimal cell and nuclei diameters...")
-            NUCLEI_DIAMETER, CELL_DIAMETER = estimate_diameters(
-                corrected_image,
-                dapi_index=DAPI_INDEX,
-                cyto_index=CYTO_INDEX,
-                cellpose_model=CELLPOSE_MODEL,
-            )
-        else:
-            print("CPSAM model selected. Initial diameters set to None.")
-            print("Note: Diameters will be estimated automatically from segmentation results in the next cell.")
-            NUCLEI_DIAMETER = None  # Will be estimated from segmentation
-            CELL_DIAMETER = None    # Will be estimated from segmentation
-
     elif SEGMENTATION_METHOD == "stardist":
         # Parameters for StarDist method
         STARDIST_MODEL = "2D_versatile_fluo"
@@ -747,23 +727,40 @@ def _(CYTO_INDEX, DAPI_INDEX, corrected_image):
         NUCLEI_NMS_THRESHOLD = 0.3
         CELL_PROB_THRESHOLD = 0.479071
         CELL_NMS_THRESHOLD = 0.3
-
     elif SEGMENTATION_METHOD == "watershed":
         # Parameters for Watershed method
-        THRESHOLD_DAPI = 4260 
+        THRESHOLD_DAPI = 4260
         THRESHOLD_CELL = 1300
         NUCLEUS_AREA = (45,450)
+    # === END OPERATOR PARAMETERS ===
+
+    # Estimate diameters (derivation; non-CPSAM cellpose only)
+    if SEGMENTATION_METHOD == "cellpose" and CELLPOSE_MODEL != "cpsam":
+        from lib.shared.segment_cellpose import estimate_diameters
+        print("Estimating optimal cell and nuclei diameters...")
+        NUCLEI_DIAMETER_INPUT, CELL_DIAMETER_INPUT = estimate_diameters(
+            corrected_image,
+            dapi_index=DAPI_INDEX,
+            cyto_index=CYTO_INDEX,
+            cellpose_model=CELLPOSE_MODEL,
+        )
+    else:
+        # CPSAM cellpose / stardist / watershed: diameter inputs not pre-estimated.
+        # CPSAM derives final diameters downstream from regionprops; stardist/watershed don't use these.
+        print("Diameter inputs set to None (derived downstream for CPSAM, unused for stardist/watershed).")
+        NUCLEI_DIAMETER_INPUT = None
+        CELL_DIAMETER_INPUT = None
     return (
         CELLPOSE_MODEL,
         CELL_CELLPROB_THRESHOLD,
-        CELL_DIAMETER,
+        CELL_DIAMETER_INPUT,
         CELL_FLOW_THRESHOLD,
         CELL_NMS_THRESHOLD,
         CELL_PROB_THRESHOLD,
         GPU,
         HELPER_INDEX,
         NUCLEI_CELLPROB_THRESHOLD,
-        NUCLEI_DIAMETER,
+        NUCLEI_DIAMETER_INPUT,
         NUCLEI_FLOW_THRESHOLD,
         NUCLEI_NMS_THRESHOLD,
         NUCLEI_PROB_THRESHOLD,
@@ -781,7 +778,7 @@ def _(CYTO_INDEX, DAPI_INDEX, corrected_image):
 def _(
     CELLPOSE_MODEL,
     CELL_CELLPROB_THRESHOLD,
-    CELL_DIAMETER,
+    CELL_DIAMETER_INPUT,
     CELL_FLOW_THRESHOLD,
     CELL_NMS_THRESHOLD,
     CELL_PROB_THRESHOLD,
@@ -791,7 +788,7 @@ def _(
     HELPER_INDEX,
     Microimage,
     NUCLEI_CELLPROB_THRESHOLD,
-    NUCLEI_DIAMETER,
+    NUCLEI_DIAMETER_INPUT,
     NUCLEI_FLOW_THRESHOLD,
     NUCLEI_NMS_THRESHOLD,
     NUCLEI_PROB_THRESHOLD,
@@ -813,7 +810,7 @@ def _(
     print(f'Segmenting image with {SEGMENTATION_METHOD}...')
     if SEGMENTATION_METHOD == 'cellpose':
         from lib.shared.segment_cellpose import segment_cellpose
-        result = segment_cellpose(corrected_image, dapi_index=DAPI_INDEX, cyto_index=CYTO_INDEX, nuclei_diameter=NUCLEI_DIAMETER, cell_diameter=CELL_DIAMETER, cellpose_kwargs=dict(nuclei_flow_threshold=NUCLEI_FLOW_THRESHOLD, nuclei_cellprob_threshold=NUCLEI_CELLPROB_THRESHOLD, cell_flow_threshold=CELL_FLOW_THRESHOLD, cell_cellprob_threshold=CELL_CELLPROB_THRESHOLD), cellpose_model=CELLPOSE_MODEL, helper_index=HELPER_INDEX, gpu=GPU, reconcile=RECONCILE, cells=SEGMENT_CELLS)
+        result = segment_cellpose(corrected_image, dapi_index=DAPI_INDEX, cyto_index=CYTO_INDEX, nuclei_diameter=NUCLEI_DIAMETER_INPUT, cell_diameter=CELL_DIAMETER_INPUT, cellpose_kwargs=dict(nuclei_flow_threshold=NUCLEI_FLOW_THRESHOLD, nuclei_cellprob_threshold=NUCLEI_CELLPROB_THRESHOLD, cell_flow_threshold=CELL_FLOW_THRESHOLD, cell_cellprob_threshold=CELL_CELLPROB_THRESHOLD), cellpose_model=CELLPOSE_MODEL, helper_index=HELPER_INDEX, gpu=GPU, reconcile=RECONCILE, cells=SEGMENT_CELLS)
     elif SEGMENTATION_METHOD == 'stardist':
         from lib.shared.segment_stardist import segment_stardist
         result = segment_stardist(corrected_image, dapi_index=DAPI_INDEX, cyto_index=CYTO_INDEX, model_type=STARDIST_MODEL, stardist_kwargs=dict(nuclei_prob_threshold=NUCLEI_PROB_THRESHOLD, nuclei_nms_threshold=NUCLEI_NMS_THRESHOLD, cell_prob_threshold=CELL_PROB_THRESHOLD, cell_nms_threshold=CELL_NMS_THRESHOLD), gpu=GPU, reconcile=RECONCILE, cells=SEGMENT_CELLS)
@@ -840,25 +837,24 @@ def _(
     annotated_microimage = [Microimage(annotated_data, channel_names='Merged', cmaps=['pure_blue', 'pure_red', 'pure_green'])]
     annotated_panel = create_micropanel(annotated_microimage, num_cols=1, figscaling=10, add_channel_label=False)
     plt.show()
+    # Final diameters that go to config.yml. For CPSAM, derive from segmented
+    # objects (regionprops); for non-CPSAM cellpose, pass through the pre-seg
+    # estimate; for stardist/watershed, None (unused by those methods).
     if SEGMENTATION_METHOD == 'cellpose' and CELLPOSE_MODEL == 'cpsam':
         from skimage.measure import regionprops
         nuclei_props = regionprops(nuclei)
         nuclei_diameters = [prop.equivalent_diameter for prop in nuclei_props]
-        estimated_nuclei_diameter = np.mean(nuclei_diameters)
-        print(f'Nuclei - Average diameter: {estimated_nuclei_diameter:.2f} pixels')
+        NUCLEI_DIAMETER = float(np.mean(nuclei_diameters))
         cells_props = regionprops(cells)
         cells_diameters = [prop.equivalent_diameter for prop in cells_props]
-        estimated_cell_diameter = np.mean(cells_diameters)
-        print(f'Cells - Average diameter: {estimated_cell_diameter:.2f} pixels')
-        NUCLEI_DIAMETER_1 = estimated_nuclei_diameter
-        CELL_DIAMETER_1 = estimated_cell_diameter
-        print(f'\nUpdated NUCLEI_DIAMETER to {NUCLEI_DIAMETER_1:.2f} pixels')
-        print(f'Updated CELL_DIAMETER to {CELL_DIAMETER_1:.2f} pixels')
+        CELL_DIAMETER = float(np.mean(cells_diameters))
+        print(f'CPSAM derived diameters from segmentation: NUCLEI_DIAMETER={NUCLEI_DIAMETER:.2f} px, CELL_DIAMETER={CELL_DIAMETER:.2f} px')
     else:
-        # Non-cpsam path: reuse the up-front estimate_diameters seeds so downstream cells + config writer have bound values.
-        NUCLEI_DIAMETER_1 = NUCLEI_DIAMETER
-        CELL_DIAMETER_1 = CELL_DIAMETER
-    return CELL_DIAMETER_1, NUCLEI_DIAMETER_1, cells, nuclei
+        # Non-CPSAM cellpose / stardist / watershed: pass through the input
+        # (None for stardist/watershed; the estimate_diameters output for non-CPSAM cellpose).
+        NUCLEI_DIAMETER = NUCLEI_DIAMETER_INPUT
+        CELL_DIAMETER = CELL_DIAMETER_INPUT
+    return CELL_DIAMETER, NUCLEI_DIAMETER, cells, nuclei
 
 
 @app.cell(hide_code=True)
@@ -1144,72 +1140,6 @@ def _(mo):
     return
 
 
-@app.cell
-def _():
-    # === OPERATOR PARAMETERS ===
-    # Refined read-call threshold. After running the cells above, review the
-    # mapping-rate-vs-threshold plot and set this to the plateau value.
-    # In headless mode the wizard's tuned_sbs.json export populates this from
-    # the grid-search optimum (or falls back to the initial THRESHOLD_READS).
-    THRESHOLD_READS_1 = None
-    # === END OPERATOR PARAMETERS ===
-    return (THRESHOLD_READS_1,)
-
-
-@app.cell
-def _(
-    BASES,
-    SEGMENT_CELLS,
-    THRESHOLD_READS_1,
-    WILDCARDS,
-    cells,
-    mo,
-    extract_bases,
-    maxed,
-    nuclei,
-    peaks,
-    plot_normalization_comparison,
-    plt,
-    sns,
-):
-    # Re-run extract_bases and call_reads with the new threshold
-    print('Extracted bases:')
-    df_bases_1 = extract_bases(peaks, maxed, cells if SEGMENT_CELLS else nuclei, THRESHOLD_READS_1, wildcards=WILDCARDS, bases=BASES)
-    mo.ui.table(df_bases_1)
-    print('Base intensity across cycles:')
-    ax = sns.pointplot(x='cycle', y='intensity', hue='channel', data=df_bases_1)
-    plt.show()
-    print('Intensity for each base:')
-    ax = sns.boxplot(x='channel', y='intensity', hue='channel', data=df_bases_1, showfliers=False)
-    plt.show()
-    print('Different normalization methods')
-    plot_normalization_comparison(df_bases_1, base_order=BASES)
-    return (df_bases_1,)
-
-
-@app.cell
-def _(
-    BARCODE_TYPE,
-    SEQUENCING_ORDER,
-    call_reads,
-    df_barcode_library,
-    df_bases_1,
-    mo,
-    peaks,
-    plot_barcode_prefix_matching,
-    plt,
-):
-    print('Called reads:')
-    df_reads_1 = call_reads(df_bases_1, peaks_data=peaks)
-    mo.ui.table(df_reads_1)
-    print('Barcode prefix matching (actual vs random):')
-    if BARCODE_TYPE == 'simple':
-    # Use appropriate library column and parameters based on barcode type
-        _, _ = plot_barcode_prefix_matching(df_reads_1, df_barcode_library, library_col='prefix')
-    else:
-        _, _ = plot_barcode_prefix_matching(df_reads_1, df_barcode_library, library_col='prefix_map', library_col_recomb='prefix_recomb', sequencing_order=SEQUENCING_ORDER)
-    plt.show()  # Default column from standardize_barcode_design  # Multi-mode: include recombination column and sequencing order  # Note: standardize_barcode_design always outputs "prefix_map" and "prefix_recomb" columns
-    return (df_reads_1,)
 
 
 @app.cell(hide_code=True)
@@ -1265,9 +1195,9 @@ def _(mo):
 
 
 @app.cell
-def _(barcodes, df_reads_1, plot_mapping_vs_threshold, plt):
+def _(barcodes, df_reads, plot_mapping_vs_threshold, plt):
     print('Mapping rate vs. Q_min for determining optimal sequence quality cutoff:')
-    plot_mapping_vs_threshold(df_reads_1, barcodes, 'Q_min')
+    plot_mapping_vs_threshold(df_reads, barcodes, 'Q_min')
     plt.show()
     return
 
@@ -1379,7 +1309,7 @@ def _(
     barcodes,
     call_cells,
     df_barcode_library,
-    df_reads_1,
+    df_reads,
     mo,
     extract_phenotype_minimal,
     nuclei,
@@ -1390,11 +1320,11 @@ def _(
 ):
     print('Calling cells with barcode mapping...')
     if BARCODE_TYPE == 'simple':
-        df_cells = call_cells(df_reads_1, df_barcode_library=df_barcode_library, q_min=Q_MIN, barcode_col=BARCODE_COL, prefix_col=PREFIX_COL, error_correct=ERROR_CORRECT, sort_calls=SORT_CALLS, max_distance=MAX_DISTANCE, n_barcodes=N_BARCODES)
+        df_cells = call_cells(df_reads, df_barcode_library=df_barcode_library, q_min=Q_MIN, barcode_col=BARCODE_COL, prefix_col=PREFIX_COL, error_correct=ERROR_CORRECT, sort_calls=SORT_CALLS, max_distance=MAX_DISTANCE, n_barcodes=N_BARCODES)
     elif BARCODE_TYPE == 'multi':
         from lib.sbs.call_cells import prep_multi_reads
         print('Preparing multi-barcode reads...')
-        df_reads_prepped = prep_multi_reads(df_reads_1, map_start=MAP_START, map_end=MAP_END, recomb_start=RECOMB_START, recomb_end=RECOMB_END, prefix_map=PREFIX_MAP, prefix_recomb=PREFIX_RECOMB)
+        df_reads_prepped = prep_multi_reads(df_reads, map_start=MAP_START, map_end=MAP_END, recomb_start=RECOMB_START, recomb_end=RECOMB_END, prefix_map=PREFIX_MAP, prefix_recomb=PREFIX_RECOMB)
         print('Calling cells with multi-barcode detection...')
         df_cells = call_cells(reads_data=df_reads_prepped, df_barcode_library=df_barcode_library, q_min=Q_MIN, map_start=MAP_START, map_end=MAP_END, prefix_map=PREFIX_MAP, recomb_start=RECOMB_START, recomb_end=RECOMB_END, prefix_recomb=PREFIX_RECOMB, recomb_filter_col=RECOMB_FILTER_COL, recomb_q_thresh=RECOMB_Q_THRESH, error_correct=ERROR_CORRECT, sort_calls=SORT_CALLS, max_distance=MAX_DISTANCE, n_barcodes=N_BARCODES, barcode_info_cols=BARCODE_INFO_COLS)
     print(f'Called {len(df_cells)} cells using {BARCODE_TYPE} mode')
@@ -1620,7 +1550,7 @@ def _(
     CALL_READS_METHOD,
     CELLPOSE_MODEL,
     CELL_CELLPROB_THRESHOLD,
-    CELL_DIAMETER_1,
+    CELL_DIAMETER,
     CELL_FLOW_THRESHOLD,
     CELL_NMS_THRESHOLD,
     CELL_PROB_THRESHOLD,
@@ -1646,7 +1576,7 @@ def _(
     MAX_FILTER_WIDTH,
     N_BARCODES,
     NUCLEI_CELLPROB_THRESHOLD,
-    NUCLEI_DIAMETER_1,
+    NUCLEI_DIAMETER,
     NUCLEI_FLOW_THRESHOLD,
     NUCLEI_NMS_THRESHOLD,
     NUCLEI_PROB_THRESHOLD,
@@ -1673,14 +1603,14 @@ def _(
     STARDIST_MODEL,
     THRESHOLD_CELL,
     THRESHOLD_DAPI,
-    THRESHOLD_READS_1,
+    THRESHOLD_READS,
     UPSAMPLE_FACTOR,
     WINDOW,
     config,
     convert_tuples_to_lists,
     yaml,
 ):
-    config['sbs'] = {'alignment_method': ALIGNMENT_METHOD, 'channel_names': CHANNEL_NAMES, 'upsample_factor': UPSAMPLE_FACTOR, 'window': WINDOW, 'skip_cycles_indices': SKIP_CYCLES_INDICES, 'manual_background_cycle_index': MANUAL_BACKGROUND_CYCLE_INDEX, 'manual_channel_mapping': MANUAL_CHANNEL_MAPPING, 'extra_channel_indices': EXTRA_CHANNEL_INDICES, 'max_filter_width': MAX_FILTER_WIDTH, 'spot_detection_method': SPOT_DETECTION_METHOD, 'dapi_cycle': DAPI_CYCLE, 'dapi_cycle_index': DAPI_CYCLE_INDEX, 'cyto_cycle': CYTO_CYCLE, 'cyto_cycle_index': CYTO_CYCLE_INDEX, 'dapi_index': DAPI_INDEX, 'cyto_index': CYTO_INDEX, 'segmentation_method': SEGMENTATION_METHOD, 'gpu': GPU, 'reconcile': RECONCILE, 'segment_cells': SEGMENT_CELLS, 'df_barcode_library_fp': DF_BARCODE_LIBRARY_FP, 'threshold_peaks': THRESHOLD_READS_1, 'call_reads_method': CALL_READS_METHOD, 'bases': BASES, 'q_min': Q_MIN, 'error_correct': ERROR_CORRECT, 'sort_calls': SORT_CALLS, 'n_barcodes': N_BARCODES, 'barcode_type': BARCODE_TYPE}
+    config['sbs'] = {'alignment_method': ALIGNMENT_METHOD, 'channel_names': CHANNEL_NAMES, 'upsample_factor': UPSAMPLE_FACTOR, 'window': WINDOW, 'skip_cycles_indices': SKIP_CYCLES_INDICES, 'manual_background_cycle_index': MANUAL_BACKGROUND_CYCLE_INDEX, 'manual_channel_mapping': MANUAL_CHANNEL_MAPPING, 'extra_channel_indices': EXTRA_CHANNEL_INDICES, 'max_filter_width': MAX_FILTER_WIDTH, 'spot_detection_method': SPOT_DETECTION_METHOD, 'dapi_cycle': DAPI_CYCLE, 'dapi_cycle_index': DAPI_CYCLE_INDEX, 'cyto_cycle': CYTO_CYCLE, 'cyto_cycle_index': CYTO_CYCLE_INDEX, 'dapi_index': DAPI_INDEX, 'cyto_index': CYTO_INDEX, 'segmentation_method': SEGMENTATION_METHOD, 'gpu': GPU, 'reconcile': RECONCILE, 'segment_cells': SEGMENT_CELLS, 'df_barcode_library_fp': DF_BARCODE_LIBRARY_FP, 'threshold_peaks': THRESHOLD_READS, 'call_reads_method': CALL_READS_METHOD, 'bases': BASES, 'q_min': Q_MIN, 'error_correct': ERROR_CORRECT, 'sort_calls': SORT_CALLS, 'n_barcodes': N_BARCODES, 'barcode_type': BARCODE_TYPE}
     if MAX_DISTANCE is not None:
         config['sbs']['max_distance'] = MAX_DISTANCE
     if BARCODE_TYPE == 'simple':
@@ -1698,7 +1628,7 @@ def _(
     elif SPOT_DETECTION_METHOD == 'spotiflow':
         config['sbs'].update({'spotiflow_cycle_index': SPOTIFLOW_CYCLE_INDEX, 'spotiflow_model': SPOTIFLOW_MODEL, 'spotiflow_threshold': SPOTIFLOW_THRESHOLD, 'spotiflow_min_distance': SPOTIFLOW_MIN_DISTANCE, 'spotiflow_remove_index': EXTRA_CHANNEL_INDICES})
     if SEGMENTATION_METHOD == 'cellpose':
-        config['sbs'].update({'nuclei_diameter': NUCLEI_DIAMETER_1, 'cell_diameter': CELL_DIAMETER_1, 'nuclei_flow_threshold': NUCLEI_FLOW_THRESHOLD, 'nuclei_cellprob_threshold': NUCLEI_CELLPROB_THRESHOLD, 'cell_flow_threshold': CELL_FLOW_THRESHOLD, 'cell_cellprob_threshold': CELL_CELLPROB_THRESHOLD, 'cellpose_model': CELLPOSE_MODEL})
+        config['sbs'].update({'nuclei_diameter': NUCLEI_DIAMETER, 'cell_diameter': CELL_DIAMETER, 'nuclei_flow_threshold': NUCLEI_FLOW_THRESHOLD, 'nuclei_cellprob_threshold': NUCLEI_CELLPROB_THRESHOLD, 'cell_flow_threshold': CELL_FLOW_THRESHOLD, 'cell_cellprob_threshold': CELL_CELLPROB_THRESHOLD, 'cellpose_model': CELLPOSE_MODEL})
         if HELPER_INDEX is not None:
             config['sbs']['helper_index'] = HELPER_INDEX
     elif SEGMENTATION_METHOD == 'stardist':
@@ -1714,9 +1644,9 @@ def _(
 
 @app.cell
 def _(
-    NUCLEI_DIAMETER_1,
-    CELL_DIAMETER_1,
-    THRESHOLD_READS_1,
+    NUCLEI_DIAMETER,
+    CELL_DIAMETER,
+    THRESHOLD_READS,
     PEAK_WIDTH,
     SEGMENTATION_METHOD,
     CELLPOSE_MODEL,
@@ -1727,11 +1657,12 @@ def _(
     import json as _je
     from pathlib import Path as _Pe
     _t = {}
-    if SEGMENTATION_METHOD == 'cellpose':
-        _t["NUCLEI_DIAMETER_1"] = {"derived": float(NUCLEI_DIAMETER_1), "src": f"estimate_diameters ({CELLPOSE_MODEL})"}
-        _t["CELL_DIAMETER_1"]   = {"derived": float(CELL_DIAMETER_1),   "src": f"estimate_diameters ({CELLPOSE_MODEL})"}
-    _t["THRESHOLD_READS_1"] = {"derived": THRESHOLD_READS_1, "src": "mapping-rate plateau (operator-refined or grid-search optimum)"}
-    _t["PEAK_WIDTH"]        = {"derived": PEAK_WIDTH,        "src": "library default or grid-search optimum"}
+    if SEGMENTATION_METHOD == 'cellpose' and NUCLEI_DIAMETER is not None:
+        _src = "regionprops on segmented objects" if CELLPOSE_MODEL == 'cpsam' else f"estimate_diameters ({CELLPOSE_MODEL})"
+        _t["NUCLEI_DIAMETER"] = {"derived": float(NUCLEI_DIAMETER), "src": _src}
+        _t["CELL_DIAMETER"]   = {"derived": float(CELL_DIAMETER),   "src": _src}
+    _t["THRESHOLD_READS"] = {"derived": THRESHOLD_READS, "src": "operator-set (reactive — change THRESHOLD_READS to refine; downstream df_bases / mapping rate update automatically)"}
+    _t["PEAK_WIDTH"]      = {"derived": PEAK_WIDTH,      "src": "operator-set (reactive)"}
     _out = _Pe(".brieflow") / "tuned_sbs.json"
     _out.parent.mkdir(exist_ok=True)
     _out.write_text(_je.dumps(_t, indent=2, default=str))

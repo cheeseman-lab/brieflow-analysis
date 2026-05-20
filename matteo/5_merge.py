@@ -588,7 +588,9 @@ def _(
     ph_test_metadata,
     preview_mask_transformations,
 ):
-    NUM_TILES_PHENO = None
+    # === OPERATOR PARAMETERS ===
+    NUM_TILES_PHENO = None  # int (e.g., 10) to preview that many phenotype tiles; only used when STITCH=True
+    # === END OPERATOR PARAMETERS ===
 
     if STITCH:
         print("Testing phenotype data:")
@@ -616,7 +618,9 @@ def _(
     preview_mask_transformations,
     sbs_test_metadata,
 ):
-    NUM_TILES_SBS = None
+    # === OPERATOR PARAMETERS ===
+    NUM_TILES_SBS = None  # int (e.g., 10) to preview that many SBS tiles; only used when STITCH=True
+    # === END OPERATOR PARAMETERS ===
 
     if STITCH:
         print("\nTesting SBS data with same transformation:")
@@ -763,6 +767,21 @@ def _(
         yaml.dump(safe_config, _config_file, default_flow_style=False, sort_keys=False)
     print(f'Image dimensions: phenotype={PHENOTYPE_DIMENSIONS}, sbs={SBS_DIMENSIONS}')
     print(f'Config saved to: {CONFIG_FILE_PATH}')
+    return
+
+
+@app.cell
+def _():
+    # === TUNED EXPORT ===
+    # No notebook-derived tuned values for merge (det_range + threshold are
+    # operator-set upfront, not notebook-derived). Empty export for symmetry.
+    import json as _je
+    from pathlib import Path as _Pe
+    _t = {}
+    _out = _Pe(".brieflow") / "tuned_merge.json"
+    _out.parent.mkdir(exist_ok=True)
+    _out.write_text(_je.dumps(_t, indent=2, default=str))
+    # === END TUNED EXPORT ===
     return
 
 

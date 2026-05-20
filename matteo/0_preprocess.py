@@ -429,22 +429,22 @@ def _():
     SBS_METADATA_IMAGES_DIR_FP = None
     SBS_METADATA_PATH_PATTERN = None
     SBS_METADATA_PATH_METADATA = None
-    SBS_METADATA_ORDER_TYPE_1 = None
+    SBS_METADATA_PATH_ORDER_TYPE = None
     SBS_METADATA_SAMPLES_DF_FP = None
     PHENOTYPE_METADATA_IMAGES_DIR_FP = None
     PHENOTYPE_METADATA_PATH_PATTERN = None
     PHENOTYPE_METADATA_PATH_METADATA = None
-    PHENOTYPE_METADATA_ORDER_TYPE_1 = None
+    PHENOTYPE_METADATA_PATH_ORDER_TYPE = None
     PHENOTYPE_METADATA_SAMPLES_DF_FP = None
     # === END OPERATOR PARAMETERS ===
     return (
         PHENOTYPE_METADATA_IMAGES_DIR_FP,
-        PHENOTYPE_METADATA_ORDER_TYPE_1,
+        PHENOTYPE_METADATA_PATH_ORDER_TYPE,
         PHENOTYPE_METADATA_PATH_METADATA,
         PHENOTYPE_METADATA_PATH_PATTERN,
         PHENOTYPE_METADATA_SAMPLES_DF_FP,
         SBS_METADATA_IMAGES_DIR_FP,
-        SBS_METADATA_ORDER_TYPE_1,
+        SBS_METADATA_PATH_ORDER_TYPE,
         SBS_METADATA_PATH_METADATA,
         SBS_METADATA_PATH_PATTERN,
         SBS_METADATA_SAMPLES_DF_FP,
@@ -454,12 +454,12 @@ def _():
 @app.cell
 def _(
     PHENOTYPE_METADATA_IMAGES_DIR_FP,
-    PHENOTYPE_METADATA_ORDER_TYPE_1,
+    PHENOTYPE_METADATA_PATH_ORDER_TYPE,
     PHENOTYPE_METADATA_PATH_METADATA,
     PHENOTYPE_METADATA_PATH_PATTERN,
     PHENOTYPE_METADATA_SAMPLES_DF_FP,
     SBS_METADATA_IMAGES_DIR_FP,
-    SBS_METADATA_ORDER_TYPE_1,
+    SBS_METADATA_PATH_ORDER_TYPE,
     SBS_METADATA_PATH_METADATA,
     SBS_METADATA_PATH_PATTERN,
     SBS_METADATA_SAMPLES_DF_FP,
@@ -470,7 +470,7 @@ def _(
     # Generate SBS metadata samples table
     if SBS_METADATA_IMAGES_DIR_FP is not None:
         print('Generating SBS metadata file inventory...')
-        sbs_metadata_samples = create_samples_df(SBS_METADATA_IMAGES_DIR_FP, SBS_METADATA_PATH_PATTERN, SBS_METADATA_PATH_METADATA, SBS_METADATA_ORDER_TYPE_1)
+        sbs_metadata_samples = create_samples_df(SBS_METADATA_IMAGES_DIR_FP, SBS_METADATA_PATH_PATTERN, SBS_METADATA_PATH_METADATA, SBS_METADATA_PATH_ORDER_TYPE)
         sbs_metadata_samples.to_csv(SBS_METADATA_SAMPLES_DF_FP, sep='\t', index=False)
         print('SBS metadata files found:')
         mo.ui.table(sbs_metadata_samples)
@@ -479,7 +479,7 @@ def _(
         sbs_metadata_samples = pd.DataFrame()
     if PHENOTYPE_METADATA_IMAGES_DIR_FP is not None:
         print('\nGenerating phenotype metadata file inventory...')
-        phenotype_metadata_samples = create_samples_df(PHENOTYPE_METADATA_IMAGES_DIR_FP, PHENOTYPE_METADATA_PATH_PATTERN, PHENOTYPE_METADATA_PATH_METADATA, PHENOTYPE_METADATA_ORDER_TYPE_1)
+        phenotype_metadata_samples = create_samples_df(PHENOTYPE_METADATA_IMAGES_DIR_FP, PHENOTYPE_METADATA_PATH_PATTERN, PHENOTYPE_METADATA_PATH_METADATA, PHENOTYPE_METADATA_PATH_ORDER_TYPE)
         phenotype_metadata_samples.to_csv(PHENOTYPE_METADATA_SAMPLES_DF_FP, sep='\t', index=False)
         print('Phenotype metadata files found:')
         mo.ui.table(phenotype_metadata_samples)
@@ -922,6 +922,22 @@ def _(
 
         # Dump the updated YAML structure, keeping markdown comments for sections
         yaml.dump(safe_config, config_file, default_flow_style=False, sort_keys=False)
+    return
+
+
+@app.cell
+def _():
+    # === TUNED EXPORT ===
+    # No notebook-derived tuned values for preprocess (all wizard-time auto-probe
+    # + operator-set; no estimate_X cells produce refined values). Empty export
+    # confirms the wizard's R3 walk that there's nothing to surface here.
+    import json as _je
+    from pathlib import Path as _Pe
+    _t = {}
+    _out = _Pe(".brieflow") / "tuned_preprocess.json"
+    _out.parent.mkdir(exist_ok=True)
+    _out.write_text(_je.dumps(_t, indent=2, default=str))
+    # === END TUNED EXPORT ===
     return
 
 

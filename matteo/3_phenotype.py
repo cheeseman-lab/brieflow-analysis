@@ -386,11 +386,6 @@ def _(CHANNEL_NAMES, aligned_image):
     RECONCILE = "contained_in_cells"
     SEGMENT_CELLS = True
     SEGMENTATION_METHOD = "cellpose"   # "cellpose" | "stardist"
-    # === END OPERATOR PARAMETERS ===
-
-    DAPI_INDEX = CHANNEL_NAMES.index("DAPI")
-    CYTO_INDEX = CHANNEL_NAMES.index(CYTO_CHANNEL)
-
     if SEGMENTATION_METHOD == "cellpose":
         # Parameters for CellPose method
         CELLPOSE_MODEL = "cyto3"
@@ -399,23 +394,6 @@ def _(CHANNEL_NAMES, aligned_image):
         CELL_FLOW_THRESHOLD = 1
         CELL_CELLPROB_THRESHOLD = 0
         HELPER_INDEX = None  # Optional: channel index to help with CPSAM segmentation
-
-        # Only estimate diameters for non-CPSAM models
-        if CELLPOSE_MODEL != "cpsam":
-            from lib.shared.segment_cellpose import estimate_diameters
-            print("Estimating optimal cell and nuclei diameters...")
-            NUCLEI_DIAMETER, CELL_DIAMETER = estimate_diameters(
-                aligned_image,
-                dapi_index=DAPI_INDEX,
-                cyto_index=CYTO_INDEX,
-                cellpose_model=CELLPOSE_MODEL,
-            )
-        else:
-            print("CPSAM model selected. Initial diameters set to None.")
-            print("Note: Diameters will be estimated automatically from segmentation results in the next cell.")
-            NUCLEI_DIAMETER = None  # Will be estimated from segmentation
-            CELL_DIAMETER = None    # Will be estimated from segmentation
-
     elif SEGMENTATION_METHOD == "stardist":
         # Parameters for StarDist method
         STARDIST_MODEL = "2D_versatile_fluo"
@@ -423,10 +401,31 @@ def _(CHANNEL_NAMES, aligned_image):
         NUCLEI_NMS_THRESHOLD = 0.3
         CELL_PROB_THRESHOLD = 0.479071
         CELL_NMS_THRESHOLD = 0.3
+    # === END OPERATOR PARAMETERS ===
+
+    DAPI_INDEX = CHANNEL_NAMES.index("DAPI")
+    CYTO_INDEX = CHANNEL_NAMES.index(CYTO_CHANNEL)
+
+    # Estimate diameters (derivation; non-CPSAM cellpose only)
+    if SEGMENTATION_METHOD == "cellpose" and CELLPOSE_MODEL != "cpsam":
+        from lib.shared.segment_cellpose import estimate_diameters
+        print("Estimating optimal cell and nuclei diameters...")
+        NUCLEI_DIAMETER_INPUT, CELL_DIAMETER_INPUT = estimate_diameters(
+            aligned_image,
+            dapi_index=DAPI_INDEX,
+            cyto_index=CYTO_INDEX,
+            cellpose_model=CELLPOSE_MODEL,
+        )
+    else:
+        # CPSAM cellpose / stardist: diameter inputs not pre-estimated.
+        # CPSAM derives downstream from regionprops; stardist doesn't use these.
+        print("Diameter inputs set to None (derived downstream for CPSAM, unused for stardist).")
+        NUCLEI_DIAMETER_INPUT = None
+        CELL_DIAMETER_INPUT = None
     return (
         CELLPOSE_MODEL,
         CELL_CELLPROB_THRESHOLD,
-        CELL_DIAMETER,
+        CELL_DIAMETER_INPUT,
         CELL_FLOW_THRESHOLD,
         CELL_NMS_THRESHOLD,
         CELL_PROB_THRESHOLD,
@@ -450,7 +449,7 @@ def _(CHANNEL_NAMES, aligned_image):
 def _(
     CELLPOSE_MODEL,
     CELL_CELLPROB_THRESHOLD,
-    CELL_DIAMETER,
+    CELL_DIAMETER_INPUT,
     CELL_FLOW_THRESHOLD,
     CELL_NMS_THRESHOLD,
     CELL_PROB_THRESHOLD,
@@ -461,7 +460,7 @@ def _(
     HELPER_INDEX,
     Microimage,
     NUCLEI_CELLPROB_THRESHOLD,
-    NUCLEI_DIAMETER,
+    NUCLEI_DIAMETER_INPUT,
     NUCLEI_FLOW_THRESHOLD,
     NUCLEI_NMS_THRESHOLD,
     NUCLEI_PROB_THRESHOLD,
@@ -480,7 +479,7 @@ def _(
     print(f'Segmenting image with {SEGMENTATION_METHOD}...')
     if SEGMENTATION_METHOD == 'cellpose':
         from lib.shared.segment_cellpose import segment_cellpose
-        result = segment_cellpose(aligned_image, dapi_index=DAPI_INDEX, cyto_index=CYTO_INDEX, nuclei_diameter=NUCLEI_DIAMETER, cell_diameter=CELL_DIAMETER, cellpose_kwargs=dict(nuclei_flow_threshold=NUCLEI_FLOW_THRESHOLD, nuclei_cellprob_threshold=NUCLEI_CELLPROB_THRESHOLD, cell_flow_threshold=CELL_FLOW_THRESHOLD, cell_cellprob_threshold=CELL_CELLPROB_THRESHOLD), cellpose_model=CELLPOSE_MODEL, helper_index=HELPER_INDEX, gpu=GPU, reconcile=RECONCILE, cells=SEGMENT_CELLS)
+        result = segment_cellpose(aligned_image, dapi_index=DAPI_INDEX, cyto_index=CYTO_INDEX, nuclei_diameter=NUCLEI_DIAMETER_INPUT, cell_diameter=CELL_DIAMETER_INPUT, cellpose_kwargs=dict(nuclei_flow_threshold=NUCLEI_FLOW_THRESHOLD, nuclei_cellprob_threshold=NUCLEI_CELLPROB_THRESHOLD, cell_flow_threshold=CELL_FLOW_THRESHOLD, cell_cellprob_threshold=CELL_CELLPROB_THRESHOLD), cellpose_model=CELLPOSE_MODEL, helper_index=HELPER_INDEX, gpu=GPU, reconcile=RECONCILE, cells=SEGMENT_CELLS)
     elif SEGMENTATION_METHOD == 'stardist':
         from lib.shared.segment_stardist import segment_stardist
         result = segment_stardist(aligned_image, dapi_index=DAPI_INDEX, cyto_index=CYTO_INDEX, model_type=STARDIST_MODEL, stardist_kwargs=dict(nuclei_prob_threshold=NUCLEI_PROB_THRESHOLD, nuclei_nms_threshold=NUCLEI_NMS_THRESHOLD, cell_prob_threshold=CELL_PROB_THRESHOLD, cell_nms_threshold=CELL_NMS_THRESHOLD), gpu=GPU, reconcile=RECONCILE, cells=SEGMENT_CELLS)
@@ -514,25 +513,27 @@ def _(
     else:
         print('Skipping cell/cytoplasm visualization (SEGMENT_CELLS=False)')
         cytoplasms = None
+    # Final diameters that go to config.yml. For CPSAM, derive from segmented
+    # objects (regionprops); for non-CPSAM cellpose, pass through the pre-seg
+    # estimate; for stardist, None (unused by that method).
     if SEGMENTATION_METHOD == 'cellpose' and CELLPOSE_MODEL == 'cpsam':
         from skimage.measure import regionprops
         nuclei_props = regionprops(nuclei)
         nuclei_diameters = [prop.equivalent_diameter for prop in nuclei_props]
-    # Handle unpacking based on SEGMENT_CELLS
-        estimated_nuclei_diameter = np.mean(nuclei_diameters)
-        print(f'Nuclei - Average diameter: {estimated_nuclei_diameter:.2f} pixels')
+        NUCLEI_DIAMETER = float(np.mean(nuclei_diameters))
+        print(f'CPSAM derived NUCLEI_DIAMETER from segmentation: {NUCLEI_DIAMETER:.2f} px')
         if SEGMENT_CELLS:
             cells_props = regionprops(cells)
-            cells_diameters = [prop.equivalent_diameter for prop in cells_props]  # No cell segmentation
-            estimated_cell_diameter = np.mean(cells_diameters)
-    # Create and display micropanel of nuclei segmentation
-            print(f'Cells - Average diameter: {estimated_cell_diameter:.2f} pixels')
-            CELL_DIAMETER_1 = estimated_cell_diameter
-            print(f'\nUpdated CELL_DIAMETER to {CELL_DIAMETER_1:.2f} pixels')
-        NUCLEI_DIAMETER_1 = estimated_nuclei_diameter
-    # Create and display micropanel of segmented cells (only if segmenting cells)
-        print(f'Updated NUCLEI_DIAMETER to {NUCLEI_DIAMETER_1:.2f} pixels')  # Create and display micropanel of annotated phenotype data  # Create and display micropanel of cytoplasms  # Calculate nuclei diameters  # Calculate cell diameters  # Update the diameter variables for config
-    return CELL_DIAMETER_1, NUCLEI_DIAMETER_1, cells, cytoplasms, nuclei
+            cells_diameters = [prop.equivalent_diameter for prop in cells_props]
+            CELL_DIAMETER = float(np.mean(cells_diameters))
+            print(f'CPSAM derived CELL_DIAMETER from segmentation: {CELL_DIAMETER:.2f} px')
+        else:
+            CELL_DIAMETER = None
+    else:
+        # Non-CPSAM cellpose / stardist: pass through input
+        NUCLEI_DIAMETER = NUCLEI_DIAMETER_INPUT
+        CELL_DIAMETER = CELL_DIAMETER_INPUT
+    return CELL_DIAMETER, NUCLEI_DIAMETER, cells, cytoplasms, nuclei
 
 
 @app.cell(hide_code=True)
@@ -665,7 +666,7 @@ def _(
     ALIGN,
     CELLPOSE_MODEL,
     CELL_CELLPROB_THRESHOLD,
-    CELL_DIAMETER_1,
+    CELL_DIAMETER,
     CELL_FLOW_THRESHOLD,
     CELL_NMS_THRESHOLD,
     CELL_PROB_THRESHOLD,
@@ -681,7 +682,7 @@ def _(
     GPU,
     HELPER_INDEX,
     NUCLEI_CELLPROB_THRESHOLD,
-    NUCLEI_DIAMETER_1,
+    NUCLEI_DIAMETER,
     NUCLEI_FLOW_THRESHOLD,
     NUCLEI_NMS_THRESHOLD,
     NUCLEI_PROB_THRESHOLD,
@@ -701,7 +702,7 @@ def _(
 ):
     config['phenotype'] = {'foci_channel_index': FOCI_CHANNEL_INDEX, 'channel_names': CHANNEL_NAMES, 'align': ALIGN, 'dapi_index': DAPI_INDEX, 'cyto_index': CYTO_INDEX, 'segmentation_method': SEGMENTATION_METHOD, 'reconcile': RECONCILE, 'gpu': GPU, 'segment_cells': SEGMENT_CELLS, 'cp_method': CP_METHOD}
     if SEGMENTATION_METHOD == 'cellpose':
-        config['phenotype'].update({'nuclei_diameter': NUCLEI_DIAMETER_1, 'cell_diameter': CELL_DIAMETER_1, 'nuclei_flow_threshold': NUCLEI_FLOW_THRESHOLD, 'nuclei_cellprob_threshold': NUCLEI_CELLPROB_THRESHOLD, 'cell_flow_threshold': CELL_FLOW_THRESHOLD, 'cell_cellprob_threshold': CELL_CELLPROB_THRESHOLD, 'cellpose_model': CELLPOSE_MODEL})
+        config['phenotype'].update({'nuclei_diameter': NUCLEI_DIAMETER, 'cell_diameter': CELL_DIAMETER, 'nuclei_flow_threshold': NUCLEI_FLOW_THRESHOLD, 'nuclei_cellprob_threshold': NUCLEI_CELLPROB_THRESHOLD, 'cell_flow_threshold': CELL_FLOW_THRESHOLD, 'cell_cellprob_threshold': CELL_CELLPROB_THRESHOLD, 'cellpose_model': CELLPOSE_MODEL})
         if HELPER_INDEX is not None:
             config['phenotype']['helper_index'] = HELPER_INDEX
     elif SEGMENTATION_METHOD == 'stardist':
@@ -724,8 +725,8 @@ def _(
 
 @app.cell
 def _(
-    NUCLEI_DIAMETER_1,
-    CELL_DIAMETER_1,
+    NUCLEI_DIAMETER,
+    CELL_DIAMETER,
     SEGMENTATION_METHOD,
     CELLPOSE_MODEL,
 ):
@@ -736,8 +737,10 @@ def _(
     from pathlib import Path as _Pe
     _t = {}
     if SEGMENTATION_METHOD == 'cellpose':
-        _t["NUCLEI_DIAMETER_1"] = {"derived": float(NUCLEI_DIAMETER_1), "src": f"estimate_diameters ({CELLPOSE_MODEL})"}
-        _t["CELL_DIAMETER_1"]   = {"derived": float(CELL_DIAMETER_1),   "src": f"estimate_diameters ({CELLPOSE_MODEL})"}
+        _src = "regionprops on segmented objects" if CELLPOSE_MODEL == 'cpsam' else f"estimate_diameters ({CELLPOSE_MODEL})"
+        _t["NUCLEI_DIAMETER"] = {"derived": float(NUCLEI_DIAMETER), "src": _src}
+        if CELL_DIAMETER is not None:
+            _t["CELL_DIAMETER"] = {"derived": float(CELL_DIAMETER), "src": _src}
     _out = _Pe(".brieflow") / "tuned_phenotype.json"
     _out.parent.mkdir(exist_ok=True)
     _out.write_text(_je.dumps(_t, indent=2, default=str))
