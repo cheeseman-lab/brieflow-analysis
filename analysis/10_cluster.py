@@ -146,14 +146,18 @@ def _(
     plot_cell_histogram,
     plt,
 ):
+    # QC: cell-count histogram per cell class. Uses a cell-local `_data` so the
+    # cross-cell-class loop result doesn't accidentally leak as the canonical
+    # aggregated_data; the canonical load (for TEST_CELL_CLASS / TEST_CHANNEL_COMBO)
+    # happens in a dedicated cell below.
     for cell_class, min_cell_cutoff in MIN_CELL_CUTOFFS.items():
         channel_combo = CHANNEL_COMBOS[0]
         _aggregated_data_path = ROOT_FP / 'aggregate' / 'tsvs' / get_filename({'cell_class': cell_class, 'channel_combo': channel_combo}, 'aggregated', 'tsv')
-        aggregated_data = pd.read_csv(_aggregated_data_path, sep='\t')
+        _data = pd.read_csv(_aggregated_data_path, sep='\t')
         print(f'Cell count distribution for: {cell_class}')
-        plot_cell_histogram(aggregated_data, min_cell_cutoff, PERTURBATION_NAME_COL)
+        plot_cell_histogram(_data, min_cell_cutoff, PERTURBATION_NAME_COL)
         plt.show()  # show cell count distribution
-    return (aggregated_data,)
+    return
 
 
 @app.cell(hide_code=True)
@@ -279,11 +283,13 @@ def _(config):
 
 
 @app.cell
-def _(ROOT_FP, TEST_CELL_CLASS, TEST_CHANNEL_COMBO, get_filename, pd):
+def _(ROOT_FP, TEST_CELL_CLASS, TEST_CHANNEL_COMBO, get_filename, mo, pd):
+    # Canonical load: aggregated data for the test class/combo pair. Used by
+    # every downstream cell that needs the aggregated table.
     _aggregated_data_path = ROOT_FP / 'aggregate' / 'tsvs' / get_filename({'cell_class': TEST_CELL_CLASS, 'channel_combo': TEST_CHANNEL_COMBO}, 'aggregated', 'tsv')
-    aggregated_data_1 = pd.read_csv(_aggregated_data_path, sep='\t')
-    aggregated_data_1
-    return
+    aggregated_data = pd.read_csv(_aggregated_data_path, sep='\t')
+    mo.ui.table(aggregated_data)
+    return (aggregated_data,)
 
 
 @app.cell
@@ -291,29 +297,23 @@ def _(
     CONTROL_KEY,
     PERTURBATION_NAME_COL,
     PHATE_DISTANCE_METRIC,
-    ROOT_FP,
-    TEST_CELL_CLASS,
-    TEST_CHANNEL_COMBO,
     TEST_LEIDEN_RESOLUTIONS,
+    aggregated_data,
     corum_group_benchmark,
     evaluate_resolution,
-    get_filename,
     np,
-    pd,
     plt,
 ):
-    _aggregated_data_path = ROOT_FP / 'aggregate' / 'tsvs' / get_filename({'cell_class': TEST_CELL_CLASS, 'channel_combo': TEST_CHANNEL_COMBO}, 'aggregated', 'tsv')
-    aggregated_data_2 = pd.read_csv(_aggregated_data_path, sep='\t')
-    shuffled_aggregated_data = aggregated_data_2.copy()
+    shuffled_aggregated_data = aggregated_data.copy()
     feature_start_idx = shuffled_aggregated_data.columns.get_loc('PC_0')
     feature_cols = shuffled_aggregated_data.columns[feature_start_idx:]
     for col in feature_cols:
         shuffled_aggregated_data[col] = np.random.permutation(shuffled_aggregated_data[col].values)
     group_benchmarks = {'CORUM': corum_group_benchmark}
-    results_df, thresholding_fig = evaluate_resolution(aggregated_data_2, PHATE_DISTANCE_METRIC, TEST_LEIDEN_RESOLUTIONS, group_benchmarks, PERTURBATION_NAME_COL, CONTROL_KEY)
+    results_df, thresholding_fig = evaluate_resolution(aggregated_data, PHATE_DISTANCE_METRIC, TEST_LEIDEN_RESOLUTIONS, group_benchmarks, PERTURBATION_NAME_COL, CONTROL_KEY)
     plt.figure(thresholding_fig.number)
     plt.show()
-    return aggregated_data_2, shuffled_aggregated_data
+    return (shuffled_aggregated_data,)
 
 
 @app.cell(hide_code=True)
@@ -389,7 +389,7 @@ def _(
     PERTURBATION_NAME_COL,
     PHATE_DISTANCE_METRIC,
     TEST_LEIDEN_RESOLUTION,
-    aggregated_data_2,
+    aggregated_data,
     mo,
     phate_leiden_pipeline,
     plot_cluster_sizes,
@@ -397,7 +397,7 @@ def _(
     plt,
     uniprot_data,
 ):
-    phate_leiden_clustering = phate_leiden_pipeline(aggregated_data_2, TEST_LEIDEN_RESOLUTION, PHATE_DISTANCE_METRIC)
+    phate_leiden_clustering = phate_leiden_pipeline(aggregated_data, TEST_LEIDEN_RESOLUTION, PHATE_DISTANCE_METRIC)
     uniprot_data['gene_name'] = uniprot_data['gene_names'].str.split().str[0]
     uniprot_data_1 = uniprot_data.drop_duplicates('gene_name', keep='first')
     uniprot_subset = uniprot_data_1[['gene_name', 'entry', 'function', 'link']].rename(columns={'entry': 'uniprot_entry', 'function': 'uniprot_function', 'link': 'uniprot_link'})
@@ -505,6 +505,21 @@ def _(
     # Convert tuples to lists before dumping
     # Write the updated configuration
         yaml.dump(safe_config, _config_file, default_flow_style=False, sort_keys=False)  # Write the introductory comments  # Dump the updated YAML structure, keeping markdown comments for sections
+    return
+
+
+@app.cell
+def _():
+    # === TUNED EXPORT ===
+    # No notebook-derived tuned values for cluster (resolutions + cell_cutoffs
+    # are operator-set upfront, not notebook-derived). Empty export for symmetry.
+    import json as _je
+    from pathlib import Path as _Pe
+    _t = {}
+    _out = _Pe(".brieflow") / "tuned_cluster.json"
+    _out.parent.mkdir(exist_ok=True)
+    _out.write_text(_je.dumps(_t, indent=2, default=str))
+    # === END TUNED EXPORT ===
     return
 
 

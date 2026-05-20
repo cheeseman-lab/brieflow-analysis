@@ -349,7 +349,7 @@ def _(
         cell_classes = list(classified_metadata['class'].unique())
     if MONTAGE_CHANNEL is not None:
         classified_metadata_copy = classified_metadata.copy(deep=True)
-        classified_metadata_copy = add_filenames(classified_metadata_copy, ROOT_FP)
+        classified_metadata_copy = add_filenames(classified_metadata_copy, ROOT_FP, img_fmt=config['all'].get('image_format', 'tiff'))
         cell_class_dfs = {cell_class: classified_metadata_copy[classified_metadata_copy['class'] == cell_class] for cell_class in CELL_CLASSES}
         title_templates = {True: 'Lowest Confidence {cell_class} Cells - {channel}', False: 'Highest Confidence {cell_class} Cells - {channel}'}
         montages, titles = ([], [])
@@ -885,6 +885,22 @@ def _(
     # Convert tuples to lists before dumping
     # Write the updated configuration
         yaml.dump(safe_config, _config_file, default_flow_style=False, sort_keys=False)  # Normalize to lists for iteration (supports both single values and lists)  # Create all combinations  # Write the introductory comments  # Dump the updated YAML structure, keeping markdown comments for sections
+    return
+
+
+@app.cell
+def _():
+    # === TUNED EXPORT ===
+    # No notebook-derived tuned values for aggregate (DROP_COLS_THRESHOLD,
+    # DROP_ROWS_THRESHOLD, CONTAMINATION, NUM_ALIGN_BATCHES are operator-set
+    # upfront, not notebook-derived). Empty export for symmetry.
+    import json as _je
+    from pathlib import Path as _Pe
+    _t = {}
+    _out = _Pe(".brieflow") / "tuned_aggregate.json"
+    _out.parent.mkdir(exist_ok=True)
+    _out.write_text(_je.dumps(_t, indent=2, default=str))
+    # === END TUNED EXPORT ===
     return
 
 

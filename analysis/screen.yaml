@@ -78,7 +78,7 @@ iss:
     - { name: "T",    laser_wavelength_nm: null, exposure_time_ms: null }
     - { name: "A",    laser_wavelength_nm: null, exposure_time_ms: null }
     - { name: "C",    laser_wavelength_nm: null, exposure_time_ms: null }
-  binning: unsure                                   # [w] 1 (none) | 2 (2x2)  — used with objective for DET_RANGE
+  binning: unsure, check ND2                      # [w] 1 (none) | 2 (2x2)  — used with objective for DET_RANGE
   cycle_order: "GTAC"                             # [w] base order across the 4 sequencing channels
   background_channel:                             # [w] which base channel/cycle to use as background
     channel: "C"
@@ -135,7 +135,7 @@ pipeline:
 # data (where the raw images are)
 # =========================================================================
 data:
-  storage_format: "/archive/cheeseman/ops_data/baker"                            # [w] nd2 | tiff | zarr
+  storage_format: nd2                                                            # [w] nd2 | tiff | zarr
   location: "/archive/cheeseman/ops_data/baker"                                  # [w] base path (e.g. /archive/cheeseman/ops_data/<screen>)
   input_sbs_dir: "/archive/cheeseman/ops_data/baker/input_sbs"                             # [w]
-  input_phenotype_dir: "/archive/cheeseman/ops_data/baker/input_phenotype"                         # [w]
+  input_phenotype_dir: "/archive/cheeseman/ops_data/baker/input_ph"                         # [w]
