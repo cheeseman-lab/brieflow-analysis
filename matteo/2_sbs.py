@@ -490,7 +490,7 @@ def _(mo):
 
 
 @app.cell
-def _(CHANNEL_NAMES, EXTRA_CHANNELS):
+def _():
     # === OPERATOR PARAMETERS ===
     MAX_FILTER_WIDTH = 3  # library default
     SPOT_DETECTION_METHOD = "standard"  # "standard" | "spotiflow"
@@ -504,10 +504,7 @@ def _(CHANNEL_NAMES, EXTRA_CHANNELS):
         SPOTIFLOW_MIN_DISTANCE = 1
     # === END OPERATOR PARAMETERS ===
 
-    # Derive extra channel indices
-    EXTRA_CHANNEL_INDICES = [CHANNEL_NAMES.index(channel) for channel in EXTRA_CHANNELS]
     return (
-        EXTRA_CHANNEL_INDICES,
         MAX_FILTER_WIDTH,
         PEAK_WIDTH,
         SPOTIFLOW_CYCLE_INDEX,
@@ -516,6 +513,16 @@ def _(CHANNEL_NAMES, EXTRA_CHANNELS):
         SPOTIFLOW_THRESHOLD,
         SPOT_DETECTION_METHOD,
     )
+
+
+@app.cell
+def _(CHANNEL_NAMES, EXTRA_CHANNELS):
+    # Derive extra channel indices. Lives in its own cell (NOT bundled with the
+    # PEAK_WIDTH operator-parameter cell above) so that mutating PEAK_WIDTH
+    # invalidates only peak-detection downstream, not segmentation. Bundling
+    # made PEAK_WIDTH changes silently invalidate cellpose via EXTRA_CHANNEL_INDICES.
+    EXTRA_CHANNEL_INDICES = [CHANNEL_NAMES.index(channel) for channel in EXTRA_CHANNELS]
+    return (EXTRA_CHANNEL_INDICES,)
 
 
 @app.cell
