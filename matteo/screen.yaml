@@ -1,85 +1,75 @@
 # screen.yaml — description of the experimental setup.
-#
-# Per-field tag:
-#   [c] canonical — required by brieflow upstream schema (BioImage Archive metadata).
-#   [w] wizard    — optional. If present, the brieflow-ops wizard skips the
-#                   corresponding interview prompt. If absent, the wizard asks
-#                   the operator or auto-probes.
-#
-# If you're documenting the screen manually and not running the wizard, you only
-# need to fill the [c] fields. If you'll run the brieflow-ops wizard later, also
-# fill the [w] fields to skip interview prompts you already know the answer to.
-#
-# Everything else (path patterns, file organization, z-planes, channel-token
-# detection, fluorophore→biological mapping derivation) is auto-probed from the
-# data at wizard time — don't try to pre-fill it here.
 
 # =========================================================================
 # collection
 # =========================================================================
 collection:
-  title: null                                     # [c]
-  publication_doi: null                           # [c]
+  title: null
+  publication_doi: null
 
 # =========================================================================
 # experiment (ontology-tagged for BIA archival)
 # =========================================================================
 experiment:
-  screen_title: null                              # [c] short slug; matches conda env brieflow_<id>
-  organism_ontology_term_id: "NCBITaxon:9606"     # [c] default = human
-  organism: "Homo sapiens"                        # [c]
-  tissue_ontology_term_id: null                   # [c] e.g. CVCL_0030 for HeLa
-  tissue: null                                    # [c] e.g. "HeLa"
-  tissue_type: "cell line"                        # [c]
-  disease_ontology_term_id: "PATO:0000461"        # [c]
-  disease: "normal"                               # [c]
-  development_stage_ontology_term_id: "na"        # [c]
-  development_stage: "na"                         # [c]
-  assay_ontology_term_id: "EFO:0022605"           # [c]
-  assay: "optical pooled screening"               # [c]
-  pseudobulk: []                                  # [c]
+  screen_title: null                              # short slug; matches conda env brieflow_<id>
+  organism_ontology_term_id: "NCBITaxon:9606"     # default = human
+  organism: "Homo sapiens"
+  tissue_ontology_term_id: null                   # e.g. CVCL_0030 for HeLa
+  tissue: null                                    # e.g. "HeLa"
+  tissue_type: "cell line"
+  disease_ontology_term_id: "PATO:0000461"
+  disease: "normal"
+  development_stage_ontology_term_id: "na"
+  development_stage: "na"
+  assay_ontology_term_id: "EFO:0022605"
+  assay: "optical pooled screening"
+  pseudobulk: []
+
 
 # =========================================================================
 # cellular
 # =========================================================================
 cellular:
-  growth_conditions: null                         # [c]
-  plate_type: null                                # [c]
-  imaging_timepoint: null                         # [c] e.g. "78 hours post-transfection"
+  growth_conditions: null
+  plate_type: null
+  imaging_timepoint: null                         # e.g. "78 hours post-transfection"
   seeding:
-    density_cells_cm2: null                       # [c]
+    density_cells_cm2: null
   induction:
-    duration: ""                                  # [c]
+    duration: ""
 
 # =========================================================================
 # library
 # =========================================================================
 library:
-  vector: null                                    # [c]
-  gene_selection: null                            # [c]
-  positive_controls: []                           # [c]
-  negative_controls: ["nontargeting"]             # [c]
-  type: "simple"                                  # [w] simple | multi — number of barcode regions per cell (drives pipeline BARCODE_TYPE: simple = one sgRNA region; multi = separate MAP + RECOMB regions)
-  detection_target: "RNA"                         # [w] DNA | RNA — DNA barcodes give NUCLEAR spots; RNA (T7-amplified or mRNA) gives NON-NUCLEAR (cytoplasmic) spots. Drives SBS pipeline spot mask + RECONCILE.
-  number_of_genes: null                           # [w]
-  barcode_table_fp: "config/barcode_library.tsv"  # [w] path to the design table
+  vector: null
+  gene_selection: null
+  positive_controls: []
+  negative_controls: ["nontargeting"]
+  type: null                                      # simple | multi  (sgRNA-level vs MAP+RECOMB barcoding)
+  detection_target: null                          # DNA | RNA — DNA barcodes give NUCLEAR spots; RNA (T7-amplified or mRNA) gives NON-NUCLEAR (cytoplasmic) spots. Drives SBS pipeline spot mask + RECONCILE.
+  number_of_genes: null
+  raw_design_table_fp: null                       # INPUT path: raw guide RNA design TSV (e.g. "config/barcode_library_design.tsv")
+  barcode_col: null                               # sgRNA-sequence column name in raw_design_table_fp (canonical: "sgRNA")
+  gene_symbol_col: null                           # canonical: "gene_symbol"
+  gene_id_col: null                               # canonical: "gene_id"
 
 # =========================================================================
 # iss (in-situ sequencing / SBS)
 # =========================================================================
 iss:
-  cycles: null                                    # [c]
-  objective: null                                 # [c] e.g. "10X 0.45 NA"
-  chemistry: "four color"                         # [c]
-  channels:                                       # [c] one entry per imaging channel
+  cycles: null
+  objective: null                                 # e.g. "10X 0.45 NA"
+  chemistry: "four color"
+  channels:                                       # one entry per imaging channel
     - { name: "DAPI", laser_wavelength_nm: 408, exposure_time_ms: null }
     - { name: "G",    laser_wavelength_nm: null, exposure_time_ms: null }
     - { name: "T",    laser_wavelength_nm: null, exposure_time_ms: null }
     - { name: "A",    laser_wavelength_nm: null, exposure_time_ms: null }
     - { name: "C",    laser_wavelength_nm: null, exposure_time_ms: null }
-  binning: null                                   # [w] 1 (none) | 2 (2x2)  — used with objective for DET_RANGE
-  cycle_order: "GTAC"                             # [w] base order across the 4 sequencing channels
-  background_channel:                             # [w] which base channel/cycle to use as background
+  binning: null                                   # 1 (none) | 2 (2x2)  — used with objective for DET_RANGE
+  cycle_order: "GTAC"                             # base order across the 4 sequencing channels
+  background_channel:                             # which base channel/cycle to use as background
     channel: null
     cycle: null
 
@@ -87,39 +77,39 @@ iss:
 # phenotype
 # =========================================================================
 phenotype:
-  objective: null                                 # [c] e.g. "20X 0.75 NA"
-  channels:                                       # [c]+[w] one entry per phenotype channel
+  objective: null                                 # e.g. "20X 0.75 NA"
+  channels:                                       # one entry per phenotype channel
     # biological_name is what features get named (DAPI_mean, CENPA_mean, …).
     # fluorophore_token is what appears in the raw filename (DAPI, GFP, A594, A750).
     # The wizard uses this mapping to skip the F-014 channel-mapping interview prompt.
-    - biological_name: null                       # [c] e.g. "DAPI"
-      marker_of: null                             # [c] e.g. "Nuclei"
-      fluorophore_token: null                     # [w] filename token (e.g. "GFP" stains "COXIV")
-      laser_wavelength_nm: null                   # [c]
-      exposure_time_ms: null                      # [c]
+    - biological_name: null                       # e.g. "DAPI"
+      marker_of: null                             # e.g. "Nuclei"
+      fluorophore_token: null                     # filename token (e.g. "GFP" stains "COXIV")
+      laser_wavelength_nm: null
+      exposure_time_ms: null
     # ... add one entry per channel ...
-  binning: null                                   # [w] 1 (none) | 2 (2x2)
-  background_channel_cell: null                   # [w] biological_name of the cell-boundary marker (e.g. "WGA")
+  binning: null                                   # 1 (none) | 2 (2x2)
+  background_channel_cell: null                   # biological_name of the cell-boundary marker (e.g. "WGA")
 
 # =========================================================================
 # microscope
 # =========================================================================
 microscope:
-  system: null                                    # [c]
+  system: null
 
 # =========================================================================
 # pipeline (where brieflow lives + which env runs it)
 # =========================================================================
 pipeline:
-  github: "cheeseman-lab/brieflow"                # [c]
-  version: null                                   # [c] branch or tag (e.g. "zarr3-merge-main-speed")
-  conda_env: null                                 # [w] e.g. "brieflow_<screen>"
+  github: "cheeseman-lab/brieflow"
+  version: null                                   # branch or tag (e.g. "zarr3-merge-main-speed")
+  conda_env: null                                 # e.g. "brieflow_<screen>"
 
 # =========================================================================
 # data (where the raw images are)
 # =========================================================================
 data:
-  storage_format: null                            # [w] nd2 | tiff | zarr
-  location: null                                  # [w] base path (e.g. /archive/cheeseman/ops_data/<screen>)
-  input_sbs_dir: null                             # [w]
-  input_phenotype_dir: null                       # [w]
+  storage_format: null                            # nd2 | tiff | zarr
+  location: null                                  # base path (e.g. /archive/cheeseman/ops_data/<screen>)
+  input_sbs_dir: null                             # raw SBS images dir
+  input_phenotype_dir: null                       # raw phenotype images dir
