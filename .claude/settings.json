@@ -1,0 +1,48 @@
+{
+  "enabledPlugins": {
+    "brieflow-auto@brieflow-auto": true
+  },
+  "permissions": {
+    "allow": [
+      "Bash(ls:*)",
+      "Bash(find:*)",
+      "Bash(stat:*)",
+      "Bash(du:*)",
+      "Bash(wc:*)",
+      "Bash(head:*)",
+      "Bash(tail:*)",
+      "Bash(grep:*)",
+      "Bash(diff:*)",
+      "Bash(cmp:*)",
+      "Bash(cat:*)",
+      "Bash(ps:*)",
+      "Bash(pgrep:*)",
+      "Bash(sleep:*)",
+      "Bash(curl:*)",
+      "Bash(python:*)",
+      "Bash(python3:*)",
+      "Bash(conda:*)",
+      "Bash(eval \"$(conda shell.bash hook)\":*)",
+      "Bash(bash /lab/barcheese01/mdiberna/brieflow-auto/plugins/brieflow-auto/scripts/marimo-pair/execute-code.sh:*)",
+      "Bash(tmux send-keys:*)",
+      "Bash(tmux list-windows:*)",
+      "Bash(tmux capture-pane:*)",
+      "Bash(tmux list-sessions:*)",
+      "Bash(scancel -u mdiberna:*)",
+      "Bash(sacct:*)",
+      "Bash(squeue:*)",
+      "Bash(sinfo:*)",
+      "Bash(scontrol show:*)",
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git ls-files:*)",
+      "Bash(git submodule:*)",
+      "Bash(git show:*)",
+      "Bash(git blame:*)",
+      "Read(//lab/ops_analysis_ssd/test_matteo/brieflow-speed/**)",
+      "Read(//lab/barcheese01/mdiberna/brieflow-auto/**)",
+      "Read(//archive/cheeseman/ops_data/**)"
+    ]
+  }
+}

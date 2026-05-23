@@ -12,6 +12,8 @@ analysis/brieflow_run_results.tsv
 analysis/tmp.*
 .tmp/
 .claude/scheduled_tasks.lock
+.claude/settings.local.json
+analysis/__marimo__/
 
 # legacy harness reorg detritus (cluster_optimization/results)
 analysis/cluster_optimization/results/well_trial_*/
