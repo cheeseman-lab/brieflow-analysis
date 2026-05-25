@@ -53,8 +53,8 @@ library:
   # --- simple mode (type: simple): one barcode column ---
   barcode_col: null                               # sgRNA-sequence column name in raw_design_table_fp (canonical: "sgRNA")
   # --- multi mode (type: multi): two barcode columns + per-region lengths + sequencing order ---
-  barcode_col_map: null                           # column name for MAP-region barcode sequences (e.g. "iBAR_2")
-  barcode_col_recomb: null                        # column name for RECOMB-region barcode sequences (e.g. "iBAR_1")
+  barcode_map_col: null                           # column name for MAP-region barcode sequences (e.g. "iBAR_2")
+  barcode_recomb_col: null                        # column name for RECOMB-region barcode sequences (e.g. "iBAR_1")
   barcode_length_map: null                        # length of MAP region in cycles (e.g. 12)
   barcode_length_recomb: null                     # length of RECOMB region in cycles (e.g. 2)
   sequencing_order: null                          # "map_recomb" (MAP first) | "recomb_map" (RECOMB first) — which region is sequenced first across cycles

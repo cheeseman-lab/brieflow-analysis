@@ -1115,8 +1115,12 @@ def _():
     # SKIP_CYCLES_MAP should match SKIP_CYCLES from the alignment cell (1-based positions).
     SKIP_CYCLES_MAP = None  # e.g., [1, 6], or None if no cycles skipped
     # Multi-mode params (used when BARCODE_TYPE == "multi"; leave None for simple mode)
-    PREFIX_MAP = None  # Column with MAP region barcode sequences (e.g., "iBAR2")
-    PREFIX_RECOMB = None  # Column with RECOMB region barcode sequences (optional)
+    # BARCODE_MAP_COL / BARCODE_RECOMB_COL: RAW column names in df_design (input to standardize_barcode_design)
+    # PREFIX_MAP / PREFIX_RECOMB: POST-standardization canonical column names (used downstream in prep_multi_reads / call_cells)
+    BARCODE_MAP_COL = None  # Raw column name in df_design for MAP barcode sequences (e.g., "iBAR_2")
+    BARCODE_RECOMB_COL = None  # Raw column name in df_design for RECOMB barcode sequences (e.g., "iBAR_1")
+    PREFIX_MAP = "prefix_map"  # Canonical column name after standardize_barcode_design renames it
+    PREFIX_RECOMB = "prefix_recomb"  # Canonical column name after standardize_barcode_design renames it
     MAP_PREFIX_LENGTH = None  # e.g., 6 for cycles 0-5
     RECOMB_PREFIX_LENGTH = None  # e.g., 6 for cycles 6-11
     SKIP_CYCLES_RECOMB = None  # 1-based positions to skip in RECOMB region
@@ -1183,9 +1187,10 @@ def _(
     uniprot_data.to_csv(UNIPROT_DATA_FP, sep="\t", index=False)
     uniprot_data = pd.read_csv(UNIPROT_DATA_FP, sep="\t")
 
-    # Read design table
+    # Read design table — sniff separator from file extension (csv|tsv)
     print("Loading and standardizing barcode design table...")
-    df_design = pd.read_csv(DF_DESIGN_FP, sep="\t")
+    _sep = "," if str(DF_DESIGN_FP).endswith(".csv") else "\t"
+    df_design = pd.read_csv(DF_DESIGN_FP, sep=_sep)
 
     # Call standardize_barcode_design with mode-specific parameters
     if BARCODE_TYPE == "simple":
@@ -1203,11 +1208,12 @@ def _(
         )
 
     elif BARCODE_TYPE == "multi":
-        # Multi mode: use prefix_map, prefix_recomb, and region-specific lengths
+        # Multi mode: pass RAW column names (BARCODE_MAP_COL/RECOMB) to standardize;
+        # downstream cells use PREFIX_MAP/PREFIX_RECOMB (canonical names after rename).
         df_barcode_library = standardize_barcode_design(
             df_design,
-            prefix_map=PREFIX_MAP,
-            prefix_recomb=PREFIX_RECOMB,
+            prefix_map=BARCODE_MAP_COL,
+            prefix_recomb=BARCODE_RECOMB_COL,
             gene_symbol_col=GENE_SYMBOL_COL,
             gene_id_col=GENE_ID_COL,
             map_prefix_length=MAP_PREFIX_LENGTH,

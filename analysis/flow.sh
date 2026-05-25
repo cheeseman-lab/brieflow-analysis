@@ -80,10 +80,16 @@ PLATE_SEQUENTIAL_MODULES="preprocess sbs phenotype"
 # ---------------------------------------------------------------------------
 BACKEND="local"
 DRY_RUN=false
-SEQUENTIAL_PLATES=false
+# Default true: per-plate runs keep snakemake DAG construction time bounded,
+# which matters at well/full scale (~160K targets per-plate vs 320K+ joint).
+# Set false (or pass --no-sequential-plates if/when added) for legacy joint mode.
+SEQUENTIAL_PLATES=true
 PLATE_COUNT=""
 FORCE_UNLOCK=false
 CORES="all"
+# Snakemake 9 defaults `--jobs` to 100 for local backend even when `--cores` is
+# higher. Set explicitly so concurrent worker count scales with `--cores`.
+JOBS="${CORES}"
 PROFILE_MODE=false
 NO_ARRAYS=false
 MODULES=()
@@ -245,7 +251,7 @@ build_snakemake_cmd() {
             cmd+=" --slurm-efficiency-report-path=${SCRIPT_DIR}/${LOG_DIR}/efficiency_$(timestamp).log"
         fi
     else
-        cmd+=" --cores ${CORES} --keep-going"
+        cmd+=" --cores ${CORES} --jobs ${JOBS} --keep-going"
     fi
 
     # Common flags
