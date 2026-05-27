@@ -80,16 +80,12 @@ PLATE_SEQUENTIAL_MODULES="preprocess sbs phenotype"
 # ---------------------------------------------------------------------------
 BACKEND="local"
 DRY_RUN=false
-# Default true: per-plate runs keep snakemake DAG construction time bounded,
-# which matters at well/full scale (~160K targets per-plate vs 320K+ joint).
-# Set false (or pass --no-sequential-plates if/when added) for legacy joint mode.
 SEQUENTIAL_PLATES=true
 PLATE_COUNT=""
 FORCE_UNLOCK=false
 CORES="all"
-# Snakemake 9 defaults `--jobs` to 100 for local backend even when `--cores` is
-# higher. Set explicitly so concurrent worker count scales with `--cores`.
-JOBS="${CORES}"
+# --jobs requires an integer (or `unlimited`). When CORES=="all", resolve to nproc.
+JOBS="$([ "${CORES}" = "all" ] && nproc || echo "${CORES}")"
 PROFILE_MODE=false
 NO_ARRAYS=false
 MODULES=()
@@ -169,6 +165,19 @@ fi
 # Expand "all" to all pipeline modules
 if [[ " ${MODULES[*]} " == *" all "* ]]; then
     MODULES=(preprocess sbs phenotype merge aggregate cluster)
+fi
+
+PHASE_GATE_CONFIG=""
+ALL_PIPELINE_PHASES=(preprocess sbs phenotype merge aggregate cluster)
+disabled_phases=()
+for phase in "${ALL_PIPELINE_PHASES[@]}"; do
+    if [[ ! " ${MODULES[*]} " == *" ${phase} "* ]]; then
+        disabled_phases+=("$phase")
+        PHASE_GATE_CONFIG+=" ${phase}_rules_enabled=false"
+    fi
+done
+if [[ ${#disabled_phases[@]} -gt 0 && ${#disabled_phases[@]} -lt ${#ALL_PIPELINE_PHASES[@]} ]]; then
+    echo "Phase rule-gates: disabled $(IFS=,; echo "${disabled_phases[*]}") (targets still loaded)"
 fi
 
 # ---------------------------------------------------------------------------
@@ -291,10 +300,13 @@ build_snakemake_cmd() {
         cmd+=" -n"
     fi
 
-    # Config overrides (plate filter + user-provided)
+    # Config overrides (plate filter + phase gates + user-provided)
     local config_args=""
     if [[ -n "$plate_filter" ]]; then
         config_args+=" plate_filter=${plate_filter}"
+    fi
+    if [[ -n "$PHASE_GATE_CONFIG" ]]; then
+        config_args+="${PHASE_GATE_CONFIG}"
     fi
     if [[ -n "$EXTRA_CONFIG" ]]; then
         config_args+=" ${EXTRA_CONFIG}"
