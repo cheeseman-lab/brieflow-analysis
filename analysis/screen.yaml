@@ -128,3 +128,13 @@ data:
   location: null                                  # base path (e.g. /archive/cheeseman/ops_data/<screen>)
   input_sbs_dir: null                             # raw SBS images dir
   input_phenotype_dir: null                       # raw phenotype images dir
+
+# =========================================================================
+# additional_notes — free-text operator observations not captured by the
+# structured fields above. Write anything screen-specific and human: imaging
+# anomalies, WHY a cycle was skipped, unusual markers, QC caveats. The wizard
+# surfaces these and may parse intent from them (e.g. a skipped-cycle rationale).
+# =========================================================================
+additional_notes: |
+  # e.g. "Cycle 1 looked misaligned relative to the other channels; it was
+  #       skipped and an additional cycle mapped accordingly."
