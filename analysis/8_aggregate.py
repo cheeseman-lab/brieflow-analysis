@@ -239,7 +239,7 @@ def _(mo):
     ### Evaluate splitting
 
     - `COLLAPSE_COLS`: Cell data columns to collapse on when creating a summary of cell counts. This will show the number of cells in each cell class for these particular columns. Ex: `["cell_barcode_0", "gene_symbol_0"]`.
-    - `MONTAGE_CHANNEL`: Channel to display in the notebook montage preview. Usually `DAPI`. Set to `None` to skip montage generation entirely. Note: montages are generated across **all** channels — this parameter only controls which channel is shown in the notebook for visual QC.
+    - `TEST_MONTAGE_CHANNEL`: Channel to display in the notebook montage preview. Usually `DAPI`. Set to `None` to skip montage generation entirely. Note: montages are generated across **all** channels — this parameter only controls which channel is shown in the notebook for visual QC.
     - `MONTAGE_NUM_CELLS`: Number of cells to include in each montage. Default `30`.
     - `MONTAGE_CELL_SIZE`: Pixel size of each cell bounding box in the montage (zoom level).
     - `MONTAGE_SHAPE`: Grid shape of the montage as `(rows, cols)`. Default `(3, 10)`.
@@ -254,7 +254,7 @@ def _(mo):
 @app.cell
 def _():
     # === OPERATOR PARAMETERS ===
-    MONTAGE_CHANNEL = None
+    TEST_MONTAGE_CHANNEL = None
     COLLAPSE_COLS = None               # e.g., ["sgRNA_0", "gene_symbol_0"]
     MONTAGE_CELL_SIZE = None           # e.g., 40 — zoom level (pixel size per cell bounding box)
     # === END OPERATOR PARAMETERS ===
@@ -265,7 +265,7 @@ def _():
     return (
         COLLAPSE_COLS,
         MONTAGE_CELL_SIZE,
-        MONTAGE_CHANNEL,
+        TEST_MONTAGE_CHANNEL,
         MONTAGE_NUM_CELLS,
         MONTAGE_SHAPE,
     )
@@ -330,7 +330,7 @@ def _(
     CELL_CLASSES,
     COLLAPSE_COLS,
     MONTAGE_CELL_SIZE,
-    MONTAGE_CHANNEL,
+    TEST_MONTAGE_CHANNEL,
     MONTAGE_NUM_CELLS,
     MONTAGE_SHAPE,
     ROOT_FP,
@@ -347,7 +347,7 @@ def _(
         cell_classes = list(classified_metadata['class'].unique()) + ['all']
     else:
         cell_classes = list(classified_metadata['class'].unique())
-    if MONTAGE_CHANNEL is not None:
+    if TEST_MONTAGE_CHANNEL is not None:
         classified_metadata_copy = classified_metadata.copy(deep=True)
         classified_metadata_copy = add_filenames(classified_metadata_copy, ROOT_FP, img_fmt=config['all'].get('image_format', 'tiff'))
         cell_class_dfs = {cell_class: classified_metadata_copy[classified_metadata_copy['class'] == cell_class] for cell_class in CELL_CLASSES}
@@ -355,9 +355,9 @@ def _(
         montages, titles = ([], [])
         for cell_class, cell_df in cell_class_dfs.items():
             for ascending in [True, False]:
-                montage = create_cell_montage(cell_data=cell_df, channels=config['phenotype']['channel_names'], num_cells=MONTAGE_NUM_CELLS, cell_size=MONTAGE_CELL_SIZE, shape=MONTAGE_SHAPE, selection_params={'method': 'sorted', 'sort_by': 'confidence', 'ascending': ascending})[MONTAGE_CHANNEL]
+                montage = create_cell_montage(cell_data=cell_df, channels=config['phenotype']['channel_names'], num_cells=MONTAGE_NUM_CELLS, cell_size=MONTAGE_CELL_SIZE, shape=MONTAGE_SHAPE, selection_params={'method': 'sorted', 'sort_by': 'confidence', 'ascending': ascending})[TEST_MONTAGE_CHANNEL]
                 montages.append(montage)
-                titles.append(title_templates[ascending].format(cell_class=cell_class, channel=MONTAGE_CHANNEL))
+                titles.append(title_templates[ascending].format(cell_class=cell_class, channel=TEST_MONTAGE_CHANNEL))
         num_rows = len(CELL_CLASSES)
         _fig, axes = plt.subplots(num_rows, 2, figsize=(10, 3 * num_rows))
         for ax, title, montage in zip(axes.flat, titles, montages):
@@ -368,7 +368,7 @@ def _(
         plt.tight_layout()
         plt.show()
     else:
-        print('MONTAGE_CHANNEL is None, skipping montage generation')
+        print('TEST_MONTAGE_CHANNEL is None, skipping montage generation')
     print('Split cell data summary:')
     _summary_df = summarize_cell_data(classified_metadata, CELL_CLASSES, COLLAPSE_COLS)
     mo.ui.table(_summary_df)
@@ -814,18 +814,25 @@ def _():
     FEATURE_NORMALIZATION = "standard"
     NUM_SIMS = None
     EXCLUSION_STRING = None
-    BOOTSTRAP_CELL_CLASS = None
-    BOOTSTRAP_CHANNEL_COMBO = None
     PSEUDOGENE_PATTERNS = None
     # === END OPERATOR PARAMETERS ===
     return (
-        BOOTSTRAP_CELL_CLASS,
-        BOOTSTRAP_CHANNEL_COMBO,
         EXCLUSION_STRING,
         FEATURE_NORMALIZATION,
         NUM_SIMS,
         PSEUDOGENE_PATTERNS,
     )
+
+
+@app.cell
+def _(CHANNEL_COMBOS, CELL_CLASSES):
+    # Bootstrap targets default to the largest configured channel combo (most
+    # channels) and all available cell classes.
+    BOOTSTRAP_CHANNEL_COMBO = (
+        "_".join(max(CHANNEL_COMBOS, key=len)) if CHANNEL_COMBOS else None
+    )
+    BOOTSTRAP_CELL_CLASS = list(CELL_CLASSES) if CELL_CLASSES else None
+    return BOOTSTRAP_CELL_CLASS, BOOTSTRAP_CHANNEL_COMBO
 
 
 @app.cell(hide_code=True)

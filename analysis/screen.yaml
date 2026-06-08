@@ -76,7 +76,10 @@ iss:
     - { name: "C",    laser_wavelength_nm: null, exposure_time_ms: null }
   binning: null                                   # 1 (none) | 2 (2x2)  — used with objective for DET_RANGE
   cycle_order: "GTAC"                             # base order across the 4 sequencing channels
-  background_channel:                             # which base channel/cycle to use as background
+  background_channel_nucleus:                     # which base channel/cycle to use as nuclear background
+    channel: "DAPI"
+    cycle: null
+  background_channel_cell:                        # which base channel/cycle to use as cytoplasmic background
     channel: null
     cycle: null
 
@@ -89,15 +92,19 @@ phenotype:
     # biological_name is what features get named (DAPI_mean, CENPA_mean, …).
     # fluorophore_token is what appears in the raw filename (DAPI, GFP, A594, A750).
     # The wizard uses this mapping to skip the F-014 channel-mapping interview prompt.
-    - biological_name: null                       # e.g. "DAPI"
-      marker_of: null                             # e.g. "Nuclei"
+    - biological_name: null                       # e.g. "DAPI"  -> channels_metadata.name
+      marker_of: null                             # e.g. "Nuclei" -> biological_annotation.biological_target
+      marker: null                                # gene/protein stained, e.g. "HSPA1B" -> biological_annotation.marker
+      marker_type: null                           # "dye" | "antibody" | "endogenous_tag" -> biological_annotation.marker_type
       fluorophore_token: null                     # filename token (e.g. "GFP" stains "COXIV")
       laser_wavelength_nm: null
       exposure_time_ms: null
     # ... add one entry per channel ...
   binning: null                                   # 1 (none) | 2 (2x2)
   segment_cells: null                             # true = segment cells around each nucleus (cellpose cyto); false = nuclei-only feature extraction (skip cellpose cell mask)
+  background_channel_nucleus: "DAPI"              # biological_name of the nuclear-boundary marker (e.g. "DAPI"); 
   background_channel_cell: null                   # biological_name of the cell-boundary marker (e.g. "WGA"); required only when segment_cells: true
+  foci_channel: null                              # biological_name of the foci/puncta marker (e.g. "gH2AX", "CENPA"); null = no foci pipeline. Drives FOCI_CHANNEL + routes the foci pipeline on/off.
 
 # =========================================================================
 # microscope

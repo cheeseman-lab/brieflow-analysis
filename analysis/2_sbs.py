@@ -816,7 +816,7 @@ def _(mo):
 @app.cell
 def _(CYTO_INDEX, DAPI_INDEX, corrected_image):
     # === OPERATOR PARAMETERS ===
-    SEGMENTATION_METHOD = "cellpose"  # "cellpose" | "stardist"
+    SEGMENTATION_METHOD = "cellpose"  # "cellpose" | "stardist" | "watershed"
     GPU = False
     RECONCILE = "contained_in_cells"
     SEGMENT_CELLS = True
@@ -1115,10 +1115,10 @@ def _():
     # SKIP_CYCLES_MAP should match SKIP_CYCLES from the alignment cell (1-based positions).
     SKIP_CYCLES_MAP = None  # e.g., [1, 6], or None if no cycles skipped
     # Multi-mode params (used when BARCODE_TYPE == "multi"; leave None for simple mode)
-    # BARCODE_MAP_COL / BARCODE_RECOMB_COL: RAW column names in df_design (input to standardize_barcode_design)
+    # BARCODE_MAP / BARCODE_RECOMB: RAW column names in df_design (input to standardize_barcode_design)
     # PREFIX_MAP / PREFIX_RECOMB: POST-standardization canonical column names (used downstream in prep_multi_reads / call_cells)
-    BARCODE_MAP_COL = None  # Raw column name in df_design for MAP barcode sequences (e.g., "iBAR_2")
-    BARCODE_RECOMB_COL = None  # Raw column name in df_design for RECOMB barcode sequences (e.g., "iBAR_1")
+    BARCODE_MAP = None  # Raw column name in df_design for MAP barcode sequences (e.g., "iBAR_2")
+    BARCODE_RECOMB = None  # Raw column name in df_design for RECOMB barcode sequences (e.g., "iBAR_1")
     PREFIX_MAP = "prefix_map"  # Canonical column name after standardize_barcode_design renames it
     PREFIX_RECOMB = "prefix_recomb"  # Canonical column name after standardize_barcode_design renames it
     MAP_PREFIX_LENGTH = None  # e.g., 6 for cycles 0-5
@@ -1208,12 +1208,12 @@ def _(
         )
 
     elif BARCODE_TYPE == "multi":
-        # Multi mode: pass RAW column names (BARCODE_MAP_COL/RECOMB) to standardize;
+        # Multi mode: pass RAW column names (BARCODE_MAP/RECOMB) to standardize;
         # downstream cells use PREFIX_MAP/PREFIX_RECOMB (canonical names after rename).
         df_barcode_library = standardize_barcode_design(
             df_design,
-            prefix_map=BARCODE_MAP_COL,
-            prefix_recomb=BARCODE_RECOMB_COL,
+            prefix_map=BARCODE_MAP,
+            prefix_recomb=BARCODE_RECOMB,
             gene_symbol_col=GENE_SYMBOL_COL,
             gene_id_col=GENE_ID_COL,
             map_prefix_length=MAP_PREFIX_LENGTH,
@@ -1428,6 +1428,8 @@ def _():
     RECOMB_START = None  # e.g., 6
     RECOMB_END = None  # e.g., 11
     BARCODE_INFO_COLS = None  # optional additional barcode info cols
+    RECOMB_FILTER_COL = "Q_recomb"  # multi mode: quality col for recomb filtering
+    RECOMB_Q_THRESH = 0.1  # multi mode: quality threshold for recomb calls
     # === END OPERATOR PARAMETERS ===
 
     # Library defaults (auto bucket) — output col names renamed to *_OUT to avoid
@@ -1437,8 +1439,6 @@ def _():
     PREFIX_COL = "prefix"  # simple mode: standardize_barcode_design output col
     PREFIX_MAP_OUT = "prefix_map"  # multi mode: MAP region output col
     PREFIX_RECOMB_OUT = "prefix_recomb"  # multi mode: RECOMB region output col
-    RECOMB_FILTER_COL = "Q_recomb"  # multi mode: quality col for recomb filtering
-    RECOMB_Q_THRESH = 0.1  # multi mode: quality threshold for recomb calls
     return (
         BARCODE_INFO_COLS,
         ERROR_CORRECT,
@@ -1529,21 +1529,11 @@ def _(
             n_barcodes=N_BARCODES,
         )
     elif BARCODE_TYPE == "multi":
-        from lib.sbs.call_cells import prep_multi_reads
-
-        print("Preparing multi-barcode reads...")
-        df_reads_prepped = prep_multi_reads(
-            df_reads,
-            map_start=MAP_START,
-            map_end=MAP_END,
-            recomb_start=RECOMB_START,
-            recomb_end=RECOMB_END,
-            prefix_map=PREFIX_MAP,
-            prefix_recomb=PREFIX_RECOMB,
-        )
+        # call_cells runs prep_multi_reads internally when map_start/map_end are set,
+        # so pass raw df_reads (matches workflow/scripts/sbs/call_cells.py).
         print("Calling cells with multi-barcode detection...")
         df_cells = call_cells(
-            reads_data=df_reads_prepped,
+            reads_data=df_reads,
             df_barcode_library=df_barcode_library,
             q_min=Q_MIN,
             map_start=MAP_START,
