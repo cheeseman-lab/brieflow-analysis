@@ -101,9 +101,30 @@ FORCERUN=""
 # in the brieflow-ops plugin; we invoke it once per flow.sh run and pass its
 # output to snakemake as --set-resources. Set BRIEFLOW_SKIP_RESOLVE=1 to
 # disable (falls back to slurm/config.yaml set-resources floor only).
-PLUGIN_DIR="${BRIEFLOW_OPS_PLUGIN_DIR:-/lab/barcheese01/mdiberna/brieflow-ops/plugins/brieflow-ops}"
+# Plugin location is auto-discovered: BRIEFLOW_OPS_PLUGIN_DIR wins, then the
+# Claude Code plugin cache, then on-VM /data checkouts, then the HPC paths.
+# Before this auto-discovery the default pointed ONLY at the HPC path, so on a
+# cloud VM the resolver silently no-op'd → no per-rule mem caps reached
+# snakemake → aggregate OOM (damavand 2026-06-13). The HPC default still works
+# unchanged.
+_find_plugin_dir() {
+    local cands=() d
+    [ -n "${BRIEFLOW_OPS_PLUGIN_DIR:-}" ] && cands+=("${BRIEFLOW_OPS_PLUGIN_DIR}")
+    cands+=( "${HOME}"/.claude/plugins/cache/brieflow-auto/brieflow-auto/* )
+    cands+=( /data/*/brieflow-auto/plugins/brieflow-auto )
+    cands+=( /data/*/.ba-push/plugins/brieflow-auto )
+    cands+=( /lab/barcheese01/mdiberna/brieflow-auto/plugins/brieflow-auto )
+    cands+=( /lab/barcheese01/mdiberna/brieflow-ops/plugins/brieflow-ops )
+    for d in "${cands[@]}"; do
+        if [ -x "${d}/scripts/brieflow_resolve_resources.py" ]; then
+            printf '%s\n' "${d}"; return 0
+        fi
+    done
+    return 1
+}
+PLUGIN_DIR="$(_find_plugin_dir || echo "")"
 RESOLVED_SET_RESOURCES=""
-if [ -z "${BRIEFLOW_SKIP_RESOLVE:-}" ] && [ -x "${PLUGIN_DIR}/scripts/brieflow_resolve_resources.py" ]; then
+if [ -z "${BRIEFLOW_SKIP_RESOLVE:-}" ] && [ -n "${PLUGIN_DIR}" ] && [ -x "${PLUGIN_DIR}/scripts/brieflow_resolve_resources.py" ]; then
     RESOLVED_SET_RESOURCES=$(python "${PLUGIN_DIR}/scripts/brieflow_resolve_resources.py" \
         --analysis-dir "${SCRIPT_DIR}" --format snakemake 2>/dev/null || echo "")
 fi
@@ -261,6 +282,21 @@ build_snakemake_cmd() {
         fi
     else
         cmd+=" --cores ${CORES} --jobs ${JOBS} --keep-going"
+        # Local backend: snakemake only enforces memory throttling when a global
+        # mem_mb *budget* is declared via --resources. Without it the per-rule
+        # mem_mb caps (--set-resources, below) are ignored and heavy rules
+        # over-schedule → OOM (hit live on damavand: 8× format_singlecell_anndata
+        # at --cores 288 blew past 2.8 TB). Default the budget to ~90% of machine
+        # RAM (OS/driver headroom); override with BRIEFLOW_LOCAL_MEM_MB.
+        local _mem_budget="${BRIEFLOW_LOCAL_MEM_MB:-}"
+        if [ -z "${_mem_budget}" ]; then
+            local _mem_total
+            _mem_total=$(awk '/MemTotal/{print int($2/1024)}' /proc/meminfo 2>/dev/null || echo 0)
+            _mem_budget=$(( _mem_total * 90 / 100 ))
+        fi
+        if [ "${_mem_budget:-0}" -gt 0 ]; then
+            cmd+=" --resources mem_mb=${_mem_budget}"
+        fi
     fi
 
     # Common flags
