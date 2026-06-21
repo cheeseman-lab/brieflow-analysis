@@ -268,6 +268,8 @@ build_snakemake_cmd() {
         fi
         cmd+=" --slurm-jobname-prefix=brieflow"
         cmd+=" --slurm-logdir=slurm/slurm_output/rule"
+        # snakemake's slurm executor requires --jobs (max concurrent slurm jobs).
+        cmd+=" --jobs ${JOBS}"
         cmd+=" --latency-wait ${LATENCY_WAIT}"
         if [[ -n "$MAX_STATUS_CHECKS" ]]; then
             cmd+=" --max-status-checks-per-second ${MAX_STATUS_CHECKS}"
