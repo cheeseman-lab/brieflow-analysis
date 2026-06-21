@@ -84,8 +84,9 @@ SEQUENTIAL_PLATES=true
 PLATE_COUNT=""
 FORCE_UNLOCK=false
 CORES="all"
-# --jobs requires an integer (or `unlimited`). When CORES=="all", resolve to nproc.
-JOBS="$([ "${CORES}" = "all" ] && nproc || echo "${CORES}")"
+# --jobs (max concurrent jobs): an explicit --jobs wins; otherwise resolved from
+# CORES after arg parsing (nproc when CORES=all). Must be an integer (or `unlimited`).
+JOBS=""
 PROFILE_MODE=false
 NO_ARRAYS=false
 MODULES=()
@@ -151,6 +152,8 @@ while [[ $# -gt 0 ]]; do
             FORCE_UNLOCK=true; shift ;;
         --cores)
             CORES="$2"; shift 2 ;;
+        --jobs)
+            JOBS="$2"; shift 2 ;;
         --profile)
             PROFILE_MODE=true; shift ;;
         --config)
@@ -177,6 +180,13 @@ while [[ $# -gt 0 ]]; do
             MODULES+=("$1"); shift ;;
     esac
 done
+
+# Resolve --jobs after parsing: an explicit --jobs wins; otherwise derive from
+# CORES (nproc when CORES=all). Keeps backend selection seamless — flow.sh emits
+# a valid --jobs for both local and slurm without needing to be hand-edited.
+if [[ -z "${JOBS}" ]]; then
+    JOBS="$([ "${CORES}" = "all" ] && nproc || echo "${CORES}")"
+fi
 
 if [[ ${#MODULES[@]} -eq 0 ]]; then
     echo "ERROR: No module specified. Use --help for usage."
