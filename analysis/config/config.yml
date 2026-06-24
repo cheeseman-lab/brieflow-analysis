@@ -1,0 +1,109 @@
+# BrieFlow config — mb_pilot A375_MB (3-dye combinatorial SBS, SBS-only).
+# preprocess + sbs carry real values; other modules are stubs (we target sbs/extract_bases).
+
+all:
+  root_fp: /lab/ops_analysis_ssd/test_matteo/mb_pilot_output/
+  image_format: tiff
+
+preprocess:
+  sbs_data_format: tiff
+  sbs_data_organization: tile
+  sbs_n_z_planes: null
+  sbs_channel_order:        # channel column values, in stacking order (1=DAPI..5=Cy5)
+  - 1
+  - 2
+  - 3
+  - 4
+  - 5
+  sbs_channel_order_flip: false
+  sbs_combo_fp: config/sbs_combo.tsv
+  sbs_samples_fp: config/sbs_samples.tsv
+  sbs_channels_metadata:
+  - {name: DAPI, index: 0, channel_type: fluorescence, color: "0000FF", description: "Nuclear stain"}
+  - {name: Cy3, index: 1, channel_type: fluorescence, color: "00FF00", description: "SBS dye Cy3"}
+  - {name: Cy3long, index: 2, channel_type: fluorescence, color: "FFAA00", description: "Cy3 long (not-G presence)"}
+  - {name: FITC, index: 3, channel_type: fluorescence, color: "FFFF00", description: "SBS dye FITC"}
+  - {name: Cy5, index: 4, channel_type: fluorescence, color: "FF0000", description: "SBS dye Cy5"}
+  phenotype_data_format: tiff
+  phenotype_data_organization: tile
+  phenotype_n_z_planes: null
+  phenotype_channel_order: null
+  phenotype_channel_order_flip: false
+  phenotype_combo_fp: config/phenotype_combo.tsv
+  phenotype_samples_fp: config/phenotype_samples.tsv
+  phenotype_channels_metadata: null
+  sample_fraction: 1
+
+sbs:
+  heatmap_shape: square
+  heatmap_plate: 6W
+  alignment_method: null
+  channel_names:
+  - DAPI
+  - Cy3
+  - Cy3long
+  - FITC
+  - Cy5
+  upsample_factor: 2
+  window: 2
+  skip_cycles_indices: null
+  manual_background_cycle_index: null
+  manual_channel_mapping: null
+  extra_channel_indices:
+  - 0
+  max_filter_width: 3
+  spot_detection_method: standard
+  dapi_cycle: 1
+  dapi_cycle_index: 0
+  cyto_cycle: 1
+  cyto_cycle_index: 0
+  dapi_index: 0
+  cyto_index: 1
+  segmentation_method: cellpose
+  gpu: false
+  reconcile: false
+  segment_cells: false
+  nuclei_diameter: 20
+  cell_diameter: 35
+  cellpose_model: cyto3
+  nuclei_flow_threshold: 0.4
+  nuclei_cellprob_threshold: 0.0
+  cell_flow_threshold: 1
+  cell_cellprob_threshold: 0
+  cyto_model: cyto3
+  df_barcode_library_fp: config/barcode_library.tsv
+  threshold_peaks: 100
+  call_reads_method: combinatorial
+  combinatorial:
+    # code = the only chemistry-specific input (dye-label combo ON per base).
+    code:
+      T: c
+      C: cf
+      A: fy
+      G: ""
+    # frac = brightness-normalized blank gate + dye-composition classifier.
+    # frac_thresh auto-defaults to 0.36/D_max (0.18 here); blank_thresh=0.5.
+    # Confirm the gates visually rather than hand-tuning these.
+    classifier: frac
+  bases:
+  - c
+  - p
+  - f
+  - y
+  barcode_type: simple
+  q_min: 0
+  barcode_col: null
+  prefix_col: prefix
+  sort_calls: count
+  error_correct: true
+  max_distance: 2
+  n_barcodes: 1
+  barcode_info_cols:
+  - gene_symbol
+  - gene_id
+  mode: null
+  peak_width: 5
+
+# Only `all`, `preprocess`, `sbs` sections exist by design — the Snakefile gates
+# each module on `"<module>" in config`, so phenotype/merge/aggregate/cluster
+# targets never load. SBS-only screen; no downstream config to break.

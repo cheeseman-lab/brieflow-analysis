@@ -1,0 +1,8 @@
+# Snakemake v8+ workflow profile — cluster defaults for the mb_pilot run.
+# Partition "20" confirmed via `sinfo`. Per-rule mem is overridden by flow.sh's
+# resource resolver (--set-resources); these are the fallback defaults.
+default-resources:
+  slurm_partition: "20"
+  runtime: 240
+  mem_mb: 8000
+  cpus_per_task: 4

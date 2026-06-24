@@ -90,7 +90,11 @@ def _():
         get_gene_mapping,
     )
     from lib.sbs.extract_bases import extract_bases
-    from lib.sbs.call_reads import call_reads, plot_normalization_comparison
+    from lib.sbs.call_reads import (
+        call_reads,
+        plot_normalization_comparison,
+        plot_combinatorial_gates,
+    )
     from lib.sbs.call_cells import call_cells
     from lib.shared.extract_phenotype_minimal import extract_phenotype_minimal
     from lib.sbs.eval_mapping import (
@@ -135,6 +139,7 @@ def _():
         plot_gene_symbol_histogram,
         plot_mapping_vs_threshold,
         plot_normalization_comparison,
+        plot_combinatorial_gates,
         plt,
         prepare_cellpose,
         random_cmap,
@@ -1252,9 +1257,17 @@ def _(mo):
 
     ### Extract base intensity, call reads, assign to cells
     - `THRESHOLD_READS`: Initial threshold for detecting sequencing reads, set to ~50 for preliminary analysis. This parameter will be optimized based on the mapping rate vs. peak threshold plot generated below. A higher threshold increases confidence in read calls but reduces the total number of detected reads.
-    - `CALL_READS_METHOD`: Method to use for correcting base intensity across channels. The below `plot_normalization_comparison` function will help you assess what method to use. Options are:
-        - `MEDIAN`: Uses median-based correction, performed independently for each tile. This is the default method.
-        - `PERCENTILE`: Uses percentile-based correction, performed independently for each tile.
+    - `CHEMISTRY_COLORS`: Number of fluorescent colors encoding the bases.
+        - `4`: standard one-dye-per-base SBS — `CALL_READS_METHOD` (below) applies.
+        - `3` or `2`: **combinatorial** chemistry — each base is a *combination*
+          of dyes ON. Set `COMBINATORIAL_CODE` (base → channel-labels ON, `""`
+          = blank). The `plot_combinatorial_gates` diagnostic below confirms the
+          gates; `frac_thresh` auto-defaults to `0.36/densest-codeword` so no
+          hand-tuning is needed.
+    - `CALL_READS_METHOD` (4-color only): base-intensity correction. The
+      `plot_normalization_comparison` function below helps assess which to use.
+        - `MEDIAN`: median-based correction, per tile. The default method.
+        - `PERCENTILE`: percentile-based correction, per tile.
     """)
     return
 
@@ -1263,15 +1276,31 @@ def _(mo):
 def _():
     # === OPERATOR PARAMETERS ===
     THRESHOLD_READS = 50  # library default; raise to be stricter
-    CALL_READS_METHOD = "median"  # "median" | "max"
+
+    # Number of colors encoding the bases: 4 (one dye per base) or 2/3
+    # (combinatorial: a base = a combination of dyes on).
+    CHEMISTRY_COLORS = 4  # 4 | 3 | 2
+
+    # 4-color base-intensity correction (ignored for combinatorial chemistry).
+    CALL_READS_METHOD = "median"  # "median" | "percentile"
+
+    # Combinatorial code for 2-/3-color chemistry: base -> channel-labels ON
+    # (labels are the BASES set above; "" = blank). Example 3-color:
+    # T=Cy3, C=Cy3+FITC, A=FITC+Cy5, G=blank -> {"T":"c","C":"cf","A":"fy","G":""}.
+    COMBINATORIAL_CODE = {"T": "c", "C": "cf", "A": "fy", "G": ""}
+    # classifier "frac" = per-spot brightness-normalized blank gate + dye
+    # composition (recommended). Confirm via the diagnostic, don't hand-tune.
+    COMBINATORIAL = {"code": COMBINATORIAL_CODE, "classifier": "frac"}
     # === END OPERATOR PARAMETERS ===
-    return CALL_READS_METHOD, THRESHOLD_READS
+    return CALL_READS_METHOD, CHEMISTRY_COLORS, COMBINATORIAL, THRESHOLD_READS
 
 
 @app.cell
 def _(
     BASES,
     CALL_READS_METHOD,
+    CHEMISTRY_COLORS,
+    COMBINATORIAL,
     SEGMENT_CELLS,
     THRESHOLD_READS,
     WILDCARDS,
@@ -1291,8 +1320,43 @@ def _(
         wildcards=WILDCARDS,
         bases=BASES,
     )
-    df_reads = call_reads(df_bases, peaks_data=peaks, method=CALL_READS_METHOD)
-    return (df_reads,)
+    # 2-/3-color combinatorial chemistry uses the combinatorial caller; 4-color
+    # uses the standard per-channel correction.
+    if CHEMISTRY_COLORS in (2, 3):
+        df_reads = call_reads(
+            df_bases, peaks_data=peaks, method="combinatorial",
+            combinatorial=COMBINATORIAL,
+        )
+    else:
+        df_reads = call_reads(df_bases, peaks_data=peaks, method=CALL_READS_METHOD)
+    return df_bases, df_reads
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ### Combinatorial chemistry diagnostic (2-/3-color only)
+
+    For combinatorial chemistry, confirm the gates by eye instead of hand-tuning
+    thresholds:
+    - **Left**: dye composition colored by called base (ternary for 3 colors,
+      fraction-vs-brightness for 2). Each base should occupy a distinct region
+      — single-dye bases at a vertex, double-dye bases on the connecting edge.
+    - **Right**: per-spot relative brightness with the blank gate. The dim/blank
+      population should fall clearly left of the red line.
+
+    If the regions overlap or the brightness gate sits off the valley, nudge
+    `frac_thresh` / `blank_thresh` in `COMBINATORIAL` above.
+    """)
+    return
+
+
+@app.cell
+def _(CHEMISTRY_COLORS, COMBINATORIAL, df_bases, plot_combinatorial_gates, plt):
+    if CHEMISTRY_COLORS in (2, 3):
+        plot_combinatorial_gates(df_bases, COMBINATORIAL)
+        plt.show()
+    return
 
 
 @app.cell(hide_code=True)
@@ -1628,6 +1692,8 @@ def _(
     CELL_NMS_THRESHOLD,
     CELL_PROB_THRESHOLD,
     CHANNEL_NAMES,
+    CHEMISTRY_COLORS,
+    COMBINATORIAL,
     CONFIG_FILE_HEADER,
     CONFIG_FILE_PATH,
     CYTO_CYCLE,
@@ -1714,6 +1780,12 @@ def _(
         "n_barcodes": N_BARCODES,
         "barcode_type": BARCODE_TYPE,
     }
+    # Chemistry: combinatorial (2-/3-color) overrides call_reads_method and
+    # records the dye->base code; 4-color keeps the standard method above.
+    config["sbs"]["chemistry_colors"] = CHEMISTRY_COLORS
+    if CHEMISTRY_COLORS in (2, 3):
+        config["sbs"]["call_reads_method"] = "combinatorial"
+        config["sbs"]["combinatorial"] = COMBINATORIAL
     if MAX_DISTANCE is not None:
         config["sbs"]["max_distance"] = MAX_DISTANCE
     if BARCODE_TYPE == "simple":
