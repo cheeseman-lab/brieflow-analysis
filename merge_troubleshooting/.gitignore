@@ -1,0 +1,6 @@
+# Large local artifacts — regenerable, do NOT commit
+cache/            # pulled GCS parquets + cached triangle hashes (~3 GB)
+*.log
+harness/*.log
+**/__pycache__/
+.DS_Store

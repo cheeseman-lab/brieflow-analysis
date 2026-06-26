@@ -279,9 +279,23 @@ def _(mo):
     ## <font color='red'>SET PARAMETERS</font>
 
     ### Parameters for metadata alignment
-    Each microscope handles global coordinates differently. If datasets were acquired in two different microscopes the metadata of the wells needs to be aligned.
+    Each microscope handles global stage coordinates differently. When SBS and phenotype
+    were acquired on **different microscopes**, their coordinate frames have different
+    origins (and occasionally a mirror/90° difference), so the well metadata must be
+    aligned before tiles can be paired.
 
-    `METADATA_ALIGN`: Whether to perform metadata alignment. Defaults `False`.
+    `METADATA_ALIGN`: Center-align the two scopes' coordinate frames (a translation that
+    makes the SBS and phenotype tile grids overlap). **Turn this on for any two-scope
+    acquisition** — it is what corrects the combined tile grid below and makes initial-site
+    selection pick the correct overlapping tiles. It does **not** correct within-tile
+    rotation/distortion (that is handled per tile-pair downstream). Defaults `False`
+    (single-scope acquisitions need no alignment). This setting is now saved to the config
+    and applied by the pipeline, not just here.
+
+    The flip/rotate options below are only for gross orientation differences (a mirrored
+    camera or a 90° mount); leave them `False` unless the tile grid is clearly mirrored or
+    rotated by a quarter turn. A small (~1°) rotation is **not** a flip — do not set these
+    for that.
 
     `ALIGNMENT_FLIP_X`: Flip images left-to-right (horizontal flip). Defaults `False`.
 
@@ -321,14 +335,22 @@ def _(
     plot_combined_tile_grid,
     sbs_test_metadata,
 ):
-    # Apply flip and rotate transformation
+    # Apply center-alignment (+ optional flip/rotate). align_metadata centers SBS onto
+    # phenotype; with all flips False this is a pure translation. The re-plotted grid
+    # below should show the two modalities overlapping (vs offset in the raw grid above).
     if METADATA_ALIGN:
         sbs_aligned, ph_aligned, transform_info = align_metadata(sbs_test_metadata, ph_test_metadata, flip_x=ALIGNMENT_FLIP_X, flip_y=ALIGNMENT_FLIP_Y, rotate_90=ALIGNMENT_ROTATE_90)
+        (_ph_cx, _ph_cy), (_sbs_cx, _sbs_cy) = transform_info["original_centers"]
+        print(f"METADATA_ALIGN on: centered SBS onto phenotype "
+              f"(raw center offset = ({_sbs_cx - _ph_cx:.0f}, {_sbs_cy - _ph_cy:.0f}) um; "
+              f"flip_x={ALIGNMENT_FLIP_X}, flip_y={ALIGNMENT_FLIP_Y}, rotate_90={ALIGNMENT_ROTATE_90})")
         _combined_tile_grid = plot_combined_tile_grid(ph_aligned, sbs_aligned, ph_image_dims=PHENOTYPE_DIMENSIONS, sbs_image_dims=SBS_DIMENSIONS)
-        _combined_tile_grid.show()  # Flip x coordinates (horizontal flip)
-    else:  # Flip y coordinates (vertical flip)
-        sbs_aligned = sbs_test_metadata  # Rotation
-        ph_aligned = ph_test_metadata  # Check the result with your combined tile grid
+        _combined_tile_grid.show()
+    else:
+        print("METADATA_ALIGN off: using raw stage coordinates "
+              "(set METADATA_ALIGN=True for two-scope acquisitions).")
+        sbs_aligned = sbs_test_metadata
+        ph_aligned = ph_test_metadata
     return ph_aligned, sbs_aligned
 
 
@@ -464,35 +486,51 @@ def _(DET_RANGE, SCORE, initial_alignment_df, plot_alignment_quality):
 
 
 @app.cell
-def _(DET_RANGE, initial_alignment_df):
-    # Validate that enough pairs pass the thresholds
-    d0, d1 = DET_RANGE
-    valid_pairs_df = initial_alignment_df.query(
-        "@d0 <= determinant <= @d1 & score > @SCORE"
-    )
-
-    print(f"\n{'='*50}")
-    print(f"VALIDATION RESULTS")
-    print(f"{'='*50}")
-    print(f"Total candidate pairs: {len(initial_alignment_df)}")
-    print(f"Pairs passing thresholds: {len(valid_pairs_df)}")
-    print(f"Minimum required: 5")
-    print(f"{'='*50}")
-
-    if len(valid_pairs_df) < 5:
-        print(f"\nWARNING: Only {len(valid_pairs_df)} pairs pass thresholds!")
-        print("The pipeline requires at least 5 valid pairs.")
-        print("Consider:")
-        print("  - Adjusting DET_RANGE or SCORE thresholds")
-        print("  - Adding more SBS tiles to INITIAL_SBS_TILES")
-        print("  - Using manual INITIAL_SITES with known good pairs")
+def _(DET_RANGE, SCORE, initial_alignment_df, ph_test_metadata, sbs_test_metadata):
+    # Validate that enough pairs pass the thresholds. DET_RANGE is operator-set (not
+    # auto-filled) — but if it is unset we give a concrete starting point instead of
+    # crashing. The fitted transform maps phenotype->SBS, so its determinant is
+    # 1/(M*B)^2 where M*B = (phenotype_px / SBS_px) is the combined magnification*binning
+    # factor between the two scopes. Getting this direction wrong is the most common
+    # merge config mistake.
+    if DET_RANGE is None:
+        print("DET_RANGE is not set. Set it from the determinant cluster in the plot above.")
+        try:
+            _MxB = sbs_test_metadata["pixel_size_x"].iloc[0] / ph_test_metadata["pixel_size_x"].iloc[0]
+            _det = 1.0 / (_MxB ** 2)
+            print(f"  Suggested starting point from pixel sizes: M*B={_MxB:.3f}, "
+                  f"expected determinant=1/(M*B)^2={_det:.5f}")
+            print(f"  -> e.g. DET_RANGE = [{0.9 * _det:.5f}, {1.1 * _det:.5f}]  (verify against the plot, then set it)")
+        except Exception:
+            print("  (could not read pixel sizes from metadata — set DET_RANGE manually from the plot)")
     else:
-        print(f"\nValidation passed! {len(valid_pairs_df)} pairs will be used.")
-    
-    # Show which pairs passed
-    print(f"\nValid pairs (tile, site):")
-    for _, row in valid_pairs_df.iterrows():
-        print(f"  [{int(row['tile'])}, {int(row['site'])}] - score: {row['score']:.3f}, det: {row['determinant']:.6f}")
+        d0, d1 = DET_RANGE
+        valid_pairs_df = initial_alignment_df.query(
+            "@d0 <= determinant <= @d1 & score > @SCORE"
+        )
+
+        print(f"\n{'='*50}")
+        print(f"VALIDATION RESULTS")
+        print(f"{'='*50}")
+        print(f"Total candidate pairs: {len(initial_alignment_df)}")
+        print(f"Pairs passing thresholds: {len(valid_pairs_df)}")
+        print(f"Minimum required: 5")
+        print(f"{'='*50}")
+
+        if len(valid_pairs_df) < 5:
+            print(f"\nWARNING: Only {len(valid_pairs_df)} pairs pass thresholds!")
+            print("The pipeline requires at least 5 valid pairs.")
+            print("Consider:")
+            print("  - Adjusting DET_RANGE or SCORE thresholds")
+            print("  - Adding more SBS tiles to INITIAL_SBS_TILES")
+            print("  - Using manual INITIAL_SITES with known good pairs")
+        else:
+            print(f"\nValidation passed! {len(valid_pairs_df)} pairs will be used.")
+
+        # Show which pairs passed
+        print(f"\nValid pairs (tile, site):")
+        for _, row in valid_pairs_df.iterrows():
+            print(f"  [{int(row['tile'])}, {int(row['site'])}] - score: {row['score']:.3f}, det: {row['determinant']:.6f}")
     return
 
 
@@ -514,6 +552,37 @@ def _():
     THRESHOLD = None                   # e.g., 2
     # === END OPERATOR PARAMETERS ===
     return (THRESHOLD,)
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## <font color='red'>SET PARAMETERS (OPTIONAL): LOCAL DISTORTION REFINEMENT</font>
+
+    `LOCAL_REFINEMENT`: Correct residual **within-tile** distortion that a single affine
+    per tile-pair cannot capture. This is the failure mode when SBS and phenotype were
+    acquired on **differently-configured microscopes** (different cameras/relay optics):
+    even after the per-tile affine, unmatched cells pile up toward the tile edges and the
+    match rate varies a lot tile-to-tile (worst tiles far below the best).
+
+    When enabled (`"polynomial"`), after the affine alignment a smooth local warp is fit
+    **only on cells already matched within `THRESHOLD`** (high-confidence correspondences,
+    refined over a couple passes) and cells are re-matched. It does not change the
+    alignment step or its config — it is applied at merge time, and is fully backward
+    compatible: leave it `None` for normal single-scope screens (behaviour is unchanged).
+
+    Set to `"polynomial"` only if your two modalities came from different scopes and the
+    per-tile match rate is poor / uneven.
+    """)
+    return
+
+
+@app.cell
+def _():
+    # === OPERATOR PARAMETERS ===
+    LOCAL_REFINEMENT = None            # None (off) | "polynomial"
+    # === END OPERATOR PARAMETERS ===
+    return (LOCAL_REFINEMENT,)
 
 
 @app.cell
@@ -733,7 +802,9 @@ def _(
     INITIAL_SBS_TILES,
     INITIAL_SITES,
     INITIAL_SITES_APPROACH,
+    LOCAL_REFINEMENT,
     MERGE_COMBO_DF_FP,
+    METADATA_ALIGN,
     PHENOTYPE_DIMENSIONS,
     PHENOTYPE_PIXEL_SIZE_1,
     PHENO_DEDUP_PRIOR,
@@ -752,7 +823,7 @@ def _(
     convert_tuples_to_lists,
     yaml,
 ):
-    config['merge'] = {'approach': 'stitch' if STITCH else 'fast', 'merge_combo_fp': MERGE_COMBO_DF_FP, 'phenotype_dimensions': PHENOTYPE_DIMENSIONS, 'sbs_dimensions': SBS_DIMENSIONS, 'sbs_metadata_cycle': SBS_METADATA_CYCLE, 'score': SCORE, 'threshold': THRESHOLD, 'sbs_metadata_channel': SBS_METADATA_CHANNEL, 'ph_metadata_channel': PH_METADATA_CHANNEL, 'alignment_flip_x': ALIGNMENT_FLIP_X, 'alignment_flip_y': ALIGNMENT_FLIP_Y, 'alignment_rotate_90': ALIGNMENT_ROTATE_90, 'sbs_dedup_prior': SBS_DEDUP_PRIOR, 'pheno_dedup_prior': PHENO_DEDUP_PRIOR}
+    config['merge'] = {'approach': 'stitch' if STITCH else 'fast', 'merge_combo_fp': MERGE_COMBO_DF_FP, 'phenotype_dimensions': PHENOTYPE_DIMENSIONS, 'sbs_dimensions': SBS_DIMENSIONS, 'sbs_metadata_cycle': SBS_METADATA_CYCLE, 'score': SCORE, 'threshold': THRESHOLD, 'sbs_metadata_channel': SBS_METADATA_CHANNEL, 'ph_metadata_channel': PH_METADATA_CHANNEL, 'metadata_align': METADATA_ALIGN, 'alignment_flip_x': ALIGNMENT_FLIP_X, 'alignment_flip_y': ALIGNMENT_FLIP_Y, 'alignment_rotate_90': ALIGNMENT_ROTATE_90, 'local_refinement': LOCAL_REFINEMENT, 'sbs_dedup_prior': SBS_DEDUP_PRIOR, 'pheno_dedup_prior': PHENO_DEDUP_PRIOR}
     if STITCH:
         config['merge'].update({'stitched_image': STITCHED_IMAGE, 'flipud': FLIPUD, 'fliplr': FLIPLR, 'rot90': ROT90, 'sbs_pixel_size': SBS_PIXEL_SIZE_1, 'phenotype_pixel_size': PHENOTYPE_PIXEL_SIZE_1})
     elif INITIAL_SITES_APPROACH == 'auto':

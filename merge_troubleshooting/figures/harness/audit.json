@@ -1,0 +1,143 @@
+{
+  "vaishnavi__matching.png": {
+    "metrics": {
+      "n_in_view": 127.0,
+      "matched_frac": 0.926509186351706
+    },
+    "flags": [],
+    "caption": "Zoomed cell overlay (green=SBS, red=mapped PH); affine vs tuned. 93% matched <2px in window."
+  },
+  "vaishnavi__alignment_quality.png": {
+    "metrics": {
+      "n_points": 15,
+      "det_cv": 0.0033563277277958744
+    },
+    "flags": [],
+    "caption": "Per-pair determinant vs score (conventional). 15 pairs, det CV 0.3%."
+  },
+  "vaishnavi__tile_grid.png": {
+    "metrics": {
+      "frame_overlap": 1.0
+    },
+    "flags": [],
+    "caption": "PH/SBS tile-position grid (conventional). Stage-frame overlap 100%."
+  },
+  "vaishnavi__pooled_merge.png": {
+    "metrics": {
+      "coverage": 0.9733693554612118,
+      "matched_frac": 0.8772799365582871,
+      "empty_frac": 0.026630644538788162,
+      "n_ph_tiles": 6,
+      "site": 294
+    },
+    "flags": [],
+    "caption": "Full SBS tile merged from ALL 6 overlapping phenotype tiles (what the well-level pipeline does). Coverage 97%, 88% of covered SBS matched <2px."
+  },
+  "pdac__matching.png": {
+    "metrics": {
+      "n_in_view": 35.333333333333336,
+      "matched_frac": 0.9811320754716981
+    },
+    "flags": [],
+    "caption": "Zoomed cell overlay (green=SBS, red=mapped PH); affine vs tuned. 98% matched <2px in window."
+  },
+  "pdac__alignment_quality.png": {
+    "metrics": {
+      "n_points": 15,
+      "det_cv": 0.0014271981434719212
+    },
+    "flags": [],
+    "caption": "Per-pair determinant vs score (conventional). 15 pairs, det CV 0.1%."
+  },
+  "pdac__tile_grid.png": {
+    "metrics": {
+      "frame_overlap": 1.0
+    },
+    "flags": [],
+    "caption": "PH/SBS tile-position grid (conventional). Stage-frame overlap 100%."
+  },
+  "pdac__pooled_merge.png": {
+    "metrics": {
+      "coverage": 1.0,
+      "matched_frac": 0.9417322834645669,
+      "empty_frac": 0.0,
+      "n_ph_tiles": 9,
+      "site": 75
+    },
+    "flags": [],
+    "caption": "Full SBS tile merged from ALL 9 overlapping phenotype tiles (what the well-level pipeline does). Coverage 100%, 94% of covered SBS matched <2px."
+  },
+  "owen_40x__matching.png": {
+    "metrics": {
+      "n_in_view": 46.0,
+      "matched_frac": 0.8985507246376812
+    },
+    "flags": [],
+    "caption": "Zoomed cell overlay (green=SBS, red=mapped PH); affine vs tuned. 90% matched <2px in window."
+  },
+  "owen_40x__alignment_quality.png": {
+    "metrics": {
+      "n_points": 5,
+      "det_cv": 0.011082018411948573
+    },
+    "flags": [],
+    "caption": "Per-pair determinant vs score (conventional). 5 pairs, det CV 1.1%."
+  },
+  "owen_40x__tile_grid.png": {
+    "metrics": {
+      "frame_overlap": 0.0
+    },
+    "flags": [
+      "PH/SBS stage frames barely overlap \u2014 unrelated coords"
+    ],
+    "caption": "PH/SBS tile-position grid (conventional). Stage-frame overlap 0%."
+  },
+  "owen_40x__pooled_merge.png": {
+    "metrics": {
+      "coverage": 0.4215155615696888,
+      "matched_frac": 0.9373996789727127,
+      "empty_frac": 0.5784844384303112,
+      "n_ph_tiles": 14,
+      "site": 8
+    },
+    "flags": [
+      "PARTIAL tile coverage <60% \u2014 not a fully merged tile",
+      "large empty region (>40%) \u2014 check alignment/coverage"
+    ],
+    "caption": "Full SBS tile merged from ALL 14 overlapping phenotype tiles (what the well-level pipeline does). Coverage 42%, 94% of covered SBS matched <2px."
+  },
+  "owen_20x__matching.png": {
+    "metrics": {
+      "n_in_view": 144.66666666666666,
+      "matched_frac": 0.7764976958525346
+    },
+    "flags": [],
+    "caption": "Zoomed cell overlay (green=SBS, red=mapped PH); affine vs tuned. 78% matched <2px in window."
+  },
+  "owen_20x__alignment_quality.png": {
+    "metrics": {
+      "n_points": 15,
+      "det_cv": 0.0014905994485487335
+    },
+    "flags": [],
+    "caption": "Per-pair determinant vs score (conventional). 15 pairs, det CV 0.1%."
+  },
+  "owen_20x__tile_grid.png": {
+    "metrics": {
+      "frame_overlap": 1.0
+    },
+    "flags": [],
+    "caption": "PH/SBS tile-position grid (conventional). Stage-frame overlap 100%."
+  },
+  "owen_20x__pooled_merge.png": {
+    "metrics": {
+      "coverage": 0.9471823204419889,
+      "matched_frac": 0.8268782081194587,
+      "empty_frac": 0.05281767955801109,
+      "n_ph_tiles": 8,
+      "site": 144
+    },
+    "flags": [],
+    "caption": "Full SBS tile merged from ALL 8 overlapping phenotype tiles (what the well-level pipeline does). Coverage 95%, 83% of covered SBS matched <2px."
+  }
+}

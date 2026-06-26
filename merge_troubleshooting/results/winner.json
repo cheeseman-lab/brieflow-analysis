@@ -1,0 +1,45 @@
+{
+  "winner_config_id": "local_refinement=polynomial|ransac_random_state=0|threshold=4|threshold_triangle=0.3|warp_degree=3|warp_iterations=2",
+  "winner_config": {
+    "threshold": "4",
+    "threshold_triangle": 0.3,
+    "ransac_random_state": "0",
+    "local_refinement": "polynomial",
+    "warp_degree": 3.0,
+    "warp_iterations": 2.0
+  },
+  "per_dataset": [
+    {
+      "dataset": "owen_20x",
+      "score": 0.7595,
+      "optimum": 0.7599,
+      "tax": 0.0004
+    },
+    {
+      "dataset": "owen_40x",
+      "score": 0.9295,
+      "optimum": 0.9295,
+      "tax": 0.0
+    },
+    {
+      "dataset": "pdac",
+      "score": 0.9219,
+      "optimum": 0.922,
+      "tax": 0.0001
+    },
+    {
+      "dataset": "vaishnavi",
+      "score": 0.8744,
+      "optimum": 0.8748,
+      "tax": 0.0005
+    }
+  ],
+  "worst_ratio": 0.9995,
+  "n_configs": 36,
+  "datasets": [
+    "owen_20x",
+    "owen_40x",
+    "pdac",
+    "vaishnavi"
+  ]
+}

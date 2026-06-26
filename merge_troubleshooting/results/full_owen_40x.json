@@ -1,0 +1,26 @@
+{
+  "dataset": "owen_40x",
+  "config": {
+    "threshold": 4,
+    "threshold_triangle": 0.3,
+    "ransac_random_state": 0,
+    "ransac_residual_threshold": 2.0,
+    "local_refinement": "polynomial",
+    "warp_degree": 3,
+    "warp_iterations": 2
+  },
+  "det_band": [
+    0.01557,
+    0.01828
+  ],
+  "aligned_pairs": 183,
+  "raw_merged": 7799,
+  "deduped": 6141,
+  "total_sbs": 19304,
+  "total_ph": 6903,
+  "sbs_rate_pct": 31.81,
+  "ph_rate_pct": 88.96,
+  "median_dist_px": 0.317,
+  "frac_under_2px": 97.88,
+  "seconds": 8.0
+}

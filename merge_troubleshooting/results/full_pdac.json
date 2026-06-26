@@ -1,0 +1,26 @@
+{
+  "dataset": "pdac",
+  "config": {
+    "threshold": 4,
+    "threshold_triangle": 0.3,
+    "ransac_random_state": 0,
+    "ransac_residual_threshold": 2.0,
+    "local_refinement": "polynomial",
+    "warp_degree": 3,
+    "warp_iterations": 2
+  },
+  "det_band": [
+    0.06616,
+    0.07767
+  ],
+  "aligned_pairs": 2272,
+  "raw_merged": 396150,
+  "deduped": 313880,
+  "total_sbs": 380884,
+  "total_ph": 425947,
+  "sbs_rate_pct": 82.41,
+  "ph_rate_pct": 73.69,
+  "median_dist_px": 0.2,
+  "frac_under_2px": 99.31,
+  "seconds": 76.0
+}
