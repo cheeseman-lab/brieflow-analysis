@@ -40,3 +40,4 @@ analysis/.brieflow/
 
 # plugin-improvement docs (live locally for reference; belong to brieflow-ops, not this repo)
 BRIEFLOW_PLUGIN_FEEDBACK.md
+merge_troubleshooting/
