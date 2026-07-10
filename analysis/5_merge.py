@@ -355,7 +355,47 @@ def _(mo):
 
 
 @app.cell
-def _(find_closest_tiles, ph_aligned, sbs_aligned):
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## <font color='red'>SET PARAMETERS (OPTIONAL): ADVANCED FAST-MERGE LEVERS</font>
+
+    Optional levers to improve a difficult merge (e.g. a large rotation / scale offset between the two scopes). All default to `None` (pipeline built-in behavior). Set them here; the alignment and match-preview cells below use them, so you can evaluate a setting before committing the config. Only levers set to a non-`None` value are written to `config.yml`.
+    """)
+    return
+
+
+@app.cell
+def _():
+    # === OPERATOR PARAMETERS: ADVANCED FAST-MERGE LEVERS ===
+    LOCAL_REFINEMENT = None       # None | "polynomial" | "thin_plate_spline"; within-tile warp
+    WARP_DEGREE = None            # polynomial warp degree (e.g. 3)
+    WARP_ITERATIONS = None        # refine-and-rematch passes (e.g. 2)
+    WARP_SMOOTHING = None         # thin-plate-spline regularization (e.g. 10)
+    SEED_OPTIMIZE = None          # try top-SEED_TOPK nearest tiles per seed, keep best (e.g. True)
+    SEED_TOPK = None              # nearest tiles to evaluate when SEED_OPTIMIZE (e.g. 3)
+    THRESHOLD_TRIANGLE = None     # triangle hash-match distance (e.g. 0.3)
+    RANSAC_RANDOM_STATE = None    # pin RANSAC for reproducibility (e.g. 0)
+    # === END OPERATOR PARAMETERS ===
+    return (
+        LOCAL_REFINEMENT,
+        RANSAC_RANDOM_STATE,
+        SEED_OPTIMIZE,
+        SEED_TOPK,
+        THRESHOLD_TRIANGLE,
+        WARP_DEGREE,
+        WARP_ITERATIONS,
+        WARP_SMOOTHING,
+    )
+
+
+def _(
+    SEED_OPTIMIZE,
+    SEED_TOPK,
+    find_closest_tiles,
+    ph_aligned,
+    sbs_aligned,
+):
     # === OPERATOR PARAMETERS ===
     INITIAL_SITES_APPROACH = None      # "auto" | "manual"
     INITIAL_SBS_TILES = None           # auto: list of SBS tile indices distributed across the well
@@ -369,8 +409,11 @@ def _(find_closest_tiles, ph_aligned, sbs_aligned):
     # Auto-discover matches from SBS tiles (for visualization and validation)
         for _sbs_tile in INITIAL_SBS_TILES:
             closest = find_closest_tiles(sbs_aligned, ph_aligned, _sbs_tile, verbose=True)
-            best_match = int(closest.iloc[0]['tile'])
-            candidate_pairs.append([best_match, _sbs_tile])
+            if SEED_OPTIMIZE:
+                for _ph_tile in closest.head(SEED_TOPK or 3)['tile'].astype(int):
+                    candidate_pairs.append([int(_ph_tile), _sbs_tile])
+            else:
+                candidate_pairs.append([int(closest.iloc[0]['tile']), _sbs_tile])
         print('\n' + '=' * 50)
         print('Discovered candidate pairs:')
         print('=' * 50)
@@ -399,9 +442,11 @@ def _(candidate_pairs):
 
 @app.cell
 def _(
+    RANSAC_RANDOM_STATE,
     ROOT_FP,
     TEST_PLATE,
     TEST_WELL,
+    THRESHOLD_TRIANGLE,
     candidate_pairs,
     get_filename,
     hash_cell_locations,
@@ -415,7 +460,9 @@ def _(
     _sbs_info_fp = ROOT_FP / 'sbs' / 'parquets' / str(TEST_PLATE) / _row2 / _col2 / 'sbs_info.parquet'
     sbs_info_1 = pd.read_parquet(_sbs_info_fp)
     sbs_info_hash = hash_cell_locations(sbs_info_1).rename(columns={'tile': 'site'})
-    initial_alignment_df = initial_alignment(phenotype_info_hash, sbs_info_hash, initial_sites=candidate_pairs)
+    _ransac_kwargs = {_k: _v for _k, _v in {'random_state': RANSAC_RANDOM_STATE}.items() if _v is not None}
+    _evaluate_kwargs = {_k: _v for _k, _v in {'threshold_triangle': THRESHOLD_TRIANGLE, 'ransac_kwargs': _ransac_kwargs or None}.items() if _v is not None} or None
+    initial_alignment_df = initial_alignment(phenotype_info_hash, sbs_info_hash, initial_sites=candidate_pairs, evaluate_kwargs=_evaluate_kwargs)
     initial_alignment_df
     return initial_alignment_df, phenotype_info_1, sbs_info_1
 
@@ -518,15 +565,20 @@ def _():
 
 @app.cell
 def _(
+    LOCAL_REFINEMENT,
     THRESHOLD,
+    WARP_DEGREE,
+    WARP_ITERATIONS,
+    WARP_SMOOTHING,
     candidate_pairs,
     fast_merge_example,
     initial_alignment_df,
     phenotype_info_1,
     sbs_info_1,
 ):
+    _warp_kwargs = {_k: _v for _k, _v in {'degree': WARP_DEGREE, 'iterations': WARP_ITERATIONS, 'smoothing': WARP_SMOOTHING}.items() if _v is not None} or None
     for _ph_tile, sbs_site in candidate_pairs:
-        success = fast_merge_example(_ph_tile, sbs_site, initial_alignment_df, phenotype_info_1, sbs_info_1, THRESHOLD)
+        success = fast_merge_example(_ph_tile, sbs_site, initial_alignment_df, phenotype_info_1, sbs_info_1, THRESHOLD, local_refinement=LOCAL_REFINEMENT, warp_kwargs=_warp_kwargs)
         if not success:
             print(f'  Try a different tile-site combination or proceed to stitch approach.')
     return
@@ -715,55 +767,6 @@ def _():
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## <font color='red'>SET PARAMETERS (OPTIONAL): ADVANCED FAST-MERGE LEVERS</font>
-
-    Tune the fast-merge alignment + warp. **All default to `None` (pipeline built-in values) — leave them unless a merge is underperforming.** Only levers set to a non-`None` value are written to `config.yml`. Only levers with measured impact are surfaced.
-
-    **Two-microscope / rotated acquisitions — validated high-impact fix (Vaishnavi well A1: median 0.91px -> 0.08px, coverage 59% -> 92%). Strongly recommended for two-scope screens:**
-
-    - `SEED_OPTIMIZE`: evaluate the top-`SEED_TOPK` nearest phenotype tiles per SBS seed and keep the best (vs the stage-nearest tile, often not the true overlap). Rec. `True`.
-    - `SEED_TOPK`: nearest tiles to evaluate. Rec. `3`.
-    - `LOCAL_REFINEMENT`: within-tile warp model, `"polynomial"` | `"thin_plate_spline"`. **TPS is the biggest quality lever on two-scope data (0.08px)**; polynomial is the robust generalizer. Rec. `"thin_plate_spline"` (two-scope), else `"polynomial"`.
-    - `WARP_SMOOTHING`: TPS regularization. Rec. `10`.
-
-    **Cross-optics generalized winner (all four datasets, 0.05% tax):**
-
-    - `WARP_DEGREE`: polynomial warp degree. Rec. `3` (pipeline default `2`).
-    - `WARP_ITERATIONS`: refine-and-rematch passes. Rec. `2`.
-    - `THRESHOLD_TRIANGLE`: max triangle-hash match distance. Rec. `0.3`.
-    - `RANSAC_RANDOM_STATE`: pin RANSAC for reproducibility (determinism, not quality). Rec. `0`.
-    """)
-    return
-
-
-@app.cell
-def _():
-    # === OPERATOR PARAMETERS: ADVANCED FAST-MERGE LEVERS ===
-    # All None => pipeline default. TPS + find-optimal-site recommended for two-scope screens.
-    SEED_OPTIMIZE = None          # keep best of top-K nearest PH tiles per SBS seed; rec. True (two-scope)
-    SEED_TOPK = None              # nearest tiles to evaluate when SEED_OPTIMIZE; rec. 3
-    LOCAL_REFINEMENT = None       # None | "polynomial" | "thin_plate_spline"; rec. "thin_plate_spline" (two-scope)
-    WARP_SMOOTHING = None         # thin-plate-spline regularization; rec. 10
-    WARP_DEGREE = None            # polynomial warp degree; rec. 3
-    WARP_ITERATIONS = None        # refine-and-rematch passes; rec. 2
-    THRESHOLD_TRIANGLE = None     # triangle hash-match distance; rec. 0.3
-    RANSAC_RANDOM_STATE = None    # pin RANSAC for reproducibility; rec. 0
-    # === END OPERATOR PARAMETERS ===
-    return (
-        LOCAL_REFINEMENT,
-        RANSAC_RANDOM_STATE,
-        SEED_OPTIMIZE,
-        SEED_TOPK,
-        THRESHOLD_TRIANGLE,
-        WARP_DEGREE,
-        WARP_ITERATIONS,
-        WARP_SMOOTHING,
-    )
-
-
-@app.cell(hide_code=True)
-def _(mo):
-    mo.md(r"""
     ## Add merge parameters to config file
     """)
     return
@@ -819,7 +822,6 @@ def _(
     else:
         config['merge'].update({'initial_sites': INITIAL_SITES, 'det_range': DET_RANGE})
         print(f'Config will use initial_sites: {len(INITIAL_SITES)} pairs')
-    # Advanced fast-merge levers - only written when set (absent keys => pipeline defaults)
     advanced_merge_levers = {'seed_optimize': SEED_OPTIMIZE, 'seed_topk': SEED_TOPK, 'local_refinement': LOCAL_REFINEMENT, 'warp_smoothing': WARP_SMOOTHING, 'warp_degree': WARP_DEGREE, 'warp_iterations': WARP_ITERATIONS, 'threshold_triangle': THRESHOLD_TRIANGLE, 'ransac_random_state': RANSAC_RANDOM_STATE}
     config['merge'].update({_k: _v for _k, _v in advanced_merge_levers.items() if _v is not None})
     safe_config = convert_tuples_to_lists(config)
