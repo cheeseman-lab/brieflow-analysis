@@ -1104,6 +1104,7 @@ def _():
     DF_DESIGN_FP = None
     DF_BARCODE_LIBRARY_FP = "config/barcode_library.tsv"
     UNIPROT_DATA_FP = "config/uniprot_data.tsv"
+    SPECIES_ID = "9606"  # NCBI taxonomy ID for UniProt annotations: human=9606, mouse=10090, rat=10116, fly=7227, worm=6239
     GENE_SYMBOL_COL = None
     GENE_ID_COL = None
     NONTARGETING_FORMAT = "nontargeting_{prefix}"
@@ -1152,6 +1153,7 @@ def _():
         SEQUENCING_ORDER,
         SKIP_CYCLES_MAP,
         SKIP_CYCLES_RECOMB,
+        SPECIES_ID,
         UNIPROT_DATA_FP,
     )
 
@@ -1175,15 +1177,16 @@ def _(
     SEQUENCING_ORDER,
     SKIP_CYCLES_MAP,
     SKIP_CYCLES_RECOMB,
+    SPECIES_ID,
     UNIPROT_DATA_FP,
-    mo,
     get_barcode_list,
     get_uniprot_data,
+    mo,
     pd,
     standardize_barcode_design,
 ):
     # Get uniprot data and save it temporarily
-    uniprot_data = get_uniprot_data()
+    uniprot_data = get_uniprot_data(species_id=SPECIES_ID)
     uniprot_data.to_csv(UNIPROT_DATA_FP, sep="\t", index=False)
     uniprot_data = pd.read_csv(UNIPROT_DATA_FP, sep="\t")
 
