@@ -355,6 +355,15 @@ def _(mo):
 
 
 @app.cell
+@app.cell
+def _():
+    def drop_none(**kwargs):
+        """Keep only the keyword args that were actually set (drop None)."""
+        return {k: v for k, v in kwargs.items() if v is not None}
+
+    return (drop_none,)
+
+
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
@@ -448,6 +457,7 @@ def _(
     TEST_WELL,
     THRESHOLD_TRIANGLE,
     candidate_pairs,
+    drop_none,
     get_filename,
     hash_cell_locations,
     initial_alignment,
@@ -460,9 +470,8 @@ def _(
     _sbs_info_fp = ROOT_FP / 'sbs' / 'parquets' / str(TEST_PLATE) / _row2 / _col2 / 'sbs_info.parquet'
     sbs_info_1 = pd.read_parquet(_sbs_info_fp)
     sbs_info_hash = hash_cell_locations(sbs_info_1).rename(columns={'tile': 'site'})
-    _ransac_kwargs = {_k: _v for _k, _v in {'random_state': RANSAC_RANDOM_STATE}.items() if _v is not None}
-    _evaluate_kwargs = {_k: _v for _k, _v in {'threshold_triangle': THRESHOLD_TRIANGLE, 'ransac_kwargs': _ransac_kwargs or None}.items() if _v is not None} or None
-    initial_alignment_df = initial_alignment(phenotype_info_hash, sbs_info_hash, initial_sites=candidate_pairs, evaluate_kwargs=_evaluate_kwargs)
+    evaluate_kwargs = drop_none(threshold_triangle=THRESHOLD_TRIANGLE, ransac_kwargs=drop_none(random_state=RANSAC_RANDOM_STATE) or None)
+    initial_alignment_df = initial_alignment(phenotype_info_hash, sbs_info_hash, initial_sites=candidate_pairs, evaluate_kwargs=evaluate_kwargs)
     initial_alignment_df
     return initial_alignment_df, phenotype_info_1, sbs_info_1
 
@@ -571,14 +580,15 @@ def _(
     WARP_ITERATIONS,
     WARP_SMOOTHING,
     candidate_pairs,
+    drop_none,
     fast_merge_example,
     initial_alignment_df,
     phenotype_info_1,
     sbs_info_1,
 ):
-    _warp_kwargs = {_k: _v for _k, _v in {'degree': WARP_DEGREE, 'iterations': WARP_ITERATIONS, 'smoothing': WARP_SMOOTHING}.items() if _v is not None} or None
+    warp_kwargs = drop_none(degree=WARP_DEGREE, iterations=WARP_ITERATIONS, smoothing=WARP_SMOOTHING) or None
     for _ph_tile, sbs_site in candidate_pairs:
-        success = fast_merge_example(_ph_tile, sbs_site, initial_alignment_df, phenotype_info_1, sbs_info_1, THRESHOLD, local_refinement=LOCAL_REFINEMENT, warp_kwargs=_warp_kwargs)
+        success = fast_merge_example(_ph_tile, sbs_site, initial_alignment_df, phenotype_info_1, sbs_info_1, THRESHOLD, local_refinement=LOCAL_REFINEMENT, warp_kwargs=warp_kwargs)
         if not success:
             print(f'  Try a different tile-site combination or proceed to stitch approach.')
     return
@@ -811,6 +821,7 @@ def _(
     WARP_SMOOTHING,
     config,
     convert_tuples_to_lists,
+    drop_none,
     yaml,
 ):
     config['merge'] = {'approach': 'stitch' if STITCH else 'fast', 'merge_combo_fp': MERGE_COMBO_DF_FP, 'phenotype_dimensions': PHENOTYPE_DIMENSIONS, 'sbs_dimensions': SBS_DIMENSIONS, 'sbs_metadata_cycle': SBS_METADATA_CYCLE, 'score': SCORE, 'threshold': THRESHOLD, 'sbs_metadata_channel': SBS_METADATA_CHANNEL, 'ph_metadata_channel': PH_METADATA_CHANNEL, 'metadata_align': METADATA_ALIGN, 'alignment_flip_x': ALIGNMENT_FLIP_X, 'alignment_flip_y': ALIGNMENT_FLIP_Y, 'alignment_rotate_90': ALIGNMENT_ROTATE_90, 'sbs_dedup_prior': SBS_DEDUP_PRIOR, 'pheno_dedup_prior': PHENO_DEDUP_PRIOR}
@@ -822,8 +833,7 @@ def _(
     else:
         config['merge'].update({'initial_sites': INITIAL_SITES, 'det_range': DET_RANGE})
         print(f'Config will use initial_sites: {len(INITIAL_SITES)} pairs')
-    advanced_merge_levers = {'seed_optimize': SEED_OPTIMIZE, 'seed_topk': SEED_TOPK, 'local_refinement': LOCAL_REFINEMENT, 'warp_smoothing': WARP_SMOOTHING, 'warp_degree': WARP_DEGREE, 'warp_iterations': WARP_ITERATIONS, 'threshold_triangle': THRESHOLD_TRIANGLE, 'ransac_random_state': RANSAC_RANDOM_STATE}
-    config['merge'].update({_k: _v for _k, _v in advanced_merge_levers.items() if _v is not None})
+    config['merge'].update(drop_none(seed_optimize=SEED_OPTIMIZE, seed_topk=SEED_TOPK, local_refinement=LOCAL_REFINEMENT, warp_smoothing=WARP_SMOOTHING, warp_degree=WARP_DEGREE, warp_iterations=WARP_ITERATIONS, threshold_triangle=THRESHOLD_TRIANGLE, ransac_random_state=RANSAC_RANDOM_STATE))
     safe_config = convert_tuples_to_lists(config)
     with open(CONFIG_FILE_PATH, 'w') as _config_file:
         _config_file.write(CONFIG_FILE_HEADER)
