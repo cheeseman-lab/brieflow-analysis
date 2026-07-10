@@ -715,6 +715,64 @@ def _():
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
+    ## <font color='red'>SET PARAMETERS (OPTIONAL): ADVANCED FAST-MERGE LEVERS</font>
+
+    These tune the fast-merge path. **All default to `None`, meaning the pipeline uses its built-in values — leave them as-is unless a merge is underperforming.** Only levers set to a non-`None` value are written to `config.yml`.
+
+    - **Triangle-hash matching** (`evaluate_match`): `THRESHOLD_TRIANGLE` (default `0.3`), `THRESHOLD_POINT` (default `2`), `THRESHOLD_REGION` (px radius, default `50`).
+    - **RANSAC** (forwarded to `RANSACRegressor`; default scikit-learn): `RANSAC_RESIDUAL_THRESHOLD`, `RANSAC_MAX_TRIALS`, `RANSAC_MIN_SAMPLES`, `RANSAC_RANDOM_STATE`.
+    - **Multistep alignment:** `BATCH_SIZE` (tiles per alignment batch).
+    - **Local warp refinement** (`fast_merge`; off unless `LOCAL_REFINEMENT` is set): `LOCAL_REFINEMENT` (`"polynomial"` | `"thin_plate_spline"`; TPS roughly halves the median residual on two-scope merges), polynomial knobs `WARP_DEGREE`/`WARP_ITERATIONS`/`WARP_MIN_CORRESPONDENCES`, TPS knobs `WARP_SMOOTHING`/`WARP_MAX_CORRESPONDENCES`.
+    - **Find-optimal-site seeding:** `SEED_OPTIMIZE` (default `False`; evaluate the top-K nearest phenotype tiles per SBS seed and keep the best) and `SEED_TOPK`.
+    """)
+    return
+
+
+@app.cell
+def _():
+    # === OPERATOR PARAMETERS: ADVANCED FAST-MERGE LEVERS ===
+    # All default to None => pipeline uses its built-in values. Only non-None
+    # levers are written to config.yml.
+    THRESHOLD_TRIANGLE = None          # triangle-descriptor match distance (default 0.3)
+    THRESHOLD_POINT = None             # post-fit point distance px (default 2)
+    THRESHOLD_REGION = None            # scoring region radius px (default 50)
+    RANSAC_RESIDUAL_THRESHOLD = None   # RANSACRegressor kwargs (default scikit-learn)
+    RANSAC_MAX_TRIALS = None
+    RANSAC_MIN_SAMPLES = None
+    RANSAC_RANDOM_STATE = None
+    BATCH_SIZE = None                  # multistep alignment batch size
+    LOCAL_REFINEMENT = None            # None | "polynomial" | "thin_plate_spline"
+    WARP_DEGREE = None                 # polynomial-warp knobs
+    WARP_ITERATIONS = None
+    WARP_MIN_CORRESPONDENCES = None
+    WARP_SMOOTHING = None              # thin-plate-spline knobs
+    WARP_MAX_CORRESPONDENCES = None
+    SEED_OPTIMIZE = False              # find-optimal-site seeding (default nearest-tile)
+    SEED_TOPK = None
+    # === END OPERATOR PARAMETERS ===
+    return (
+        BATCH_SIZE,
+        LOCAL_REFINEMENT,
+        RANSAC_MAX_TRIALS,
+        RANSAC_MIN_SAMPLES,
+        RANSAC_RANDOM_STATE,
+        RANSAC_RESIDUAL_THRESHOLD,
+        SEED_OPTIMIZE,
+        SEED_TOPK,
+        THRESHOLD_POINT,
+        THRESHOLD_REGION,
+        THRESHOLD_TRIANGLE,
+        WARP_DEGREE,
+        WARP_ITERATIONS,
+        WARP_MAX_CORRESPONDENCES,
+        WARP_MIN_CORRESPONDENCES,
+        WARP_SMOOTHING,
+    )
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
     ## Add merge parameters to config file
     """)
     return
@@ -725,6 +783,7 @@ def _(
     ALIGNMENT_FLIP_X,
     ALIGNMENT_FLIP_Y,
     ALIGNMENT_ROTATE_90,
+    BATCH_SIZE,
     CONFIG_FILE_HEADER,
     CONFIG_FILE_PATH,
     DET_RANGE,
@@ -733,11 +792,17 @@ def _(
     INITIAL_SBS_TILES,
     INITIAL_SITES,
     INITIAL_SITES_APPROACH,
+    LOCAL_REFINEMENT,
     MERGE_COMBO_DF_FP,
+    METADATA_ALIGN,
     PHENOTYPE_DIMENSIONS,
     PHENOTYPE_PIXEL_SIZE_1,
     PHENO_DEDUP_PRIOR,
     PH_METADATA_CHANNEL,
+    RANSAC_MAX_TRIALS,
+    RANSAC_MIN_SAMPLES,
+    RANSAC_RANDOM_STATE,
+    RANSAC_RESIDUAL_THRESHOLD,
     ROT90,
     SBS_DEDUP_PRIOR,
     SBS_DIMENSIONS,
@@ -745,9 +810,19 @@ def _(
     SBS_METADATA_CYCLE,
     SBS_PIXEL_SIZE_1,
     SCORE,
+    SEED_OPTIMIZE,
+    SEED_TOPK,
     STITCH,
     STITCHED_IMAGE,
     THRESHOLD,
+    THRESHOLD_POINT,
+    THRESHOLD_REGION,
+    THRESHOLD_TRIANGLE,
+    WARP_DEGREE,
+    WARP_ITERATIONS,
+    WARP_MAX_CORRESPONDENCES,
+    WARP_MIN_CORRESPONDENCES,
+    WARP_SMOOTHING,
     config,
     convert_tuples_to_lists,
     yaml,
@@ -761,6 +836,9 @@ def _(
     else:
         config['merge'].update({'initial_sites': INITIAL_SITES, 'det_range': DET_RANGE})
         print(f'Config will use initial_sites: {len(INITIAL_SITES)} pairs')
+    # Advanced fast-merge levers - only written when set (absent keys => pipeline defaults)
+    advanced_merge_levers = {'metadata_align': METADATA_ALIGN, 'threshold_triangle': THRESHOLD_TRIANGLE, 'threshold_point': THRESHOLD_POINT, 'threshold_region': THRESHOLD_REGION, 'ransac_residual_threshold': RANSAC_RESIDUAL_THRESHOLD, 'ransac_max_trials': RANSAC_MAX_TRIALS, 'ransac_min_samples': RANSAC_MIN_SAMPLES, 'ransac_random_state': RANSAC_RANDOM_STATE, 'batch_size': BATCH_SIZE, 'local_refinement': LOCAL_REFINEMENT, 'warp_degree': WARP_DEGREE, 'warp_iterations': WARP_ITERATIONS, 'warp_min_correspondences': WARP_MIN_CORRESPONDENCES, 'warp_smoothing': WARP_SMOOTHING, 'warp_max_correspondences': WARP_MAX_CORRESPONDENCES, 'seed_optimize': SEED_OPTIMIZE, 'seed_topk': SEED_TOPK}
+    config['merge'].update({_k: _v for _k, _v in advanced_merge_levers.items() if _v is not None})
     safe_config = convert_tuples_to_lists(config)
     with open(CONFIG_FILE_PATH, 'w') as _config_file:
         _config_file.write(CONFIG_FILE_HEADER)
