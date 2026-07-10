@@ -355,7 +355,56 @@ def _(mo):
 
 
 @app.cell
-def _(find_closest_tiles, ph_aligned, sbs_aligned):
+@app.cell
+def _():
+    def drop_none(**kwargs):
+        """Keep only the keyword args that were actually set (drop None)."""
+        return {k: v for k, v in kwargs.items() if v is not None}
+
+    return (drop_none,)
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## <font color='red'>SET PARAMETERS (OPTIONAL): ADVANCED FAST-MERGE LEVERS</font>
+
+    Optional levers to improve a difficult merge (e.g. a large rotation / scale offset between the two scopes). All default to `None` (pipeline built-in behavior). Set them here; the alignment and match-preview cells below use them, so you can evaluate a setting before committing the config. Only levers set to a non-`None` value are written to `config.yml`.
+    """)
+    return
+
+
+@app.cell
+def _():
+    # === OPERATOR PARAMETERS: ADVANCED FAST-MERGE LEVERS ===
+    LOCAL_REFINEMENT = None       # None | "polynomial" | "thin_plate_spline"; within-tile warp
+    WARP_DEGREE = None            # polynomial warp degree (e.g. 3)
+    WARP_ITERATIONS = None        # refine-and-rematch passes (e.g. 2)
+    WARP_SMOOTHING = None         # thin-plate-spline regularization (e.g. 10)
+    SEED_OPTIMIZE = None          # try top-SEED_TOPK nearest tiles per seed, keep best (e.g. True)
+    SEED_TOPK = None              # nearest tiles to evaluate when SEED_OPTIMIZE (e.g. 3)
+    THRESHOLD_TRIANGLE = None     # triangle hash-match distance (e.g. 0.3)
+    RANSAC_RANDOM_STATE = None    # pin RANSAC for reproducibility (e.g. 0)
+    # === END OPERATOR PARAMETERS ===
+    return (
+        LOCAL_REFINEMENT,
+        RANSAC_RANDOM_STATE,
+        SEED_OPTIMIZE,
+        SEED_TOPK,
+        THRESHOLD_TRIANGLE,
+        WARP_DEGREE,
+        WARP_ITERATIONS,
+        WARP_SMOOTHING,
+    )
+
+
+def _(
+    SEED_OPTIMIZE,
+    SEED_TOPK,
+    find_closest_tiles,
+    ph_aligned,
+    sbs_aligned,
+):
     # === OPERATOR PARAMETERS ===
     INITIAL_SITES_APPROACH = None      # "auto" | "manual"
     INITIAL_SBS_TILES = None           # auto: list of SBS tile indices distributed across the well
@@ -369,8 +418,11 @@ def _(find_closest_tiles, ph_aligned, sbs_aligned):
     # Auto-discover matches from SBS tiles (for visualization and validation)
         for _sbs_tile in INITIAL_SBS_TILES:
             closest = find_closest_tiles(sbs_aligned, ph_aligned, _sbs_tile, verbose=True)
-            best_match = int(closest.iloc[0]['tile'])
-            candidate_pairs.append([best_match, _sbs_tile])
+            if SEED_OPTIMIZE:
+                for _ph_tile in closest.head(SEED_TOPK or 3)['tile'].astype(int):
+                    candidate_pairs.append([int(_ph_tile), _sbs_tile])
+            else:
+                candidate_pairs.append([int(closest.iloc[0]['tile']), _sbs_tile])
         print('\n' + '=' * 50)
         print('Discovered candidate pairs:')
         print('=' * 50)
@@ -399,10 +451,13 @@ def _(candidate_pairs):
 
 @app.cell
 def _(
+    RANSAC_RANDOM_STATE,
     ROOT_FP,
     TEST_PLATE,
     TEST_WELL,
+    THRESHOLD_TRIANGLE,
     candidate_pairs,
+    drop_none,
     get_filename,
     hash_cell_locations,
     initial_alignment,
@@ -415,7 +470,8 @@ def _(
     _sbs_info_fp = ROOT_FP / 'sbs' / 'parquets' / str(TEST_PLATE) / _row2 / _col2 / 'sbs_info.parquet'
     sbs_info_1 = pd.read_parquet(_sbs_info_fp)
     sbs_info_hash = hash_cell_locations(sbs_info_1).rename(columns={'tile': 'site'})
-    initial_alignment_df = initial_alignment(phenotype_info_hash, sbs_info_hash, initial_sites=candidate_pairs)
+    evaluate_kwargs = drop_none(threshold_triangle=THRESHOLD_TRIANGLE, ransac_kwargs=drop_none(random_state=RANSAC_RANDOM_STATE) or None)
+    initial_alignment_df = initial_alignment(phenotype_info_hash, sbs_info_hash, initial_sites=candidate_pairs, evaluate_kwargs=evaluate_kwargs)
     initial_alignment_df
     return initial_alignment_df, phenotype_info_1, sbs_info_1
 
@@ -518,15 +574,21 @@ def _():
 
 @app.cell
 def _(
+    LOCAL_REFINEMENT,
     THRESHOLD,
+    WARP_DEGREE,
+    WARP_ITERATIONS,
+    WARP_SMOOTHING,
     candidate_pairs,
+    drop_none,
     fast_merge_example,
     initial_alignment_df,
     phenotype_info_1,
     sbs_info_1,
 ):
+    warp_kwargs = drop_none(degree=WARP_DEGREE, iterations=WARP_ITERATIONS, smoothing=WARP_SMOOTHING) or None
     for _ph_tile, sbs_site in candidate_pairs:
-        success = fast_merge_example(_ph_tile, sbs_site, initial_alignment_df, phenotype_info_1, sbs_info_1, THRESHOLD)
+        success = fast_merge_example(_ph_tile, sbs_site, initial_alignment_df, phenotype_info_1, sbs_info_1, THRESHOLD, local_refinement=LOCAL_REFINEMENT, warp_kwargs=warp_kwargs)
         if not success:
             print(f'  Try a different tile-site combination or proceed to stitch approach.')
     return
@@ -733,11 +795,14 @@ def _(
     INITIAL_SBS_TILES,
     INITIAL_SITES,
     INITIAL_SITES_APPROACH,
+    LOCAL_REFINEMENT,
     MERGE_COMBO_DF_FP,
+    METADATA_ALIGN,
     PHENOTYPE_DIMENSIONS,
     PHENOTYPE_PIXEL_SIZE_1,
     PHENO_DEDUP_PRIOR,
     PH_METADATA_CHANNEL,
+    RANSAC_RANDOM_STATE,
     ROT90,
     SBS_DEDUP_PRIOR,
     SBS_DIMENSIONS,
@@ -745,14 +810,21 @@ def _(
     SBS_METADATA_CYCLE,
     SBS_PIXEL_SIZE_1,
     SCORE,
+    SEED_OPTIMIZE,
+    SEED_TOPK,
     STITCH,
     STITCHED_IMAGE,
     THRESHOLD,
+    THRESHOLD_TRIANGLE,
+    WARP_DEGREE,
+    WARP_ITERATIONS,
+    WARP_SMOOTHING,
     config,
     convert_tuples_to_lists,
+    drop_none,
     yaml,
 ):
-    config['merge'] = {'approach': 'stitch' if STITCH else 'fast', 'merge_combo_fp': MERGE_COMBO_DF_FP, 'phenotype_dimensions': PHENOTYPE_DIMENSIONS, 'sbs_dimensions': SBS_DIMENSIONS, 'sbs_metadata_cycle': SBS_METADATA_CYCLE, 'score': SCORE, 'threshold': THRESHOLD, 'sbs_metadata_channel': SBS_METADATA_CHANNEL, 'ph_metadata_channel': PH_METADATA_CHANNEL, 'alignment_flip_x': ALIGNMENT_FLIP_X, 'alignment_flip_y': ALIGNMENT_FLIP_Y, 'alignment_rotate_90': ALIGNMENT_ROTATE_90, 'sbs_dedup_prior': SBS_DEDUP_PRIOR, 'pheno_dedup_prior': PHENO_DEDUP_PRIOR}
+    config['merge'] = {'approach': 'stitch' if STITCH else 'fast', 'merge_combo_fp': MERGE_COMBO_DF_FP, 'phenotype_dimensions': PHENOTYPE_DIMENSIONS, 'sbs_dimensions': SBS_DIMENSIONS, 'sbs_metadata_cycle': SBS_METADATA_CYCLE, 'score': SCORE, 'threshold': THRESHOLD, 'sbs_metadata_channel': SBS_METADATA_CHANNEL, 'ph_metadata_channel': PH_METADATA_CHANNEL, 'metadata_align': METADATA_ALIGN, 'alignment_flip_x': ALIGNMENT_FLIP_X, 'alignment_flip_y': ALIGNMENT_FLIP_Y, 'alignment_rotate_90': ALIGNMENT_ROTATE_90, 'sbs_dedup_prior': SBS_DEDUP_PRIOR, 'pheno_dedup_prior': PHENO_DEDUP_PRIOR}
     if STITCH:
         config['merge'].update({'stitched_image': STITCHED_IMAGE, 'flipud': FLIPUD, 'fliplr': FLIPLR, 'rot90': ROT90, 'sbs_pixel_size': SBS_PIXEL_SIZE_1, 'phenotype_pixel_size': PHENOTYPE_PIXEL_SIZE_1})
     elif INITIAL_SITES_APPROACH == 'auto':
@@ -761,6 +833,7 @@ def _(
     else:
         config['merge'].update({'initial_sites': INITIAL_SITES, 'det_range': DET_RANGE})
         print(f'Config will use initial_sites: {len(INITIAL_SITES)} pairs')
+    config['merge'].update(drop_none(seed_optimize=SEED_OPTIMIZE, seed_topk=SEED_TOPK, local_refinement=LOCAL_REFINEMENT, warp_smoothing=WARP_SMOOTHING, warp_degree=WARP_DEGREE, warp_iterations=WARP_ITERATIONS, threshold_triangle=THRESHOLD_TRIANGLE, ransac_random_state=RANSAC_RANDOM_STATE))
     safe_config = convert_tuples_to_lists(config)
     with open(CONFIG_FILE_PATH, 'w') as _config_file:
         _config_file.write(CONFIG_FILE_HEADER)
