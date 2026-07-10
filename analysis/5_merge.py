@@ -717,13 +717,21 @@ def _(mo):
     mo.md(r"""
     ## <font color='red'>SET PARAMETERS (OPTIONAL): ADVANCED FAST-MERGE LEVERS</font>
 
-    These tune the fast-merge path. **All default to `None`, meaning the pipeline uses its built-in values — leave them as-is unless a merge is underperforming.** Only levers set to a non-`None` value are written to `config.yml`.
+    Tune the fast-merge alignment + warp. **All default to `None` (pipeline built-in values) — leave them unless a merge is underperforming.** Only levers set to a non-`None` value are written to `config.yml`. Only levers with measured impact are surfaced.
 
-    - **Triangle-hash matching** (`evaluate_match`): `THRESHOLD_TRIANGLE` (default `0.3`), `THRESHOLD_POINT` (default `2`), `THRESHOLD_REGION` (px radius, default `50`).
-    - **RANSAC** (forwarded to `RANSACRegressor`; default scikit-learn): `RANSAC_RESIDUAL_THRESHOLD`, `RANSAC_MAX_TRIALS`, `RANSAC_MIN_SAMPLES`, `RANSAC_RANDOM_STATE`.
-    - **Multistep alignment:** `BATCH_SIZE` (tiles per alignment batch).
-    - **Local warp refinement** (`fast_merge`; off unless `LOCAL_REFINEMENT` is set): `LOCAL_REFINEMENT` (`"polynomial"` | `"thin_plate_spline"`; TPS roughly halves the median residual on two-scope merges), polynomial knobs `WARP_DEGREE`/`WARP_ITERATIONS`/`WARP_MIN_CORRESPONDENCES`, TPS knobs `WARP_SMOOTHING`/`WARP_MAX_CORRESPONDENCES`.
-    - **Find-optimal-site seeding:** `SEED_OPTIMIZE` (default `False`; evaluate the top-K nearest phenotype tiles per SBS seed and keep the best) and `SEED_TOPK`.
+    **Two-microscope / rotated acquisitions — validated high-impact fix (Vaishnavi well A1: median 0.91px -> 0.08px, coverage 59% -> 92%). Strongly recommended for two-scope screens:**
+
+    - `SEED_OPTIMIZE`: evaluate the top-`SEED_TOPK` nearest phenotype tiles per SBS seed and keep the best (vs the stage-nearest tile, often not the true overlap). Rec. `True`.
+    - `SEED_TOPK`: nearest tiles to evaluate. Rec. `3`.
+    - `LOCAL_REFINEMENT`: within-tile warp model, `"polynomial"` | `"thin_plate_spline"`. **TPS is the biggest quality lever on two-scope data (0.08px)**; polynomial is the robust generalizer. Rec. `"thin_plate_spline"` (two-scope), else `"polynomial"`.
+    - `WARP_SMOOTHING`: TPS regularization. Rec. `10`.
+
+    **Cross-optics generalized winner (all four datasets, 0.05% tax):**
+
+    - `WARP_DEGREE`: polynomial warp degree. Rec. `3` (pipeline default `2`).
+    - `WARP_ITERATIONS`: refine-and-rematch passes. Rec. `2`.
+    - `THRESHOLD_TRIANGLE`: max triangle-hash match distance. Rec. `0.3`.
+    - `RANSAC_RANDOM_STATE`: pin RANSAC for reproducibility (determinism, not quality). Rec. `0`.
     """)
     return
 
@@ -731,41 +739,24 @@ def _(mo):
 @app.cell
 def _():
     # === OPERATOR PARAMETERS: ADVANCED FAST-MERGE LEVERS ===
-    # All default to None => pipeline uses its built-in values. Only non-None
-    # levers are written to config.yml.
-    THRESHOLD_TRIANGLE = None          # triangle-descriptor match distance (default 0.3)
-    THRESHOLD_POINT = None             # post-fit point distance px (default 2)
-    THRESHOLD_REGION = None            # scoring region radius px (default 50)
-    RANSAC_RESIDUAL_THRESHOLD = None   # RANSACRegressor kwargs (default scikit-learn)
-    RANSAC_MAX_TRIALS = None
-    RANSAC_MIN_SAMPLES = None
-    RANSAC_RANDOM_STATE = None
-    BATCH_SIZE = None                  # multistep alignment batch size
-    LOCAL_REFINEMENT = None            # None | "polynomial" | "thin_plate_spline"
-    WARP_DEGREE = None                 # polynomial-warp knobs
-    WARP_ITERATIONS = None
-    WARP_MIN_CORRESPONDENCES = None
-    WARP_SMOOTHING = None              # thin-plate-spline knobs
-    WARP_MAX_CORRESPONDENCES = None
-    SEED_OPTIMIZE = False              # find-optimal-site seeding (default nearest-tile)
-    SEED_TOPK = None
+    # All None => pipeline default. TPS + find-optimal-site recommended for two-scope screens.
+    SEED_OPTIMIZE = None          # keep best of top-K nearest PH tiles per SBS seed; rec. True (two-scope)
+    SEED_TOPK = None              # nearest tiles to evaluate when SEED_OPTIMIZE; rec. 3
+    LOCAL_REFINEMENT = None       # None | "polynomial" | "thin_plate_spline"; rec. "thin_plate_spline" (two-scope)
+    WARP_SMOOTHING = None         # thin-plate-spline regularization; rec. 10
+    WARP_DEGREE = None            # polynomial warp degree; rec. 3
+    WARP_ITERATIONS = None        # refine-and-rematch passes; rec. 2
+    THRESHOLD_TRIANGLE = None     # triangle hash-match distance; rec. 0.3
+    RANSAC_RANDOM_STATE = None    # pin RANSAC for reproducibility; rec. 0
     # === END OPERATOR PARAMETERS ===
     return (
-        BATCH_SIZE,
         LOCAL_REFINEMENT,
-        RANSAC_MAX_TRIALS,
-        RANSAC_MIN_SAMPLES,
         RANSAC_RANDOM_STATE,
-        RANSAC_RESIDUAL_THRESHOLD,
         SEED_OPTIMIZE,
         SEED_TOPK,
-        THRESHOLD_POINT,
-        THRESHOLD_REGION,
         THRESHOLD_TRIANGLE,
         WARP_DEGREE,
         WARP_ITERATIONS,
-        WARP_MAX_CORRESPONDENCES,
-        WARP_MIN_CORRESPONDENCES,
         WARP_SMOOTHING,
     )
 
@@ -783,7 +774,6 @@ def _(
     ALIGNMENT_FLIP_X,
     ALIGNMENT_FLIP_Y,
     ALIGNMENT_ROTATE_90,
-    BATCH_SIZE,
     CONFIG_FILE_HEADER,
     CONFIG_FILE_PATH,
     DET_RANGE,
@@ -799,10 +789,7 @@ def _(
     PHENOTYPE_PIXEL_SIZE_1,
     PHENO_DEDUP_PRIOR,
     PH_METADATA_CHANNEL,
-    RANSAC_MAX_TRIALS,
-    RANSAC_MIN_SAMPLES,
     RANSAC_RANDOM_STATE,
-    RANSAC_RESIDUAL_THRESHOLD,
     ROT90,
     SBS_DEDUP_PRIOR,
     SBS_DIMENSIONS,
@@ -815,19 +802,15 @@ def _(
     STITCH,
     STITCHED_IMAGE,
     THRESHOLD,
-    THRESHOLD_POINT,
-    THRESHOLD_REGION,
     THRESHOLD_TRIANGLE,
     WARP_DEGREE,
     WARP_ITERATIONS,
-    WARP_MAX_CORRESPONDENCES,
-    WARP_MIN_CORRESPONDENCES,
     WARP_SMOOTHING,
     config,
     convert_tuples_to_lists,
     yaml,
 ):
-    config['merge'] = {'approach': 'stitch' if STITCH else 'fast', 'merge_combo_fp': MERGE_COMBO_DF_FP, 'phenotype_dimensions': PHENOTYPE_DIMENSIONS, 'sbs_dimensions': SBS_DIMENSIONS, 'sbs_metadata_cycle': SBS_METADATA_CYCLE, 'score': SCORE, 'threshold': THRESHOLD, 'sbs_metadata_channel': SBS_METADATA_CHANNEL, 'ph_metadata_channel': PH_METADATA_CHANNEL, 'alignment_flip_x': ALIGNMENT_FLIP_X, 'alignment_flip_y': ALIGNMENT_FLIP_Y, 'alignment_rotate_90': ALIGNMENT_ROTATE_90, 'sbs_dedup_prior': SBS_DEDUP_PRIOR, 'pheno_dedup_prior': PHENO_DEDUP_PRIOR}
+    config['merge'] = {'approach': 'stitch' if STITCH else 'fast', 'merge_combo_fp': MERGE_COMBO_DF_FP, 'phenotype_dimensions': PHENOTYPE_DIMENSIONS, 'sbs_dimensions': SBS_DIMENSIONS, 'sbs_metadata_cycle': SBS_METADATA_CYCLE, 'score': SCORE, 'threshold': THRESHOLD, 'sbs_metadata_channel': SBS_METADATA_CHANNEL, 'ph_metadata_channel': PH_METADATA_CHANNEL, 'metadata_align': METADATA_ALIGN, 'alignment_flip_x': ALIGNMENT_FLIP_X, 'alignment_flip_y': ALIGNMENT_FLIP_Y, 'alignment_rotate_90': ALIGNMENT_ROTATE_90, 'sbs_dedup_prior': SBS_DEDUP_PRIOR, 'pheno_dedup_prior': PHENO_DEDUP_PRIOR}
     if STITCH:
         config['merge'].update({'stitched_image': STITCHED_IMAGE, 'flipud': FLIPUD, 'fliplr': FLIPLR, 'rot90': ROT90, 'sbs_pixel_size': SBS_PIXEL_SIZE_1, 'phenotype_pixel_size': PHENOTYPE_PIXEL_SIZE_1})
     elif INITIAL_SITES_APPROACH == 'auto':
@@ -837,7 +820,7 @@ def _(
         config['merge'].update({'initial_sites': INITIAL_SITES, 'det_range': DET_RANGE})
         print(f'Config will use initial_sites: {len(INITIAL_SITES)} pairs')
     # Advanced fast-merge levers - only written when set (absent keys => pipeline defaults)
-    advanced_merge_levers = {'metadata_align': METADATA_ALIGN, 'threshold_triangle': THRESHOLD_TRIANGLE, 'threshold_point': THRESHOLD_POINT, 'threshold_region': THRESHOLD_REGION, 'ransac_residual_threshold': RANSAC_RESIDUAL_THRESHOLD, 'ransac_max_trials': RANSAC_MAX_TRIALS, 'ransac_min_samples': RANSAC_MIN_SAMPLES, 'ransac_random_state': RANSAC_RANDOM_STATE, 'batch_size': BATCH_SIZE, 'local_refinement': LOCAL_REFINEMENT, 'warp_degree': WARP_DEGREE, 'warp_iterations': WARP_ITERATIONS, 'warp_min_correspondences': WARP_MIN_CORRESPONDENCES, 'warp_smoothing': WARP_SMOOTHING, 'warp_max_correspondences': WARP_MAX_CORRESPONDENCES, 'seed_optimize': SEED_OPTIMIZE, 'seed_topk': SEED_TOPK}
+    advanced_merge_levers = {'seed_optimize': SEED_OPTIMIZE, 'seed_topk': SEED_TOPK, 'local_refinement': LOCAL_REFINEMENT, 'warp_smoothing': WARP_SMOOTHING, 'warp_degree': WARP_DEGREE, 'warp_iterations': WARP_ITERATIONS, 'threshold_triangle': THRESHOLD_TRIANGLE, 'ransac_random_state': RANSAC_RANDOM_STATE}
     config['merge'].update({_k: _v for _k, _v in advanced_merge_levers.items() if _v is not None})
     safe_config = convert_tuples_to_lists(config)
     with open(CONFIG_FILE_PATH, 'w') as _config_file:
