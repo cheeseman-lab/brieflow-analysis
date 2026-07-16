@@ -58,6 +58,7 @@ def _():
         preview_mask_transformations,
         align_metadata,
         find_closest_tiles,
+        filter_low_score_seeds,
         fast_merge_example,
     )
     from lib.merge.hash import hash_cell_locations, initial_alignment
@@ -69,6 +70,7 @@ def _():
         align_metadata,
         convert_tuples_to_lists,
         fast_merge_example,
+        filter_low_score_seeds,
         find_closest_tiles,
         get_filename,
         hash_cell_locations,
@@ -520,36 +522,54 @@ def _(DET_RANGE, SCORE, initial_alignment_df, plot_alignment_quality):
 
 
 @app.cell
-def _(DET_RANGE, initial_alignment_df):
+def _(DET_RANGE, SCORE, SEED_OPTIMIZE, filter_low_score_seeds, initial_alignment_df):
     # Validate that enough pairs pass the thresholds
     d0, d1 = DET_RANGE
     valid_pairs_df = initial_alignment_df.query(
         "@d0 <= determinant <= @d1 & score > @SCORE"
     )
 
+    # Collapse top-K seed candidates to the best-scoring phenotype tile per SBS site.
+    # Mirrors the pipeline (fast_alignment.py) so this preview shows the 1:1 mapping the run will use.
+    if SEED_OPTIMIZE:
+        _n_before = len(valid_pairs_df)
+        valid_pairs_df = valid_pairs_df.sort_values(
+            "score", ascending=False
+        ).drop_duplicates(subset="site", keep="first")
+        print(f"seed_optimize: kept best-scoring tile per site ({_n_before} -> {len(valid_pairs_df)})")
+
+    # Drop seeds whose score is a low outlier relative to the cohort (keeps >= 5)
+    _n_before = len(valid_pairs_df)
+    valid_pairs_df = filter_low_score_seeds(valid_pairs_df)
+    if len(valid_pairs_df) < _n_before:
+        print(f"filtered {_n_before - len(valid_pairs_df)} low-score outlier seed(s) ({_n_before} -> {len(valid_pairs_df)})")
+
+    valid_pairs_df = valid_pairs_df.sort_values("site")
+    final_pairs = valid_pairs_df[["tile", "site"]].astype(int).values.tolist()
+
     print(f"\n{'='*50}")
     print(f"VALIDATION RESULTS")
     print(f"{'='*50}")
     print(f"Total candidate pairs: {len(initial_alignment_df)}")
-    print(f"Pairs passing thresholds: {len(valid_pairs_df)}")
+    print(f"Valid pairs (1 phenotype tile per SBS site): {len(final_pairs)}")
     print(f"Minimum required: 5")
     print(f"{'='*50}")
 
-    if len(valid_pairs_df) < 5:
-        print(f"\nWARNING: Only {len(valid_pairs_df)} pairs pass thresholds!")
+    if len(final_pairs) < 5:
+        print(f"\nWARNING: Only {len(final_pairs)} pairs pass thresholds!")
         print("The pipeline requires at least 5 valid pairs.")
         print("Consider:")
         print("  - Adjusting DET_RANGE or SCORE thresholds")
         print("  - Adding more SBS tiles to INITIAL_SBS_TILES")
         print("  - Using manual INITIAL_SITES with known good pairs")
     else:
-        print(f"\nValidation passed! {len(valid_pairs_df)} pairs will be used.")
-    
-    # Show which pairs passed
+        print(f"\nValidation passed! {len(final_pairs)} pairs will be used.")
+
+    # Show which pairs passed (one phenotype tile per SBS site)
     print(f"\nValid pairs (tile, site):")
     for _, row in valid_pairs_df.iterrows():
         print(f"  [{int(row['tile'])}, {int(row['site'])}] - score: {row['score']:.3f}, det: {row['determinant']:.6f}")
-    return
+    return (final_pairs,)
 
 
 @app.cell(hide_code=True)
@@ -579,15 +599,15 @@ def _(
     WARP_DEGREE,
     WARP_ITERATIONS,
     WARP_SMOOTHING,
-    candidate_pairs,
     drop_none,
     fast_merge_example,
+    final_pairs,
     initial_alignment_df,
     phenotype_info_1,
     sbs_info_1,
 ):
     warp_kwargs = drop_none(degree=WARP_DEGREE, iterations=WARP_ITERATIONS, smoothing=WARP_SMOOTHING) or None
-    for _ph_tile, sbs_site in candidate_pairs:
+    for _ph_tile, sbs_site in final_pairs:
         success = fast_merge_example(_ph_tile, sbs_site, initial_alignment_df, phenotype_info_1, sbs_info_1, THRESHOLD, local_refinement=LOCAL_REFINEMENT, warp_kwargs=warp_kwargs)
         if not success:
             print(f'  Try a different tile-site combination or proceed to stitch approach.')
