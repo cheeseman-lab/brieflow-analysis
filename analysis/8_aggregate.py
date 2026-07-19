@@ -654,7 +654,7 @@ def _(mo):
 
     - `BATCH_COLS`: Which columns of metadata have batch-specific information. Usually `["plate", "well"]`.
     - `CONTROL_KEY`: Name of perturbation in `PERTURBATION_NAME_COL` that indicates a control cell.
-    - `PERTURBATION_ID_COL`: Name of column that identifies unique perturbations. Only needed if you want your controls to have different perturbation names, ex `cell_barcode_0`. Otherwise, can leave this as `None`.
+    - `PERTURBATION_ID_COL`: Name of the column identifying a unique **construct** (sgRNA / barcode), ex `cell_barcode_0` or `sgRNA_0`. This sets the resolution of construct-level aggregation and the bootstrap null: each construct becomes its own row, so every non-targeting guide is treated as a separate control element. **This should essentially always be set.** If left as `None` it falls back to `PERTURBATION_NAME_COL`, which collapses constructs to gene level — all controls become a single construct and the bootstrap null loses construct-to-construct variance, making p-values under-dispersed.
     """)
     return
 
@@ -664,7 +664,7 @@ def _():
     # === OPERATOR PARAMETERS ===
     BATCH_COLS = None                  # e.g., ["plate", "well"]
     CONTROL_KEY = None                 # e.g., "nontargeting"
-    PERTURBATION_ID_COL = None         # e.g., "sgRNA_0"
+    PERTURBATION_ID_COL = "cell_barcode_0"   # or "sgRNA_0" — should essentially always be set
     # === END OPERATOR PARAMETERS ===
     return BATCH_COLS, CONTROL_KEY, PERTURBATION_ID_COL
 
@@ -802,6 +802,7 @@ def _(mo):
     - `PSEUDOGENE_PATTERNS`: Dictionary defining how to group single-construct genes into pseudo-genes for more robust statistical testing. For each pattern category, specify:
       - `pattern`: Regex pattern to match gene names
       - `constructs_per_pseudogene`: Number of constructs to group together
+    - `BOOTSTRAP_EXTRA_FEATURES`: Extra feature tags to bootstrap over, **in addition** to the default set (optional). By default the bootstrap runs on a curated subset of **nucleus/cell** features: intensity (`*_mean`, `*_int`, `*_mass_displacement`, `*_mean_edge`, `*_std_edge`, `*_mean_frac_0`, `*_mean_frac_3`), shape (`*_area`, `*_solidity`, `*_form_factor`, `*_eccentricity`), and overlap (`*_manders*`, `*_correlation*`) (defined in `get_feature_table_cols`, `brieflow/workflow/lib/aggregate/cell_data_utils.py`). To test features outside this set (e.g. radial metrics), pass a list of substrings matching their column names — any feature whose name contains one of the tags is added. Ex: `["radial_cv", "frac_at_d"]` or `None`. For full manual control instead, set `bootstrap_features_fp` in the config to a file listing the exact features (one per line), which bypasses the default subset entirely. See `brieflow/workflow/lib/external/CP_EMULATOR_FEATURES.md` → *Bootstrap Feature Selection* for the full included/excluded breakdown.
 
     **Note**: Without the combinations configured, bootstrapping will be skipped entirely. Bootstrap analysis can take hours to days depending on `NUM_SIMS` and dataset size.
     """)
@@ -815,8 +816,10 @@ def _():
     NUM_SIMS = None
     EXCLUSION_STRING = None
     PSEUDOGENE_PATTERNS = None
+    BOOTSTRAP_EXTRA_FEATURES = None    # e.g., ["radial_cv", "frac_at_d"]
     # === END OPERATOR PARAMETERS ===
     return (
+        BOOTSTRAP_EXTRA_FEATURES,
         EXCLUSION_STRING,
         FEATURE_NORMALIZATION,
         NUM_SIMS,
@@ -850,6 +853,7 @@ def _(
     BATCH_COLS,
     BOOTSTRAP_CELL_CLASS,
     BOOTSTRAP_CHANNEL_COMBO,
+    BOOTSTRAP_EXTRA_FEATURES,
     COLLAPSE_COLS,
     CONFIG_FILE_HEADER,
     CONFIG_FILE_PATH,
@@ -885,7 +889,7 @@ def _(
         cell_classes_list = BOOTSTRAP_CELL_CLASS if isinstance(BOOTSTRAP_CELL_CLASS, list) else [BOOTSTRAP_CELL_CLASS]
         channel_combos_list = BOOTSTRAP_CHANNEL_COMBO if isinstance(BOOTSTRAP_CHANNEL_COMBO, list) else [BOOTSTRAP_CHANNEL_COMBO]
         BOOTSTRAP_COMBINATIONS = [{'cell_class': cc, 'channel_combo': ch} for cc, ch in product(cell_classes_list, channel_combos_list)]
-        config['aggregate'].update({'feature_normalization': FEATURE_NORMALIZATION, 'num_sims': NUM_SIMS, 'exclusion_string': EXCLUSION_STRING, 'bootstrap_combinations': BOOTSTRAP_COMBINATIONS, 'pseudogene_patterns': PSEUDOGENE_PATTERNS})
+        config['aggregate'].update({'feature_normalization': FEATURE_NORMALIZATION, 'num_sims': NUM_SIMS, 'exclusion_string': EXCLUSION_STRING, 'bootstrap_combinations': BOOTSTRAP_COMBINATIONS, 'pseudogene_patterns': PSEUDOGENE_PATTERNS, 'bootstrap_extra_features': BOOTSTRAP_EXTRA_FEATURES})
     safe_config = convert_tuples_to_lists(config)
     with open(CONFIG_FILE_PATH, 'w') as _config_file:
         _config_file.write(CONFIG_FILE_HEADER)
