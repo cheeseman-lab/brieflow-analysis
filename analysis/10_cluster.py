@@ -170,10 +170,13 @@ def _(mo):
     - `STRING_PAIR_BENCHMARK_FP`: Path to save and access STRING pair benchmark.
     - `CORUM_GROUP_BENCHMARK_FP`: Path to save and access CORUM group benchmark.
     - `KEGG_GROUP_BENCHMARK_FP`: Path to save and access KEGG group benchmark.
+    - `SPECIES_ID`: NCBI taxonomy ID of the screen organism (`"9606"` human, `"10090"` mouse, `"10116"` rat). Sets which organism the STRING/CORUM/pathway benchmarks below are pulled for.
 
     **Note**: We use the following benchmark schemas:
     - Pair Bechmark: `gene_name` column for gene matching with a cluster gene (or does not exist in cluster genes); `pair` column with a pair ID. Used to benchmark known pair relationships in generated cluster.
     - Group Bechmark: `gene_name` column for gene matching with a cluster gene (or does not exist in cluster genes); `group` column with a group ID. Used to benchmark known group relationships in generated cluster, where a group represents genes involved in a pathway, protein complex, etc.
+
+    The generation cell below is just a convenience: it *pulls* pair/group benchmarks for `SPECIES_ID` from public databases. The pipeline itself only reads whatever TSV each `*_FP` points at, so these tables can just as easily be built by hand — assemble your own `gene_name`/`pair` or `gene_name`/`group` TSV (for an organism or curated gene set we do not auto-generate), point the matching `*_FP` at it, and skip the generation cell.
     """)
     return
 
