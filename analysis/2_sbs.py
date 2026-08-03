@@ -159,6 +159,10 @@ def _(mo):
 
     - `CHANNEL_NAMES`: A list of ordered names for each channel in your SBS image.
     - `CHANNEL_CMAPS`: A list of color maps to use when showing channel microimages. These need to be a Matplotlib or microfilm colormap. We recommend using: `["pure_red", "pure_green", "pure_blue", "pure_cyan", "pure_magenta", "pure_yellow"]`.
+    - `BASES`: Names used for the channels that encode sequencing bases. Their order must match `CHANNEL_NAMES` after `EXTRA_CHANNELS` are removed. Leave as `None` for standard `G/T/A/C` imaging. For combinatorial imaging, use descriptive dye names such as `["Red", "Green"]`.
+    - `EXTRA_CHANNELS`: Channels that do not encode bases, such as DAPI or a segmentation stain. Leave as `None` for standard `G/T/A/C` imaging, or list them explicitly for combinatorial imaging.
+
+    For example, if `CHANNEL_NAMES = ["DAPI", "Red", "Green"]`, use `BASES = ["Red", "Green"]` and `EXTRA_CHANNELS = ["DAPI"]`.
     """)
     return
 
@@ -171,15 +175,24 @@ def _():
     TEST_TILE = None
     CHANNEL_NAMES = None  # e.g., ["DAPI", "G", "T", "A", "C"]
     CHANNEL_CMAPS = None
+    BASES = None  # e.g., ["Red", "Green"] for combinatorial chemistry
+    EXTRA_CHANNELS = None  # e.g., ["DAPI"]
     # === END OPERATOR PARAMETERS ===
 
     # Derive wildcard dictionary for testing
     WILDCARDS = dict(well=TEST_WELL, tile=TEST_TILE)
-    # Remove DAPI channel to get bases
-    BASES = [channel for channel in CHANNEL_NAMES if channel in ["G", "T", "A", "C"]]
-    EXTRA_CHANNELS = [
-        channel for channel in CHANNEL_NAMES if channel not in ["G", "T", "A", "C"]
-    ]
+    if BASES is None:
+        BASES = [
+            channel for channel in CHANNEL_NAMES if channel in ["G", "T", "A", "C"]
+        ]
+    if EXTRA_CHANNELS is None:
+        EXTRA_CHANNELS = [
+            channel for channel in CHANNEL_NAMES if channel not in ["G", "T", "A", "C"]
+        ]
+    if len(BASES) + len(EXTRA_CHANNELS) != len(CHANNEL_NAMES):
+        raise ValueError(
+            "BASES and EXTRA_CHANNELS must describe every CHANNEL_NAMES entry exactly once."
+        )
     return (
         BASES,
         CHANNEL_CMAPS,
@@ -1255,9 +1268,25 @@ def _(mo):
 
     ### Extract base intensity, call reads, assign to cells
     - `THRESHOLD_READS`: Initial threshold for detecting sequencing reads, set to ~50 for preliminary analysis. This parameter will be optimized based on the mapping rate vs. peak threshold plot generated below. A higher threshold increases confidence in read calls but reduces the total number of detected reads.
-    - `CALL_READS_METHOD`: Method to use for correcting base intensity across channels. The below `plot_normalization_comparison` function will help you assess what method to use. Options are:
-        - `MEDIAN`: Uses median-based correction, performed independently for each tile. This is the default method.
-        - `PERCENTILE`: Uses percentile-based correction, performed independently for each tile.
+    - `CHEMISTRY`: How fluorescence encodes a base.
+        - Use `"four_color"` when each base has its own channel: one channel for A, C, G, and T.
+        - Use `"combinatorial"` when a base is identified by an ON/OFF pattern across two or more dye channels.
+    - `CALL_READS_METHOD`: How the fluorescence measurements become barcodes.
+        - Four color: `"median"` (default) or `"percentile"`.
+        - Combinatorial `"frac"` (recommended): call one base per cycle from the dye pattern, join the calls into a barcode, then map that barcode to the library.
+        - Combinatorial `"merfish"`: compare the complete measured dye pattern directly with every known barcode and return the closest match.
+    - `COMBINATORIAL_CODE`: The ON channels for each base. Channel names must exactly match `BASES`; use an empty list when no channel is ON.
+
+    Here is a two-channel example. Replace it with the encoding used by your experiment:
+
+    | Base | Red channel | Green channel | `COMBINATORIAL_CODE` value |
+    |---|---|---|---|
+    | A | ON | OFF | `["Red"]` |
+    | C | OFF | ON | `["Green"]` |
+    | G | ON | ON | `["Red", "Green"]` |
+    | T | OFF | OFF | `[]` |
+
+    `frac` can optionally correct a called barcode to a nearby library barcode using `ERROR_CORRECT` and `MAX_DISTANCE` below. `merfish` has already chosen the closest library barcode, so `ERROR_CORRECT` must be `False` with that method.
     """)
     return
 
@@ -1266,21 +1295,34 @@ def _(mo):
 def _():
     # === OPERATOR PARAMETERS ===
     THRESHOLD_READS = 50  # library default; raise to be stricter
-    CALL_READS_METHOD = "median"  # "median" | "max"
+    CHEMISTRY = "four_color"  # "four_color" | "combinatorial"
+    # four_color: median|percentile; combinatorial: frac|merfish
+    CALL_READS_METHOD = "median"
+    # Example only: replace these ON-channel lists with your assay's encoding.
+    COMBINATORIAL_CODE = {
+        "A": ["Red"],
+        "C": ["Green"],
+        "G": ["Red", "Green"],
+        "T": [],
+    }
     # === END OPERATOR PARAMETERS ===
-    return CALL_READS_METHOD, THRESHOLD_READS
+    COMBINATORIAL = {"code": COMBINATORIAL_CODE}
+    return CALL_READS_METHOD, CHEMISTRY, COMBINATORIAL, THRESHOLD_READS
 
 
 @app.cell
 def _(
     BASES,
     CALL_READS_METHOD,
+    CHEMISTRY,
+    COMBINATORIAL,
     SEGMENT_CELLS,
     THRESHOLD_READS,
     WILDCARDS,
     call_reads,
     cells,
     extract_bases,
+    df_barcode_library,
     maxed,
     nuclei,
     peaks,
@@ -1294,7 +1336,19 @@ def _(
         wildcards=WILDCARDS,
         bases=BASES,
     )
-    df_reads = call_reads(df_bases, peaks_data=peaks, method=CALL_READS_METHOD)
+    codebook = (
+        df_barcode_library
+        if CHEMISTRY == "combinatorial" and CALL_READS_METHOD == "merfish"
+        else None
+    )
+    df_reads = call_reads(
+        df_bases,
+        peaks_data=peaks,
+        method=CALL_READS_METHOD,
+        chemistry=CHEMISTRY,
+        combinatorial=COMBINATORIAL if CHEMISTRY == "combinatorial" else None,
+        codebook=codebook,
+    )
     return (df_reads,)
 
 
@@ -1362,9 +1416,9 @@ def _(mo):
 
     **Common to both barcode modes:**
     - `Q_MIN`: Minimum quality score for base reads (default: 0)
-    - `ERROR_CORRECT`: Enable read error correction (default: False)
+    - `ERROR_CORRECT`: Allow a called barcode to be corrected to a nearby library barcode (default: `False`). This may be used with combinatorial `frac`, but must remain `False` with `merfish` because `merfish` already returns a library barcode.
     - `SORT_CALLS`: Method for prioritizing barcodes - 'count' for mRNA protocols, 'peak' for DNA protocols
-    - `MAX_DISTANCE`: Maximum edit distance for barcode matching (optional)
+    - `MAX_DISTANCE`: Maximum number of base positions that may differ during barcode correction. With combinatorial `frac`, `1` is the conservative starting point. Larger values accept more uncertain matches and should be validated with suitable negative controls.
 
     **Simple mode specific:**
     - `BARCODE_COL`: Column in barcode library with full sequences (defined upstream in the barcode design cell)
@@ -1462,7 +1516,23 @@ def _():
 
 
 @app.cell
-def _(BARCODE_TYPE, ERROR_CORRECT, MAX_DISTANCE, PREFIX_COL, df_barcode_library):
+def _(
+    BARCODE_TYPE,
+    CALL_READS_METHOD,
+    CHEMISTRY,
+    ERROR_CORRECT,
+    MAX_DISTANCE,
+    PREFIX_COL,
+    df_barcode_library,
+):
+    if (
+        CHEMISTRY == "combinatorial"
+        and CALL_READS_METHOD == "merfish"
+        and ERROR_CORRECT
+    ):
+        raise ValueError(
+            "ERROR_CORRECT must be False with merfish because merfish already returns the closest library barcode."
+        )
     if ERROR_CORRECT:
         import math
 
@@ -1624,6 +1694,8 @@ def _(
     BARCODE_TYPE,
     BASES,
     CALL_READS_METHOD,
+    CHEMISTRY,
+    COMBINATORIAL,
     CELLPOSE_MODEL,
     CELL_CELLPROB_THRESHOLD,
     CELL_DIAMETER,
@@ -1709,6 +1781,7 @@ def _(
         "segment_cells": SEGMENT_CELLS,
         "df_barcode_library_fp": DF_BARCODE_LIBRARY_FP,
         "threshold_peaks": THRESHOLD_READS,
+        "chemistry": CHEMISTRY,
         "call_reads_method": CALL_READS_METHOD,
         "bases": BASES,
         "q_min": Q_MIN,
@@ -1717,6 +1790,8 @@ def _(
         "n_barcodes": N_BARCODES,
         "barcode_type": BARCODE_TYPE,
     }
+    if CHEMISTRY == "combinatorial":
+        config["sbs"]["combinatorial"] = COMBINATORIAL
     if MAX_DISTANCE is not None:
         config["sbs"]["max_distance"] = MAX_DISTANCE
     if BARCODE_TYPE == "simple":
