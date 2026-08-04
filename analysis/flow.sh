@@ -138,7 +138,13 @@ fi
 # Parse arguments
 # ---------------------------------------------------------------------------
 show_help() {
-    head -35 "$0" | tail -31
+    # Marker-based (not a fixed line-count slice): prints from the first to the
+    # last "# ===...===" separator line, so header edits never desync this from
+    # the actual comment block above.
+    local first last
+    first=$(grep -n '^# =\{10,\}$' "$0" | head -1 | cut -d: -f1)
+    last=$(grep -n '^# =\{10,\}$' "$0" | tail -1 | cut -d: -f1)
+    sed -n "${first},${last}p" "$0"
     exit 0
 }
 
