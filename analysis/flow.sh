@@ -14,6 +14,8 @@
 #   --dry-run, -n           Show what would run without executing
 #   --sequential-plates     Process plates one at a time (auto-detects count)
 #   --plates N              Override plate count for sequential processing
+#   --only-plate N          Run only plate N, no looping (mutually exclusive
+#                           with --sequential-plates / --plates)
 #   --unlock                Force unlock before running
 #   --cores N               Number of cores for local backend (default: all)
 #   --profile               Enable profiling mode: keep all slurm logs, generate
@@ -81,7 +83,9 @@ PLATE_SEQUENTIAL_MODULES="preprocess sbs phenotype"
 BACKEND="local"
 DRY_RUN=false
 SEQUENTIAL_PLATES=true
+SEQUENTIAL_PLATES_EXPLICIT=false
 PLATE_COUNT=""
+ONLY_PLATE=""
 FORCE_UNLOCK=false
 CORES="all"
 # --jobs (max concurrent jobs): an explicit --jobs wins; otherwise resolved from
@@ -145,9 +149,11 @@ while [[ $# -gt 0 ]]; do
         --dry-run|-n)
             DRY_RUN=true; shift ;;
         --sequential-plates)
-            SEQUENTIAL_PLATES=true; shift ;;
+            SEQUENTIAL_PLATES=true; SEQUENTIAL_PLATES_EXPLICIT=true; shift ;;
         --plates)
-            SEQUENTIAL_PLATES=true; PLATE_COUNT="$2"; shift 2 ;;
+            SEQUENTIAL_PLATES=true; SEQUENTIAL_PLATES_EXPLICIT=true; PLATE_COUNT="$2"; shift 2 ;;
+        --only-plate)
+            ONLY_PLATE="$2"; shift 2 ;;
         --unlock)
             FORCE_UNLOCK=true; shift ;;
         --cores)
@@ -180,6 +186,14 @@ while [[ $# -gt 0 ]]; do
             MODULES+=("$1"); shift ;;
     esac
 done
+
+# --only-plate scopes a run to exactly one plate (no loop); it reuses the same
+# plate_filter config key --sequential-plates/--plates use per iteration, so
+# the two modes are mutually exclusive.
+if [[ -n "$ONLY_PLATE" ]] && [[ "$SEQUENTIAL_PLATES_EXPLICIT" == true ]]; then
+    echo "ERROR: --only-plate cannot be combined with --sequential-plates or --plates. Pick one plate-scoping mode."
+    exit 1
+fi
 
 # Resolve --jobs after parsing: an explicit --jobs wins; otherwise derive from
 # CORES (nproc when CORES=all). Keeps backend selection seamless — flow.sh emits
@@ -409,7 +423,31 @@ run_snakemake_module() {
         use_plates=true
     fi
 
-    if [[ "$use_plates" == true ]]; then
+    # --only-plate: scope to exactly one plate via the same plate_filter config
+    # key the sequential loop below uses per-iteration, but without looping.
+    local use_only_plate=false
+    if [[ -n "$ONLY_PLATE" ]] && [[ " $PLATE_SEQUENTIAL_MODULES " == *" $module "* ]]; then
+        use_only_plate=true
+    fi
+
+    if [[ "$use_only_plate" == true ]]; then
+        echo "Single plate processing: plate ${ONLY_PLATE}"
+        echo ""
+
+        local cmd
+        cmd=$(build_snakemake_cmd "$target" "$ONLY_PLATE")
+
+        # Add groups for slurm
+        if [[ "$BACKEND" == "slurm" ]]; then
+            local groups
+            groups=$(get_groups_flag "$module")
+            if [[ -n "$groups" ]]; then
+                cmd+=" ${groups}"
+            fi
+        fi
+
+        eval "$cmd"
+    elif [[ "$use_plates" == true ]]; then
         # Determine plate count
         local num_plates="${PLATE_COUNT}"
         if [[ -z "$num_plates" ]]; then
