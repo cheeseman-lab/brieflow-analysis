@@ -187,7 +187,9 @@ def _():
     STRING_PAIR_BENCHMARK_FP = "config/benchmark_clusters/string_pair_benchmark.tsv"
     CORUM_GROUP_BENCHMARK_FP = "config/benchmark_clusters/corum_group_benchmark.tsv"
     KEGG_GROUP_BENCHMARK_FP = "config/benchmark_clusters/kegg_group_benchmark.tsv"
-    SPECIES_ID = "9606"  # NCBI taxonomy ID for cluster benchmarks: human=9606, mouse=10090, rat=10116
+    # === OPERATOR PARAMETERS ===
+    SPECIES_ID = "9606"  # NCBI taxid: 9606 human, 10090 mouse, 10116 rat
+    # === END OPERATOR PARAMETERS ===
     return (
         CORUM_GROUP_BENCHMARK_FP,
         KEGG_GROUP_BENCHMARK_FP,

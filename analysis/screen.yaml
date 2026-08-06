@@ -12,7 +12,7 @@ collection:
 # =========================================================================
 experiment:
   screen_title: null                              # short slug; matches conda env brieflow_<id>
-  organism_ontology_term_id: "NCBITaxon:9606"     # default = human
+  organism_ontology_term_id: "NCBITaxon:9606"     # NCBI taxid — drives SPECIES_ID (UniProt + CORUM/MSigDB/STRING benchmarks). human 9606 · mouse 10090 · rat 10116
   organism: "Homo sapiens"
   tissue_ontology_term_id: null                   # e.g. CVCL_0030 for HeLa
   tissue: null                                    # e.g. "HeLa"
@@ -67,7 +67,13 @@ library:
 iss:
   cycles: null
   objective: null                                 # e.g. "10X 0.45 NA"
-  chemistry: "four color"
+  chemistry: "four color"                         # "four color" | "combinatorial" — combinatorial requires the combinatorial: block below
+  # combinatorial:                                # COMBINATORIAL CHEMISTRY ONLY — omit entirely for four-color G/T/A/C imaging
+  #   code:                                       # map each base to its ON dye-channels (names must match iss.channels below)
+  #     A: ["Red"]                                #   BASES + EXTRA_CHANNELS are derived from this + iss.channels
+  #     C: ["Green"]
+  #     G: ["Red", "Green"]
+  #     T: []                                     #   empty list = no dye channel ON for this base
   channels:                                       # one entry per imaging channel
     - { name: "DAPI", laser_wavelength_nm: 408, exposure_time_ms: null }
     - { name: "G",    laser_wavelength_nm: null, exposure_time_ms: null }
