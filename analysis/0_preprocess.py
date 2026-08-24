@@ -453,11 +453,14 @@ def _():
 
 @app.cell
 def _(
+    PHENOTYPE_IMAGES_DIR_FP,
     PHENOTYPE_METADATA_IMAGES_DIR_FP,
     PHENOTYPE_METADATA_PATH_ORDER_TYPE,
     PHENOTYPE_METADATA_PATH_METADATA,
     PHENOTYPE_METADATA_PATH_PATTERN,
     PHENOTYPE_METADATA_SAMPLES_DF_FP,
+    Path,
+    SBS_IMAGES_DIR_FP,
     SBS_METADATA_IMAGES_DIR_FP,
     SBS_METADATA_PATH_ORDER_TYPE,
     SBS_METADATA_PATH_METADATA,
@@ -466,27 +469,49 @@ def _(
     create_samples_df,
     mo,
     pd,
+    phenotype_samples,
+    sbs_samples,
 ):
-    # Generate SBS metadata samples table
-    if SBS_METADATA_IMAGES_DIR_FP is not None:
-        print('Generating SBS metadata file inventory...')
-        sbs_metadata_samples = create_samples_df(SBS_METADATA_IMAGES_DIR_FP, SBS_METADATA_PATH_PATTERN, SBS_METADATA_PATH_METADATA, SBS_METADATA_PATH_ORDER_TYPE)
-        sbs_metadata_samples.to_csv(SBS_METADATA_SAMPLES_DF_FP, sep='\t', index=False)
-        print('SBS metadata files found:')
-        mo.ui.table(sbs_metadata_samples)
-    else:
-        print('SBS: No external metadata files - will extract from image files')
-        sbs_metadata_samples = pd.DataFrame()
-    if PHENOTYPE_METADATA_IMAGES_DIR_FP is not None:
-        print('\nGenerating phenotype metadata file inventory...')
-        phenotype_metadata_samples = create_samples_df(PHENOTYPE_METADATA_IMAGES_DIR_FP, PHENOTYPE_METADATA_PATH_PATTERN, PHENOTYPE_METADATA_PATH_METADATA, PHENOTYPE_METADATA_PATH_ORDER_TYPE)
-        phenotype_metadata_samples.to_csv(PHENOTYPE_METADATA_SAMPLES_DF_FP, sep='\t', index=False)
-        print('Phenotype metadata files found:')
-        mo.ui.table(phenotype_metadata_samples)
-    # Generate phenotype metadata samples table
-    else:
-        print('Phenotype: No external metadata files - will extract from ND2 files')
-        phenotype_metadata_samples = pd.DataFrame()
+    # Assemble the per-FOV metadata inventory for each modality. Priority:
+    #   1) an explicit external metadata-image directory (create_samples_df), else
+    #   2) Opera Phenix `Index.xml` embedded in the image tree (stage positions), else
+    #   3) nothing external -> positions extracted from the image files downstream.
+    from lib.preprocess.preprocess import assemble_phenix_metadata
+
+    def _metadata_inventory(images_dir_fp, metadata_dir_fp, path_pattern,
+                            path_metadata, path_order_type, samples_df,
+                            inventory_fp, side):
+        if metadata_dir_fp is not None:
+            print(f"Generating {side} metadata file inventory...")
+            inv = create_samples_df(metadata_dir_fp, path_pattern, path_metadata, path_order_type)
+            inv.to_csv(inventory_fp, sep="\t", index=False)
+            print(f"{side} metadata files found.")
+            return inv
+        positions = assemble_phenix_metadata(images_dir_fp) if images_dir_fp else pd.DataFrame()
+        if len(positions) > 0:
+            content_fp = str(Path(inventory_fp).with_name(f"{side.lower()}_metadata.tsv"))
+            positions.to_csv(content_fp, sep="\t", index=False)
+            keys = [c for c in ("cycle", "round", "well", "tile") if c in positions.columns]
+            inv = positions[keys].copy()
+            inv.insert(0, "plate", samples_df["plate"].iloc[0] if len(samples_df) else 1)
+            inv["sample_fp"] = content_fp
+            inv.to_csv(inventory_fp, sep="\t", index=False)
+            print(f"{side}: assembled {len(positions)} Phenix stage positions from Index.xml")
+            return inv
+        print(f"{side}: No external metadata files - will extract from image files")
+        return pd.DataFrame()
+
+    sbs_metadata_samples = _metadata_inventory(
+        SBS_IMAGES_DIR_FP, SBS_METADATA_IMAGES_DIR_FP, SBS_METADATA_PATH_PATTERN,
+        SBS_METADATA_PATH_METADATA, SBS_METADATA_PATH_ORDER_TYPE, sbs_samples,
+        SBS_METADATA_SAMPLES_DF_FP, "SBS",
+    )
+    phenotype_metadata_samples = _metadata_inventory(
+        PHENOTYPE_IMAGES_DIR_FP, PHENOTYPE_METADATA_IMAGES_DIR_FP, PHENOTYPE_METADATA_PATH_PATTERN,
+        PHENOTYPE_METADATA_PATH_METADATA, PHENOTYPE_METADATA_PATH_ORDER_TYPE, phenotype_samples,
+        PHENOTYPE_METADATA_SAMPLES_DF_FP, "phenotype",
+    )
+    mo.ui.table(sbs_metadata_samples)
     return phenotype_metadata_samples, sbs_metadata_samples
 
 
