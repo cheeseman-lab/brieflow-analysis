@@ -68,7 +68,7 @@ def _():
         image_segmentation_annotations,
         convert_tuples_to_lists,
     )
-    from lib.shared.file_utils import get_filename, get_hcs_nested_path
+    from lib.shared.file_utils import get_filename, get_hcs_nested_path, split_well
     from lib.shared.illumination_correction import apply_ic_field
     from lib.phenotype.align_channels import align_phenotype_channels, visualize_phenotype_alignment
     from lib.shared.align import apply_custom_offsets
@@ -163,7 +163,7 @@ def _(
     IMAGE_FORMAT = config['all'].get('image_format', 'tiff')
     # HCS-nested zarr layout: preprocess/phenotype/<plate>/<row>/<col>/...
     # IC field: preprocess/ic_fields/phenotype/<plate>/<row>/<col>/ic_field.zarr/zarr.json
-    _row, _col = TEST_WELL[0], TEST_WELL[1:]
+    _row, _col = split_well(TEST_WELL)
     if IMAGE_FORMAT == 'zarr':
         phenotype_test_image_path = str(PREPROCESS_FP / 'phenotype' / get_hcs_nested_path({'plate': TEST_PLATE, 'row': _row, 'col': _col, 'tile': TEST_TILE}, 'image'))
     else:

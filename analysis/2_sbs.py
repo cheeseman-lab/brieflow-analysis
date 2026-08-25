@@ -71,7 +71,7 @@ def _():
         image_segmentation_annotations,
         convert_tuples_to_lists,
     )
-    from lib.shared.file_utils import get_filename, get_hcs_nested_path
+    from lib.shared.file_utils import get_filename, get_hcs_nested_path, split_well
     from lib.sbs.align_cycles import align_cycles, visualize_sbs_alignment
     from lib.shared.log_filter import log_filter
     from lib.sbs.compute_standard_deviation import compute_standard_deviation
@@ -337,8 +337,8 @@ def _(
             / get_hcs_nested_path(
                 {
                     "plate": TEST_PLATE,
-                    "row": TEST_WELL[0],
-                    "col": TEST_WELL[1:],
+                    "row": split_well(TEST_WELL)[0],
+                    "col": split_well(TEST_WELL)[1],
                     "tile": TEST_TILE,
                     "cycle": "{cycle}",
                 },
@@ -713,7 +713,7 @@ def _(
         )
 
         # Load and combine IC fields (HCS-nested zarr layout: <plate>/<row>/<col>/<cycle>/ic_field.zarr)
-        _row, _col = TEST_WELL[0], TEST_WELL[1:]
+        _row, _col = split_well(TEST_WELL)
         ic_field_dapi = read_image(
             PREPROCESS_FP
             / "ic_fields"
@@ -742,7 +742,7 @@ def _(
     else:
         # Same cycle - use single cycle for both image data and IC field
         aligned_image_data_segmentation_cycle = aligned[CYTO_CYCLE_INDEX]
-        _row, _col = TEST_WELL[0], TEST_WELL[1:]
+        _row, _col = split_well(TEST_WELL)
         ic_field = read_image(
             PREPROCESS_FP
             / "ic_fields"
