@@ -252,9 +252,15 @@ def _(WELL_ANNOTATIONS_FP, config, pd):
 
 
 @app.cell
-def _(METADATA_COLS, cell_data, split_cell_data):
+def _(METADATA_COLS, WELL_ANNOTATIONS_FP, cell_data, split_cell_data):
     # Split cell data into metadata and features
     metadata, features = split_cell_data(cell_data, METADATA_COLS)
+
+    # join annotations as split_datasets does, so the cells below see what the pipeline will
+    if WELL_ANNOTATIONS_FP is not None:
+        from lib.aggregate.cell_data_utils import join_well_annotations
+
+        metadata = join_well_annotations(metadata, WELL_ANNOTATIONS_FP)
     print(metadata.shape, features.shape)
     return features, metadata
 
