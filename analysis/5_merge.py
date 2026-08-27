@@ -357,7 +357,6 @@ def _(mo):
 
 
 @app.cell
-@app.cell
 def _():
     def drop_none(**kwargs):
         """Keep only the keyword args that were actually set (drop None)."""
@@ -400,6 +399,7 @@ def _():
     )
 
 
+@app.cell
 def _(
     SEED_OPTIMIZE,
     SEED_TOPK,
