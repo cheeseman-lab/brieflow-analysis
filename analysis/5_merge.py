@@ -50,7 +50,7 @@ def _():
     import yaml
     import pandas as pd
 
-    from lib.shared.file_utils import get_filename, get_hcs_nested_path
+    from lib.shared.file_utils import get_filename, get_hcs_nested_path, split_well
     from lib.shared.configuration_utils import CONFIG_FILE_HEADER, convert_tuples_to_lists
     from lib.merge.merge_utils import (
         plot_combined_tile_grid,
@@ -248,7 +248,7 @@ def _(
     # load phenotype and SBS metadata dfs (HCS-nested zarr layout: metadata + info parquets at
     # preprocess/metadata/{phenotype,sbs}/<plate>/<row>/<col>/combined_metadata.parquet and
     # {phenotype,sbs}/parquets/<plate>/<row>/<col>/{phenotype_info,sbs_info}.parquet)
-    _row, _col = TEST_WELL[0], TEST_WELL[1:]
+    _row, _col = split_well(TEST_WELL)
     ph_test_metadata_fp = ROOT_FP / 'preprocess' / 'metadata' / 'phenotype' / str(TEST_PLATE) / _row / _col / 'combined_metadata.parquet'
     ph_test_metadata = pd.read_parquet(ph_test_metadata_fp)
     if PH_METADATA_CHANNEL is not None:
@@ -357,7 +357,6 @@ def _(mo):
 
 
 @app.cell
-@app.cell
 def _():
     def drop_none(**kwargs):
         """Keep only the keyword args that were actually set (drop None)."""
@@ -400,6 +399,7 @@ def _():
     )
 
 
+@app.cell
 def _(
     SEED_OPTIMIZE,
     SEED_TOPK,
@@ -465,7 +465,7 @@ def _(
     initial_alignment,
     pd,
 ):
-    _row2, _col2 = TEST_WELL[0], TEST_WELL[1:]
+    _row2, _col2 = split_well(TEST_WELL)
     _phenotype_info_fp = ROOT_FP / 'phenotype' / 'parquets' / str(TEST_PLATE) / _row2 / _col2 / 'phenotype_info.parquet'
     phenotype_info_1 = pd.read_parquet(_phenotype_info_fp)
     phenotype_info_hash = hash_cell_locations(phenotype_info_1)
