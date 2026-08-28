@@ -319,8 +319,13 @@ def _(
         shuffled_aggregated_data[col] = np.random.permutation(shuffled_aggregated_data[col].values)
     group_benchmarks = {'CORUM': corum_group_benchmark}
     results_df, thresholding_fig = evaluate_resolution(aggregated_data, PHATE_DISTANCE_METRIC, TEST_LEIDEN_RESOLUTIONS, group_benchmarks, PERTURBATION_NAME_COL, CONTROL_KEY)
-    plt.figure(thresholding_fig.number)
-    plt.show()
+    # evaluate_resolution returns no figure when a benchmark shares no gene names with the
+    # screen, e.g. a construct-indexed library (NR3C1_1) against CORUM's bare symbols
+    if thresholding_fig is None:
+        print('No benchmark pairs matched this screen - skipping resolution figure')
+    else:
+        plt.figure(thresholding_fig.number)
+        plt.show()
     return (shuffled_aggregated_data,)
 
 
