@@ -189,7 +189,7 @@ def _(mo):
     - `SPLIT_COL`: Column to split datasets on. Each value gets its own dataset and its own embedding space. `"class"` is the classifier output; set to an annotation column to split by it instead.
     - `GROUP_COLS`: Extra columns to aggregate within, so a point becomes perturbation x these. Keeps one shared embedding space. Ex `["treatment"]`.
     - `BOOTSTRAP_CONTROL_SCOPE`: `"pooled"` draws the bootstrap null from all controls; `"within_group"` restricts it to controls sharing the point's group; `"reference_group"` restricts it to controls in `BOOTSTRAP_REFERENCE_GROUP` whatever the point's own group. Use `"within_group"` when groups have different baselines, or the null spans them and real hits are lost. Use `"reference_group"` when the group is a treatment acting on the perturbation itself, so the null has to be the untreated state.
-    - `BOOTSTRAP_REFERENCE_GROUP`: Group value `"reference_group"` pins the null to, e.g. `"Ethanol"` for the vehicle wells. Several `GROUP_COLS` join their values with `=`. Ignored by the other scopes.
+    - `BOOTSTRAP_REFERENCE_GROUP`: The `GROUP_COLS` value the null is pinned to — the untreated or vehicle group. Several `GROUP_COLS` join their values with `=`. Ignored by the other scopes.
     """)
     return
 
@@ -201,7 +201,7 @@ def _():
     SPLIT_COL = 'class'                     # "class" (classifier) or an annotation column
     GROUP_COLS = []                         # e.g., ["treatment"]
     BOOTSTRAP_CONTROL_SCOPE = 'pooled'      # "pooled" | "within_group" | "reference_group"
-    BOOTSTRAP_REFERENCE_GROUP = None        # e.g., "Ethanol"; required by "reference_group"
+    BOOTSTRAP_REFERENCE_GROUP = None        # the vehicle group; required by "reference_group"
     # === END OPERATOR PARAMETERS ===
     return (
         BOOTSTRAP_CONTROL_SCOPE,
