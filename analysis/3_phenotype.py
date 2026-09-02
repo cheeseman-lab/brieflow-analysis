@@ -75,6 +75,10 @@ def _():
     from lib.phenotype.identify_cytoplasm_cellpose import (
         identify_cytoplasm_cellpose,
     )
+    from lib.phenotype.custom_features import (
+        load_custom_features,
+        register_custom_features,
+    )
 
     return (
         CONFIG_FILE_HEADER,
@@ -89,10 +93,12 @@ def _():
         get_hcs_nested_path,
         identify_cytoplasm_cellpose,
         image_segmentation_annotations,
+        load_custom_features,
         np,
         plt,
         random_cmap,
         read_image,
+        register_custom_features,
         visualize_phenotype_alignment,
         yaml,
     )
@@ -555,6 +561,7 @@ def _(mo):
         - `cp_emulator`: Use emulated code from original _Feldman et. al. 2019_ to extract CellProfiler-like features.
         - `cp_measure`: Use Pythonic version of [CellProfiler](https://github.com/afermg/cp_measure) directly from Imaging Platform. Still in development, may run slowly in Jupyter notebook for testing purposes.
     - `FOCI_CHANNEL`: Name of the channel(s) used for foci detection (e.g., "GH2AX", "DAPI"). Can be a single channel name (string) or a list of channel names. The channel index(es) will be automatically derived from this name.
+    - `CUSTOM_FEATURES`: List of extra per-cell feature functions to extract alongside the built-in ones, for measurements `cp_emulator` does not provide. Each takes a regionprops-like region, whose `region.intensity_image` is `(height, width, channel)` in `CHANNEL_NAMES` order, and returns a single number. Entries are either a bare function, measured on the nucleus, or a `(function, compartment)` pair, where compartment is `"nucleus"`, `"cell"`, or `"cytoplasm"` — measuring a nuclear feature on the cell mask returns plausible but wrong numbers, so declare the compartment the measurement is defined on. Only the function source travels to the workflow, so each function must define or import every name it uses. Each becomes a `{compartment}_custom_{name}_{hash}` column, where the hash pins the definition that produced it. Declaring `"cytoplasm"` requires `SEGMENT_CELLS = True` and cytoplasm segmentation. Requires `CP_METHOD = "cp_emulator"`.
     """)
     return
 
@@ -569,6 +576,40 @@ def _():
 
 
 @app.cell
+def _():
+    # === OPERATOR PARAMETERS ===
+    # Define each feature with def, then list it in CUSTOM_FEATURES, either bare to
+    # measure it on the nucleus or as a (function, compartment) pair, e.g.
+    #
+    # def puncta_count(region):
+    #     import skimage.measure
+    #     import skimage.morphology
+    #
+    #     channel = region.intensity_image[..., 1]
+    #     tophat = skimage.morphology.white_tophat(channel, skimage.morphology.disk(3))
+    #     return int(skimage.measure.label(tophat > 50).max())
+    #
+    # CUSTOM_FEATURES = [puncta_count, (spread_index, "cell")]
+
+    CUSTOM_FEATURES = []
+    # === END OPERATOR PARAMETERS ===
+    return (CUSTOM_FEATURES,)
+
+
+@app.cell
+def _(CUSTOM_FEATURES, load_custom_features, register_custom_features):
+    # Round trip through the source text the workflow will receive, so a definition
+    # that cannot survive the config hop fails here rather than on a compute node
+    CUSTOM_FEATURE_DEFINITIONS = register_custom_features(CUSTOM_FEATURES)
+    custom_features = load_custom_features(CUSTOM_FEATURE_DEFINITIONS)
+
+    print(f"{len(CUSTOM_FEATURE_DEFINITIONS)} custom features registered:")
+    for _definition in CUSTOM_FEATURE_DEFINITIONS:
+        print(f"  {_definition['column']}")
+    return CUSTOM_FEATURE_DEFINITIONS, custom_features
+
+
+@app.cell
 def _(
     CHANNEL_NAMES,
     CP_METHOD,
@@ -577,6 +618,7 @@ def _(
     WILDCARDS,
     aligned_image,
     cells,
+    custom_features,
     cytoplasms,
     nuclei,
 ):
@@ -616,6 +658,7 @@ def _(
             cytoplasms=cytoplasms,
             foci_channel=FOCI_CHANNEL_INDEX,
             channel_names=CHANNEL_NAMES,
+            custom_features=custom_features,
         )
     else:
         raise ValueError(f"Unknown CP_METHOD: {CP_METHOD}. Choose 'cp_measure' or 'cp_emulator'.")
@@ -676,6 +719,7 @@ def _(
     CP_METHOD,
     CUSTOM_CHANNEL_OFFSETS,
     CUSTOM_CHANNEL_OFFSETS_INDEXED,
+    CUSTOM_FEATURE_DEFINITIONS,
     CYTO_INDEX,
     DAPI_INDEX,
     FOCI_CHANNEL_INDEX,
@@ -716,6 +760,8 @@ def _(
         config['phenotype']['window'] = WINDOW
     if CUSTOM_CHANNEL_OFFSETS:
         config['phenotype']['custom_channel_offsets'] = CUSTOM_CHANNEL_OFFSETS_INDEXED
+    if CUSTOM_FEATURE_DEFINITIONS:
+        config['phenotype']['custom_features'] = CUSTOM_FEATURE_DEFINITIONS
     safe_config = convert_tuples_to_lists(config)
     with open(CONFIG_FILE_PATH, 'w') as _config_file:
         _config_file.write(CONFIG_FILE_HEADER)
