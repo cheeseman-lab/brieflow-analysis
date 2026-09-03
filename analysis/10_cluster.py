@@ -260,6 +260,8 @@ def _(mo):
 
     - `PHATE_DISTANCE_METRIC`: Distance metric used by phate during dimensionality reduction. Can be `euclidean` or `cosine`, `cosine` is recommended. Check out this [blog post](https://cmry.github.io/notes/euclidean-v-cosine) for more insight on how to choose a clustering metric.
     - `PERTURBATION_AUC_THRESHOLD`: AUC value used to filter out perturbations. Higher AUC value means more selective, usually `0.6`. Can be left as `None` for no filtering.
+    - `CONTROL_SCOPE`: Controls that `mean_potential_to_nontargeting` averages each point's distance over. `"pooled"` uses all controls; `"within_group"` uses controls sharing the point's own `GROUP_COLS` group; `"reference_group"` uses controls in `CONTROL_REFERENCE_GROUP` whatever the point's own group. Only matters when `GROUP_COLS` is set in notebook 8 — otherwise every scope is the same set. Use `"reference_group"` when the group is a treatment acting on the perturbation itself, so the null has to be the untreated state.
+    - `CONTROL_REFERENCE_GROUP`: The `GROUP_COLS` value the null is pinned to — the untreated or vehicle group. Several `GROUP_COLS` join their values with `=`. Ignored by the other scopes.
     - `TEST_LEIDEN_RESOLUTIONS`: Resolutions for Leiden clustering. Higher means more clusters (and therefore less genes per cluster). Should be a list of numbers. We recommend `[0.1, 1, 5, 7, 9, 11, 13, 15, 20, 100]`.
 
     **Notes**:
@@ -276,12 +278,16 @@ def _(config):
     TEST_CHANNEL_COMBO = None
     PHATE_DISTANCE_METRIC = None       # "cosine" | "euclidean"
     PERTURBATION_AUC_THRESHOLD = None
+    CONTROL_SCOPE = 'pooled'               # "pooled" | "within_group" | "reference_group"
+    CONTROL_REFERENCE_GROUP = None         # the vehicle group; required by "reference_group"
     TEST_LEIDEN_RESOLUTIONS = None     # e.g., [2, 3, 4, 5]
     # === END OPERATOR PARAMETERS ===
 
     CONTROL_KEY = config["aggregate"]["control_key"]
     return (
         CONTROL_KEY,
+        CONTROL_REFERENCE_GROUP,
+        CONTROL_SCOPE,
         PERTURBATION_AUC_THRESHOLD,
         PHATE_DISTANCE_METRIC,
         TEST_CELL_CLASS,
@@ -319,8 +325,14 @@ def _(
         shuffled_aggregated_data[col] = np.random.permutation(shuffled_aggregated_data[col].values)
     group_benchmarks = {'CORUM': corum_group_benchmark}
     results_df, thresholding_fig = evaluate_resolution(aggregated_data, PHATE_DISTANCE_METRIC, TEST_LEIDEN_RESOLUTIONS, group_benchmarks, PERTURBATION_NAME_COL, CONTROL_KEY)
-    plt.figure(thresholding_fig.number)
-    plt.show()
+    # evaluate_resolution returns no figure when a benchmark shares no gene names with the
+    # screen, e.g. a construct-indexed library (SYMBOL_1, SYMBOL_2) against CORUM's bare
+    # gene symbols
+    if thresholding_fig is None:
+        print('No benchmark pairs matched this screen - skipping resolution figure')
+    else:
+        plt.figure(thresholding_fig.number)
+        plt.show()
     return (shuffled_aggregated_data,)
 
 
@@ -493,6 +505,8 @@ def _(
     CLUSTER_COMBO_FP,
     CONFIG_FILE_HEADER,
     CONFIG_FILE_PATH,
+    CONTROL_REFERENCE_GROUP,
+    CONTROL_SCOPE,
     CORUM_GROUP_BENCHMARK_FP,
     FINAL_LEIDEN_RESOLUTIONS,
     KEGG_GROUP_BENCHMARK_FP,
@@ -506,7 +520,7 @@ def _(
     yaml,
 ):
     # Add cluster section
-    config['cluster'] = {'min_cell_cutoffs': MIN_CELL_CUTOFFS, 'leiden_resolutions': FINAL_LEIDEN_RESOLUTIONS, 'phate_distance_metric': PHATE_DISTANCE_METRIC, 'cluster_combo_fp': CLUSTER_COMBO_FP, 'uniprot_data_fp': UNIPROT_DATA_FP, 'string_pair_benchmark_fp': STRING_PAIR_BENCHMARK_FP, 'corum_group_benchmark_fp': CORUM_GROUP_BENCHMARK_FP, 'kegg_group_benchmark_fp': KEGG_GROUP_BENCHMARK_FP, 'perturbation_auc_threshold': PERTURBATION_AUC_THRESHOLD}
+    config['cluster'] = {'min_cell_cutoffs': MIN_CELL_CUTOFFS, 'leiden_resolutions': FINAL_LEIDEN_RESOLUTIONS, 'phate_distance_metric': PHATE_DISTANCE_METRIC, 'cluster_combo_fp': CLUSTER_COMBO_FP, 'uniprot_data_fp': UNIPROT_DATA_FP, 'string_pair_benchmark_fp': STRING_PAIR_BENCHMARK_FP, 'corum_group_benchmark_fp': CORUM_GROUP_BENCHMARK_FP, 'kegg_group_benchmark_fp': KEGG_GROUP_BENCHMARK_FP, 'perturbation_auc_threshold': PERTURBATION_AUC_THRESHOLD, 'control_scope': CONTROL_SCOPE, 'control_reference_group': CONTROL_REFERENCE_GROUP}
     safe_config = convert_tuples_to_lists(config)
     with open(CONFIG_FILE_PATH, 'w') as _config_file:
         _config_file.write(CONFIG_FILE_HEADER)

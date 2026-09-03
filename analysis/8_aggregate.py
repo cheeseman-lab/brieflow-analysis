@@ -180,8 +180,40 @@ def _(mo):
     return
 
 
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## <font color='red'>SET PARAMETERS: WELL ANNOTATIONS, SPLIT AND GROUP</font>
+
+    - `WELL_ANNOTATIONS_FP`: TSV of per-well experimental variables (`plate`, `well`, then any annotation columns, e.g. `treatment`). Joined onto cell metadata so they can be split or grouped on. `None` to skip.
+    - `SPLIT_COL`: Column to split datasets on. Each value gets its own dataset and its own embedding space. `"class"` is the classifier output; set to an annotation column to split by it instead.
+    - `GROUP_COLS`: Extra columns to aggregate within, so a point becomes perturbation x these. Keeps one shared embedding space. Ex `["treatment"]`.
+    - `BOOTSTRAP_CONTROL_SCOPE`: `"pooled"` draws the bootstrap null from all controls; `"within_group"` restricts it to controls sharing the point's group; `"reference_group"` restricts it to controls in `BOOTSTRAP_REFERENCE_GROUP` whatever the point's own group. Use `"within_group"` when groups have different baselines, or the null spans them and real hits are lost. Use `"reference_group"` when the group is a treatment acting on the perturbation itself, so the null has to be the untreated state.
+    - `BOOTSTRAP_REFERENCE_GROUP`: The `GROUP_COLS` value the null is pinned to — the untreated or vehicle group. Several `GROUP_COLS` join their values with `=`. Ignored by the other scopes.
+    """)
+    return
+
+
 @app.cell
-def _(config, pd):
+def _():
+    # === OPERATOR PARAMETERS ===
+    WELL_ANNOTATIONS_FP = None              # e.g., "config/well_annotations.tsv"
+    SPLIT_COL = 'class'                     # "class" (classifier) or an annotation column
+    GROUP_COLS = []                         # e.g., ["treatment"]
+    BOOTSTRAP_CONTROL_SCOPE = 'pooled'      # "pooled" | "within_group" | "reference_group"
+    BOOTSTRAP_REFERENCE_GROUP = None        # the vehicle group; required by "reference_group"
+    # === END OPERATOR PARAMETERS ===
+    return (
+        BOOTSTRAP_CONTROL_SCOPE,
+        BOOTSTRAP_REFERENCE_GROUP,
+        GROUP_COLS,
+        SPLIT_COL,
+        WELL_ANNOTATIONS_FP,
+    )
+
+
+@app.cell
+def _(WELL_ANNOTATIONS_FP, config, pd):
     # Load classification settings from config (set in notebook 7)
     from lib.phenotype.constants import DEFAULT_METADATA_COLS
     if 'classify' in config:
@@ -206,6 +238,14 @@ def _(config, pd):
     print(f'Class title: {CLASS_TITLE}')
     print(f'Class mapping: {CLASS_MAPPING}')
     print(f'Confidence thresholds: {CONFIDENCE_THRESHOLDS}')
+    # annotation columns are metadata for every downstream script that splits cell data
+    if WELL_ANNOTATIONS_FP is not None:
+        _ann_cols = [_c for _c in pd.read_csv(WELL_ANNOTATIONS_FP, sep='\t').columns if _c not in ('plate', 'well')]
+        _new_cols = [_c for _c in _ann_cols if _c not in METADATA_COLS]
+        if _new_cols:
+            METADATA_COLS = METADATA_COLS + _new_cols
+            pd.Series(METADATA_COLS).to_csv(METADATA_COLS_FP, index=False, header=False, sep='\t')
+            print(f'Added annotation columns to metadata: {_new_cols}')
     print(f'\n{len(METADATA_COLS)} metadata columns:')
     # Always show the metadata columns so user can verify
     for _col in METADATA_COLS:
@@ -220,9 +260,15 @@ def _(config, pd):
 
 
 @app.cell
-def _(METADATA_COLS, cell_data, split_cell_data):
+def _(METADATA_COLS, WELL_ANNOTATIONS_FP, cell_data, split_cell_data):
     # Split cell data into metadata and features
     metadata, features = split_cell_data(cell_data, METADATA_COLS)
+
+    # join annotations as split_datasets does, so the cells below see what the pipeline will
+    if WELL_ANNOTATIONS_FP is not None:
+        from lib.aggregate.cell_data_utils import join_well_annotations
+
+        metadata = join_well_annotations(metadata, WELL_ANNOTATIONS_FP)
     print(metadata.shape, features.shape)
     return features, metadata
 
@@ -853,7 +899,9 @@ def _(
     BATCH_COLS,
     BOOTSTRAP_CELL_CLASS,
     BOOTSTRAP_CHANNEL_COMBO,
+    BOOTSTRAP_CONTROL_SCOPE,
     BOOTSTRAP_EXTRA_FEATURES,
+    BOOTSTRAP_REFERENCE_GROUP,
     COLLAPSE_COLS,
     CONFIG_FILE_HEADER,
     CONFIG_FILE_PATH,
@@ -864,6 +912,7 @@ def _(
     EXCLUSION_STRING,
     FEATURE_NORMALIZATION,
     FILTER_QUERIES,
+    GROUP_COLS,
     IMPUTE,
     METADATA_COLS_FP,
     MONTAGE_CELL_SIZE,
@@ -877,14 +926,16 @@ def _(
     PS_PERCENTILE_THRESHOLD,
     PS_PROBABILITY_THRESHOLD,
     SKIP_PERTURBATION_SCORE,
+    SPLIT_COL,
     VARIANCE_OR_NCOMP,
+    WELL_ANNOTATIONS_FP,
     config,
     convert_tuples_to_lists,
     product,
     yaml,
 ):
     # Add aggregate section (classifier settings are in config["classify"] from notebook 7)
-    config['aggregate'] = {'metadata_cols_fp': METADATA_COLS_FP, 'collapse_cols': COLLAPSE_COLS, 'aggregate_combo_fp': AGGREGATE_COMBO_FP, 'filter_queries': FILTER_QUERIES, 'perturbation_name_col': PERTURBATION_NAME_COL, 'drop_cols_threshold': DROP_COLS_THRESHOLD, 'drop_rows_threshold': DROP_ROWS_THRESHOLD, 'impute': IMPUTE, 'contamination': CONTAMINATION, 'batch_cols': BATCH_COLS, 'control_key': CONTROL_KEY, 'perturbation_id_col': PERTURBATION_ID_COL, 'variance_or_ncomp': VARIANCE_OR_NCOMP, 'num_align_batches': NUM_ALIGN_BATCHES, 'agg_method': AGG_METHOD, 'skip_perturbation_score': SKIP_PERTURBATION_SCORE, 'ps_probability_threshold': PS_PROBABILITY_THRESHOLD, 'ps_percentile_threshold': PS_PERCENTILE_THRESHOLD, 'montage_num_cells': MONTAGE_NUM_CELLS, 'montage_cell_size': MONTAGE_CELL_SIZE, 'montage_shape': list(MONTAGE_SHAPE)}
+    config['aggregate'] = {'metadata_cols_fp': METADATA_COLS_FP, 'collapse_cols': COLLAPSE_COLS, 'aggregate_combo_fp': AGGREGATE_COMBO_FP, 'filter_queries': FILTER_QUERIES, 'perturbation_name_col': PERTURBATION_NAME_COL, 'drop_cols_threshold': DROP_COLS_THRESHOLD, 'drop_rows_threshold': DROP_ROWS_THRESHOLD, 'impute': IMPUTE, 'contamination': CONTAMINATION, 'batch_cols': BATCH_COLS, 'control_key': CONTROL_KEY, 'perturbation_id_col': PERTURBATION_ID_COL, 'variance_or_ncomp': VARIANCE_OR_NCOMP, 'num_align_batches': NUM_ALIGN_BATCHES, 'agg_method': AGG_METHOD, 'skip_perturbation_score': SKIP_PERTURBATION_SCORE, 'ps_probability_threshold': PS_PROBABILITY_THRESHOLD, 'ps_percentile_threshold': PS_PERCENTILE_THRESHOLD, 'montage_num_cells': MONTAGE_NUM_CELLS, 'montage_cell_size': MONTAGE_CELL_SIZE, 'montage_shape': list(MONTAGE_SHAPE), 'well_annotations_fp': WELL_ANNOTATIONS_FP, 'split_col': SPLIT_COL, 'group_cols': GROUP_COLS, 'bootstrap_control_scope': BOOTSTRAP_CONTROL_SCOPE, 'bootstrap_reference_group': BOOTSTRAP_REFERENCE_GROUP}
     if BOOTSTRAP_CELL_CLASS and BOOTSTRAP_CHANNEL_COMBO:
         cell_classes_list = BOOTSTRAP_CELL_CLASS if isinstance(BOOTSTRAP_CELL_CLASS, list) else [BOOTSTRAP_CELL_CLASS]
         channel_combos_list = BOOTSTRAP_CHANNEL_COMBO if isinstance(BOOTSTRAP_CHANNEL_COMBO, list) else [BOOTSTRAP_CHANNEL_COMBO]
