@@ -1287,6 +1287,11 @@ def _(mo):
     | T | OFF | OFF | `[]` |
 
     `frac` can optionally correct a called barcode to a nearby library barcode using `ERROR_CORRECT` and `MAX_DISTANCE` below. `merfish` has already chosen the closest library barcode, so `ERROR_CORRECT` must be `False` with that method.
+
+    Two optional calibrations apply to combinatorial `frac`. Both default to `None`, which leaves the call unchanged. Check them when the mapping rate is low but the reads look real.
+
+    - `DYE_SCALE`: Multiplier per dye channel, applied before the ON/OFF fractions are computed. A dye that images dimmer than the others never reaches the ON threshold in a two-dye base, so that base is called as the one-dye base instead, with no error raised. The tell is a one-sided substitution spectrum: on one PoTC plate 57% of single-base errors were C called as T, with the dim dye's fraction at 0.15 against a 0.18 threshold. Set the factor that brings the dim dye's brightness up to the others, e.g. `{"Alexa 488": 1.5}`, and confirm it against a decoy library before keeping it.
+    - `BRIGHTNESS_REGIONS`: Inclusive 1-based cycle ranges over which the blank state's brightness reference is taken. A cycle is called blank when it is dim relative to that reference; taken across all cycles, a barcode whose regions are imaged at different brightness has its dim region called blank too often. Set this to the barcode's regions, normally `[[MAP_START, MAP_END], [RECOMB_START, RECOMB_END]]` as defined below. Cycles outside every listed region keep the all-cycle reference.
     """)
     return
 
@@ -1305,8 +1310,14 @@ def _():
         "G": ["Red", "Green"],
         "T": [],
     }
+    DYE_SCALE = None  # combinatorial frac only, e.g. {"Alexa 488": 1.5}
+    BRIGHTNESS_REGIONS = None  # combinatorial frac only, e.g. [[1, 7], [8, 12]]
     # === END OPERATOR PARAMETERS ===
     COMBINATORIAL = {"code": COMBINATORIAL_CODE}
+    if DYE_SCALE:
+        COMBINATORIAL["dye_scale"] = DYE_SCALE
+    if BRIGHTNESS_REGIONS:
+        COMBINATORIAL["brightness_regions"] = BRIGHTNESS_REGIONS
     return CALL_READS_METHOD, CHEMISTRY, COMBINATORIAL, THRESHOLD_READS
 
 
