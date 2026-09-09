@@ -289,6 +289,7 @@ def _(mo):
     - `MONTAGE_NUM_CELLS`: Number of cells to include in each montage. Default `30`.
     - `MONTAGE_CELL_SIZE`: Pixel size of each cell bounding box in the montage (zoom level).
     - `MONTAGE_SHAPE`: Grid shape of the montage as `(rows, cols)`. Default `(3, 10)`.
+    - `GENERATE_MONTAGES`: Whether the aggregate pipeline writes montages. Default `True`; set `False` to skip them.
 
     **Notes**:
     - We generate cell classes for each of the classes listed in the classifier and an "all" class. So for a classifier that splits by mitotic or interphase the final classes will be `["mitotic", "interphase", "all"]`.
@@ -303,6 +304,7 @@ def _():
     TEST_MONTAGE_CHANNEL = None
     COLLAPSE_COLS = None               # e.g., ["sgRNA_0", "gene_symbol_0"]
     MONTAGE_CELL_SIZE = None           # e.g., 40 — zoom level (pixel size per cell bounding box)
+    GENERATE_MONTAGES = True           # write montages in the aggregate pipeline
     # === END OPERATOR PARAMETERS ===
 
     # Library defaults (auto bucket)
@@ -310,6 +312,7 @@ def _():
     MONTAGE_SHAPE = (3, 10)
     return (
         COLLAPSE_COLS,
+        GENERATE_MONTAGES,
         MONTAGE_CELL_SIZE,
         TEST_MONTAGE_CHANNEL,
         MONTAGE_NUM_CELLS,
@@ -426,10 +429,39 @@ def _(mo):
     mo.md(r"""
     ## <font color='red'>SET PARAMETERS</font>
 
+    ### Secondary object aggregation (optional)
+
+    If secondary object detection was enabled in the phenotype module, per-object features are available and `SECOND_OBJ_AGG_STRATEGY` controls how they fold into cell-level data before aggregation:
+
+    - `"none"`: No per-object features enter the aggregate pipeline.
+    - `"single"`: Populate features only for cells with exactly one secondary object (NaN otherwise).
+    - `"all"`: Numbered columns per object (`second_obj_area_1`, `second_obj_area_2`, ...).
+    - `"average"`: Mean of numeric features across a cell's secondary objects.
+
+    Cell-level summary columns (`has_second_obj`, `num_second_objs`, ...) are always available and can be used in `FILTER_QUERIES`.
+    """)
+    return
+
+
+@app.cell
+def _():
+    # === OPERATOR PARAMETERS ===
+    SECOND_OBJ_AGG_STRATEGY = "none"   # "none" | "single" | "all" | "average"
+    # === END OPERATOR PARAMETERS ===
+    return (SECOND_OBJ_AGG_STRATEGY,)
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## <font color='red'>SET PARAMETERS</font>
+
     ### Aggregate by channel combos
 
     - `CHANNEL_COMBOS`: Combinations of channels to aggregate by. This is a list of lists with channel names, ex `[["DAPI", "CENPA"], ["DAPI", "WGA"]]`.
     - `AGGREGATE_COMBO_FP`: Location of aggregate combinations dataframe.
+    - `SPLIT_BY_COMPARTMENT`: Split aggregate and cluster outputs by compartment (`cell`, `nucleus`, `cytoplasm`, `second_obj`). When `False` (default) outputs keep the standard paths and use every compartment.
+    - `COMPARTMENT_COMBOS`: Compartment combinations to aggregate by when splitting, as a list of lists, ex `[["cell", "nucleus", "cytoplasm"], ["nucleus"]]`. Every channel combo is paired with every compartment combo.
     - `TEST_CELL_CLASS`: Cell class to configure aggregate params with. Can be any of the cell classes or `all`.
     - `TEST_CHANNEL_COMBO`: Channel combo to configure aggregate params with; must be one of the channel combos. Ex `["DAPI", "CENPA"]`.
     """)
@@ -441,12 +473,16 @@ def _():
     # === OPERATOR PARAMETERS ===
     CHANNEL_COMBOS = None              # e.g., [["DAPI", "COXIV", "CENPA", "WGA"], ["DAPI", "CENPA"]]
     AGGREGATE_COMBO_FP = "config/aggregate_combo.tsv"
+    SPLIT_BY_COMPARTMENT = False
+    COMPARTMENT_COMBOS = None          # e.g., [["cell", "nucleus", "cytoplasm"], ["nucleus"]]
     TEST_CELL_CLASS = None
     TEST_CHANNEL_COMBO = None
     # === END OPERATOR PARAMETERS ===
     return (
         AGGREGATE_COMBO_FP,
         CHANNEL_COMBOS,
+        COMPARTMENT_COMBOS,
+        SPLIT_BY_COMPARTMENT,
         TEST_CELL_CLASS,
         TEST_CHANNEL_COMBO,
     )
@@ -456,7 +492,9 @@ def _():
 def _(
     AGGREGATE_COMBO_FP,
     CHANNEL_COMBOS,
+    COMPARTMENT_COMBOS,
     Path,
+    SPLIT_BY_COMPARTMENT,
     cell_classes,
     config,
     pd,
@@ -483,6 +521,13 @@ def _(
         index=aggregate_wildcard_combos.index,
     )
     aggregate_wildcard_combos = aggregate_wildcard_combos.drop(columns="plate_well")
+
+    # Pair every channel combo with every compartment combo when splitting by compartment
+    if SPLIT_BY_COMPARTMENT:
+        compartment_combos = ["-".join(combo) for combo in COMPARTMENT_COMBOS]
+        aggregate_wildcard_combos = aggregate_wildcard_combos.merge(
+            pd.DataFrame({"compartment_combo": compartment_combos}), how="cross"
+        )
 
     # Save aggregate wildcard combos
     aggregate_wildcard_combos.to_csv(AGGREGATE_COMBO_FP, sep="\t", index=False)
@@ -700,6 +745,7 @@ def _(mo):
 
     - `BATCH_COLS`: Which columns of metadata have batch-specific information. Usually `["plate", "well"]`.
     - `CONTROL_KEY`: Name of perturbation in `PERTURBATION_NAME_COL` that indicates a control cell.
+    - `CONTROL_NAME_COL`: Column matched against `CONTROL_KEY` when it differs from `PERTURBATION_NAME_COL` (optional; `None` uses `PERTURBATION_NAME_COL`).
     - `PERTURBATION_ID_COL`: Name of the column identifying a unique **construct** (sgRNA / barcode), ex `cell_barcode_0` or `sgRNA_0`. This sets the resolution of construct-level aggregation and the bootstrap null: each construct becomes its own row, so every non-targeting guide is treated as a separate control element. **This should essentially always be set.** If left as `None` it falls back to `PERTURBATION_NAME_COL`, which collapses constructs to gene level — all controls become a single construct and the bootstrap null loses construct-to-construct variance, making p-values under-dispersed.
     """)
     return
@@ -711,8 +757,9 @@ def _():
     BATCH_COLS = None                  # e.g., ["plate", "well"]
     CONTROL_KEY = None                 # e.g., "nontargeting"
     PERTURBATION_ID_COL = "cell_barcode_0"   # or "sgRNA_0" — should essentially always be set
+    CONTROL_NAME_COL = None            # e.g., "gene_symbol_0" when PERTURBATION_NAME_COL is a construct column
     # === END OPERATOR PARAMETERS ===
-    return BATCH_COLS, CONTROL_KEY, PERTURBATION_ID_COL
+    return BATCH_COLS, CONTROL_KEY, CONTROL_NAME_COL, PERTURBATION_ID_COL
 
 
 @app.cell
@@ -874,14 +921,20 @@ def _():
 
 
 @app.cell
-def _(CHANNEL_COMBOS, CELL_CLASSES):
+def _(CHANNEL_COMBOS, CELL_CLASSES, COMPARTMENT_COMBOS, SPLIT_BY_COMPARTMENT):
     # Bootstrap targets default to the largest configured channel combo (most
-    # channels) and all available cell classes.
+    # channels), all available cell classes, and every compartment combo when
+    # splitting by compartment.
     BOOTSTRAP_CHANNEL_COMBO = (
         "_".join(max(CHANNEL_COMBOS, key=len)) if CHANNEL_COMBOS else None
     )
     BOOTSTRAP_CELL_CLASS = list(CELL_CLASSES) if CELL_CLASSES else None
-    return BOOTSTRAP_CELL_CLASS, BOOTSTRAP_CHANNEL_COMBO
+    BOOTSTRAP_COMPARTMENT_COMBO = (
+        ["-".join(combo) for combo in COMPARTMENT_COMBOS]
+        if SPLIT_BY_COMPARTMENT and COMPARTMENT_COMBOS
+        else None
+    )
+    return BOOTSTRAP_CELL_CLASS, BOOTSTRAP_CHANNEL_COMBO, BOOTSTRAP_COMPARTMENT_COMBO
 
 
 @app.cell(hide_code=True)
@@ -899,6 +952,7 @@ def _(
     BATCH_COLS,
     BOOTSTRAP_CELL_CLASS,
     BOOTSTRAP_CHANNEL_COMBO,
+    BOOTSTRAP_COMPARTMENT_COMBO,
     BOOTSTRAP_CONTROL_SCOPE,
     BOOTSTRAP_EXTRA_FEATURES,
     BOOTSTRAP_REFERENCE_GROUP,
@@ -907,11 +961,13 @@ def _(
     CONFIG_FILE_PATH,
     CONTAMINATION,
     CONTROL_KEY,
+    CONTROL_NAME_COL,
     DROP_COLS_THRESHOLD,
     DROP_ROWS_THRESHOLD,
     EXCLUSION_STRING,
     FEATURE_NORMALIZATION,
     FILTER_QUERIES,
+    GENERATE_MONTAGES,
     GROUP_COLS,
     IMPUTE,
     METADATA_COLS_FP,
@@ -925,7 +981,9 @@ def _(
     PSEUDOGENE_PATTERNS,
     PS_PERCENTILE_THRESHOLD,
     PS_PROBABILITY_THRESHOLD,
+    SECOND_OBJ_AGG_STRATEGY,
     SKIP_PERTURBATION_SCORE,
+    SPLIT_BY_COMPARTMENT,
     SPLIT_COL,
     VARIANCE_OR_NCOMP,
     WELL_ANNOTATIONS_FP,
@@ -935,11 +993,13 @@ def _(
     yaml,
 ):
     # Add aggregate section (classifier settings are in config["classify"] from notebook 7)
-    config['aggregate'] = {'metadata_cols_fp': METADATA_COLS_FP, 'collapse_cols': COLLAPSE_COLS, 'aggregate_combo_fp': AGGREGATE_COMBO_FP, 'filter_queries': FILTER_QUERIES, 'perturbation_name_col': PERTURBATION_NAME_COL, 'drop_cols_threshold': DROP_COLS_THRESHOLD, 'drop_rows_threshold': DROP_ROWS_THRESHOLD, 'impute': IMPUTE, 'contamination': CONTAMINATION, 'batch_cols': BATCH_COLS, 'control_key': CONTROL_KEY, 'perturbation_id_col': PERTURBATION_ID_COL, 'variance_or_ncomp': VARIANCE_OR_NCOMP, 'num_align_batches': NUM_ALIGN_BATCHES, 'agg_method': AGG_METHOD, 'skip_perturbation_score': SKIP_PERTURBATION_SCORE, 'ps_probability_threshold': PS_PROBABILITY_THRESHOLD, 'ps_percentile_threshold': PS_PERCENTILE_THRESHOLD, 'montage_num_cells': MONTAGE_NUM_CELLS, 'montage_cell_size': MONTAGE_CELL_SIZE, 'montage_shape': list(MONTAGE_SHAPE), 'well_annotations_fp': WELL_ANNOTATIONS_FP, 'split_col': SPLIT_COL, 'group_cols': GROUP_COLS, 'bootstrap_control_scope': BOOTSTRAP_CONTROL_SCOPE, 'bootstrap_reference_group': BOOTSTRAP_REFERENCE_GROUP}
+    config['aggregate'] = {'metadata_cols_fp': METADATA_COLS_FP, 'collapse_cols': COLLAPSE_COLS, 'aggregate_combo_fp': AGGREGATE_COMBO_FP, 'split_by_compartment': SPLIT_BY_COMPARTMENT, 'second_obj_agg_strategy': SECOND_OBJ_AGG_STRATEGY, 'filter_queries': FILTER_QUERIES, 'perturbation_name_col': PERTURBATION_NAME_COL, 'drop_cols_threshold': DROP_COLS_THRESHOLD, 'drop_rows_threshold': DROP_ROWS_THRESHOLD, 'impute': IMPUTE, 'contamination': CONTAMINATION, 'batch_cols': BATCH_COLS, 'control_key': CONTROL_KEY, 'control_name_col': CONTROL_NAME_COL, 'perturbation_id_col': PERTURBATION_ID_COL, 'variance_or_ncomp': VARIANCE_OR_NCOMP, 'num_align_batches': NUM_ALIGN_BATCHES, 'agg_method': AGG_METHOD, 'skip_perturbation_score': SKIP_PERTURBATION_SCORE, 'ps_probability_threshold': PS_PROBABILITY_THRESHOLD, 'ps_percentile_threshold': PS_PERCENTILE_THRESHOLD, 'montage_num_cells': MONTAGE_NUM_CELLS, 'montage_cell_size': MONTAGE_CELL_SIZE, 'montage_shape': list(MONTAGE_SHAPE), 'generate_montages': GENERATE_MONTAGES, 'well_annotations_fp': WELL_ANNOTATIONS_FP, 'split_col': SPLIT_COL, 'group_cols': GROUP_COLS, 'bootstrap_control_scope': BOOTSTRAP_CONTROL_SCOPE, 'bootstrap_reference_group': BOOTSTRAP_REFERENCE_GROUP}
     if BOOTSTRAP_CELL_CLASS and BOOTSTRAP_CHANNEL_COMBO:
         cell_classes_list = BOOTSTRAP_CELL_CLASS if isinstance(BOOTSTRAP_CELL_CLASS, list) else [BOOTSTRAP_CELL_CLASS]
         channel_combos_list = BOOTSTRAP_CHANNEL_COMBO if isinstance(BOOTSTRAP_CHANNEL_COMBO, list) else [BOOTSTRAP_CHANNEL_COMBO]
         BOOTSTRAP_COMBINATIONS = [{'cell_class': cc, 'channel_combo': ch} for cc, ch in product(cell_classes_list, channel_combos_list)]
+        if SPLIT_BY_COMPARTMENT and BOOTSTRAP_COMPARTMENT_COMBO:
+            BOOTSTRAP_COMBINATIONS = [{**combo, 'compartment_combo': cp} for combo, cp in product(BOOTSTRAP_COMBINATIONS, BOOTSTRAP_COMPARTMENT_COMBO)]
         config['aggregate'].update({'feature_normalization': FEATURE_NORMALIZATION, 'num_sims': NUM_SIMS, 'exclusion_string': EXCLUSION_STRING, 'bootstrap_combinations': BOOTSTRAP_COMBINATIONS, 'pseudogene_patterns': PSEUDOGENE_PATTERNS, 'bootstrap_extra_features': BOOTSTRAP_EXTRA_FEATURES})
     safe_config = convert_tuples_to_lists(config)
     with open(CONFIG_FILE_PATH, 'w') as _config_file:
