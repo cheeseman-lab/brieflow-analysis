@@ -110,7 +110,6 @@ def _(CONFIG_FILE_PATH, Path, pd, yaml):
     print(f'Channel Combos: {CHANNEL_COMBOS}')
     CELL_CLASSES = list(aggregate_combos['cell_class'].unique())
     print(f'Cell classes: {CELL_CLASSES}')
-    # compartment combos only exist when aggregate.split_by_compartment is on
     if 'compartment_combo' in aggregate_combos.columns:
         print(f"Compartment combos: {aggregate_combos['compartment_combo'].unique().tolist()}")
     return CHANNEL_COMBOS, ROOT_FP, config
@@ -133,7 +132,7 @@ def _(mo):
 def _(config):
     # === OPERATOR PARAMETERS ===
     MIN_CELL_CUTOFFS = None            # e.g., {"all": 5, "Interphase": 5, "Mitotic": 5}
-    TEST_COMPARTMENT_COMBO = None      # e.g., "nucleus"; only when aggregate.split_by_compartment is on
+    TEST_COMPARTMENT_COMBO = None
     # === END OPERATOR PARAMETERS ===
 
     PERTURBATION_NAME_COL = config["aggregate"]["perturbation_name_col"]
