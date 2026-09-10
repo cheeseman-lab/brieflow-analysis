@@ -870,6 +870,7 @@ def _():
         "cell_bounds_1",
         "cell_bounds_2",
         "cell_bounds_3",
+        "num_nuclei",
         "cytoplasm_i",
         "cytoplasm_j",
         "cytoplasm_bounds_0",
