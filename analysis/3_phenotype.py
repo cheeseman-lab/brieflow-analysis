@@ -699,6 +699,322 @@ def _(CHANNEL_NAMES, phenotype_cp):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
+    ## <font color='red'>SET PARAMETERS</font>
+
+    ### Secondary object detection (optional)
+
+    Segment and phenotype additional objects contained within cells (e.g. an intracellular pathogen, organelles, foci). Leave `SECOND_OBJ_DETECTION = False` to skip.
+
+    - `SECOND_OBJ_DETECTION`: Whether to detect secondary objects.
+    - `SECOND_OBJ_CHANNEL`: Name of the channel carrying the secondary objects.
+    - `SECOND_OBJ_METHOD`: `"threshold"` (classical), `"cellpose"`, or `"stardist"`.
+
+    **Size filtering and cell association (all methods)**
+    - `SECOND_OBJ_MIN_SIZE` / `SECOND_OBJ_MAX_SIZE`: Valid object size, as Feret diameter or pixel area depending on `SIZE_FILTER_METHOD` (`"feret"` or `"area"`).
+    - `MAX_OBJECTS_PER_CELL`: Maximum objects kept per cell.
+    - `OVERLAP_THRESHOLD`: Minimum overlap ratio to associate an object with a cell.
+    - `MAX_TOTAL_OBJECTS`: Failsafe; a tile with more detected objects returns empty results.
+
+    **Cellpose** (`SECOND_OBJ_METHOD = "cellpose"`): `SECOND_OBJ_CELLPOSE_MODEL`, `SECOND_OBJ_DIAMETER` (`None` estimates from the test image), `SECOND_OBJ_FLOW_THRESHOLD`, `SECOND_OBJ_CELLPROB_THRESHOLD`.
+
+    **StarDist** (`SECOND_OBJ_METHOD = "stardist"`): `SECOND_OBJ_STARDIST_MODEL`, `SECOND_OBJ_PROB_THRESHOLD`, `SECOND_OBJ_NMS_THRESHOLD`.
+
+    **Threshold** (`SECOND_OBJ_METHOD = "threshold"`)
+    - `THRESHOLD_SMOOTHING_SCALE`: Gaussian sigma before thresholding.
+    - `THRESHOLD_METHOD`: `"otsu_two_peak"`, `"otsu_three_peak_mid_bg"`, `"otsu_three_peak_mid_fg"`, or `"min_cross_entropy"`.
+    - `USE_MORPHOLOGICAL_OPENING` / `OPENING_DISK_RADIUS`: Opening to separate weakly connected objects.
+    - `FILL_HOLES`: `"threshold"`, `"declump"`, `"both"`, or `"none"`.
+    - `DECLUMP_METHOD`: `"none"`, `"shape"`, `"intensity"`, or `"shape_intensity"`; `DECLUMP_MODE`: `"watershed"`, `"propagate"`, or `"none"`.
+    - `SUPPRESS_LOCAL_MAXIMA`: Minimum spacing between seeds in pixels (decrease if objects merge, increase if they over-split).
+    - `MAXIMA_REDUCTION_FACTOR`: H-minima suppression of weak seeds (0-1), `None` to disable.
+    - `USE_SHAPE_REFINEMENT` / `PROPORTION_THRESHOLD`: Reject watershed splits whose boundary is long relative to the perimeter.
+    """)
+    return
+
+
+@app.cell
+def _(CHANNEL_NAMES, GPU, aligned_image):
+    # === OPERATOR PARAMETERS (SECONDARY OBJECTS — optional) ===
+    SECOND_OBJ_DETECTION = False
+    SECOND_OBJ_CHANNEL = None
+    SECOND_OBJ_METHOD = "threshold"    # "threshold" | "cellpose" | "stardist"
+
+    # Size filtering and cell association (all methods)
+    SECOND_OBJ_MIN_SIZE = 10
+    SECOND_OBJ_MAX_SIZE = 200
+    SIZE_FILTER_METHOD = "feret"
+    MAX_OBJECTS_PER_CELL = 120
+    OVERLAP_THRESHOLD = 0.1
+    MAX_TOTAL_OBJECTS = 1000
+
+    # Cellpose parameters (SECOND_OBJ_METHOD == "cellpose")
+    SECOND_OBJ_CELLPOSE_MODEL = "cyto3"
+    SECOND_OBJ_DIAMETER_INPUT = None   # None = estimate from the test image
+    SECOND_OBJ_FLOW_THRESHOLD = 0.4
+    SECOND_OBJ_CELLPROB_THRESHOLD = 0.0
+
+    # StarDist parameters (SECOND_OBJ_METHOD == "stardist")
+    SECOND_OBJ_STARDIST_MODEL = "2D_versatile_fluo"
+    SECOND_OBJ_PROB_THRESHOLD = 0.5
+    SECOND_OBJ_NMS_THRESHOLD = 0.4
+
+    # Threshold parameters (SECOND_OBJ_METHOD == "threshold")
+    THRESHOLD_SMOOTHING_SCALE = 1.3488
+    THRESHOLD_METHOD = "otsu_two_peak"
+    USE_MORPHOLOGICAL_OPENING = True
+    OPENING_DISK_RADIUS = 1
+    FILL_HOLES = "both"
+    DECLUMP_METHOD = "shape"
+    DECLUMP_MODE = "watershed"
+    SUPPRESS_LOCAL_MAXIMA = 20
+    MAXIMA_REDUCTION_FACTOR = None
+    USE_SHAPE_REFINEMENT = False
+    PROPORTION_THRESHOLD = 0.4
+    RETURN_INTERMEDIATE_OUTPUTS = False  # show the threshold mask in the preview below
+    # === END OPERATOR PARAMETERS ===
+
+    SECOND_OBJ_CHANNEL_INDEX = (
+        CHANNEL_NAMES.index(SECOND_OBJ_CHANNEL) if SECOND_OBJ_DETECTION else None
+    )
+    SECOND_OBJ_DIAMETER = SECOND_OBJ_DIAMETER_INPUT
+    if (
+        SECOND_OBJ_DETECTION
+        and SECOND_OBJ_METHOD == "cellpose"
+        and SECOND_OBJ_DIAMETER is None
+    ):
+        from lib.phenotype.segment_secondary_object import estimate_second_obj_diameter
+
+        # cpsam (Cellpose 4) has no automatic diameter estimate
+        _estimation_method = "manual" if SECOND_OBJ_CELLPOSE_MODEL == "cpsam" else "cellpose"
+        print(f"Estimating secondary object diameter in {SECOND_OBJ_CHANNEL}...")
+        SECOND_OBJ_DIAMETER = estimate_second_obj_diameter(
+            aligned_image,
+            SECOND_OBJ_CHANNEL_INDEX,
+            method=_estimation_method,
+            model_type=SECOND_OBJ_CELLPOSE_MODEL,
+            gpu=GPU,
+        )
+        print(f"Estimated diameter: {SECOND_OBJ_DIAMETER}")
+    return (
+        DECLUMP_METHOD,
+        DECLUMP_MODE,
+        FILL_HOLES,
+        MAXIMA_REDUCTION_FACTOR,
+        MAX_OBJECTS_PER_CELL,
+        MAX_TOTAL_OBJECTS,
+        OPENING_DISK_RADIUS,
+        OVERLAP_THRESHOLD,
+        PROPORTION_THRESHOLD,
+        RETURN_INTERMEDIATE_OUTPUTS,
+        SECOND_OBJ_CELLPOSE_MODEL,
+        SECOND_OBJ_CELLPROB_THRESHOLD,
+        SECOND_OBJ_CHANNEL,
+        SECOND_OBJ_CHANNEL_INDEX,
+        SECOND_OBJ_DETECTION,
+        SECOND_OBJ_DIAMETER,
+        SECOND_OBJ_FLOW_THRESHOLD,
+        SECOND_OBJ_MAX_SIZE,
+        SECOND_OBJ_METHOD,
+        SECOND_OBJ_MIN_SIZE,
+        SECOND_OBJ_NMS_THRESHOLD,
+        SECOND_OBJ_PROB_THRESHOLD,
+        SECOND_OBJ_STARDIST_MODEL,
+        SIZE_FILTER_METHOD,
+        SUPPRESS_LOCAL_MAXIMA,
+        THRESHOLD_METHOD,
+        THRESHOLD_SMOOTHING_SCALE,
+        USE_MORPHOLOGICAL_OPENING,
+        USE_SHAPE_REFINEMENT,
+    )
+
+
+@app.cell
+def _(
+    CHANNEL_CMAPS,
+    CHANNEL_NAMES,
+    DECLUMP_METHOD,
+    DECLUMP_MODE,
+    FILL_HOLES,
+    GPU,
+    MAXIMA_REDUCTION_FACTOR,
+    MAX_OBJECTS_PER_CELL,
+    MAX_TOTAL_OBJECTS,
+    OPENING_DISK_RADIUS,
+    OVERLAP_THRESHOLD,
+    PROPORTION_THRESHOLD,
+    RETURN_INTERMEDIATE_OUTPUTS,
+    SECOND_OBJ_CELLPOSE_MODEL,
+    SECOND_OBJ_CELLPROB_THRESHOLD,
+    SECOND_OBJ_CHANNEL,
+    SECOND_OBJ_CHANNEL_INDEX,
+    SECOND_OBJ_DETECTION,
+    SECOND_OBJ_DIAMETER,
+    SECOND_OBJ_FLOW_THRESHOLD,
+    SECOND_OBJ_MAX_SIZE,
+    SECOND_OBJ_METHOD,
+    SECOND_OBJ_MIN_SIZE,
+    SECOND_OBJ_NMS_THRESHOLD,
+    SECOND_OBJ_PROB_THRESHOLD,
+    SECOND_OBJ_STARDIST_MODEL,
+    SIZE_FILTER_METHOD,
+    SUPPRESS_LOCAL_MAXIMA,
+    THRESHOLD_METHOD,
+    THRESHOLD_SMOOTHING_SCALE,
+    USE_MORPHOLOGICAL_OPENING,
+    USE_SHAPE_REFINEMENT,
+    aligned_image,
+    cells,
+    cytoplasms,
+    nuclei,
+    plt,
+):
+    # Segment secondary objects on the test image
+    second_obj_masks = None
+    cell_second_obj_table = None
+    if SECOND_OBJ_DETECTION:
+        from skimage import measure
+        from lib.phenotype.segment_secondary_object import (
+            segment_second_objs,
+            segment_second_objs_ml,
+            create_second_obj_boundary_visualization,
+            create_second_obj_standard_visualization,
+        )
+
+        print(f"Segmenting secondary objects in {SECOND_OBJ_CHANNEL} with the {SECOND_OBJ_METHOD} method...")
+
+        # Nuclei centroids for cell-nucleus distance features
+        _nuclei_centroids = {
+            region.label: region.centroid for region in measure.regionprops(nuclei)
+        }
+        _common = dict(
+            image=aligned_image,
+            second_obj_channel_index=SECOND_OBJ_CHANNEL_INDEX,
+            cell_masks=cells,
+            cytoplasm_masks=cytoplasms,
+            second_obj_min_size=SECOND_OBJ_MIN_SIZE,
+            second_obj_max_size=SECOND_OBJ_MAX_SIZE,
+            size_filter_method=SIZE_FILTER_METHOD,
+            max_objects_per_cell=MAX_OBJECTS_PER_CELL,
+            overlap_threshold=OVERLAP_THRESHOLD,
+            nuclei_centroids=_nuclei_centroids,
+            max_total_objects=MAX_TOTAL_OBJECTS,
+        )
+        _threshold_output = None
+
+        if SECOND_OBJ_METHOD == "cellpose":
+            second_obj_masks, cell_second_obj_table, _updated_cytoplasms = segment_second_objs_ml(
+                **_common,
+                second_obj_method="cellpose",
+                gpu=GPU,
+                second_obj_cellpose_model=SECOND_OBJ_CELLPOSE_MODEL,
+                second_obj_diameter=SECOND_OBJ_DIAMETER,
+                second_obj_flow_threshold=SECOND_OBJ_FLOW_THRESHOLD,
+                second_obj_cellprob_threshold=SECOND_OBJ_CELLPROB_THRESHOLD,
+            )
+        elif SECOND_OBJ_METHOD == "stardist":
+            second_obj_masks, cell_second_obj_table, _updated_cytoplasms = segment_second_objs_ml(
+                **_common,
+                second_obj_method="stardist",
+                gpu=GPU,
+                second_obj_stardist_model=SECOND_OBJ_STARDIST_MODEL,
+                second_obj_prob_threshold=SECOND_OBJ_PROB_THRESHOLD,
+                second_obj_nms_threshold=SECOND_OBJ_NMS_THRESHOLD,
+            )
+        elif SECOND_OBJ_METHOD == "threshold":
+            _result = segment_second_objs(
+                **_common,
+                threshold_smoothing_scale=THRESHOLD_SMOOTHING_SCALE,
+                threshold_method=THRESHOLD_METHOD,
+                use_morphological_opening=USE_MORPHOLOGICAL_OPENING,
+                opening_disk_radius=OPENING_DISK_RADIUS,
+                fill_holes=FILL_HOLES,
+                declump_method=DECLUMP_METHOD,
+                declump_mode=DECLUMP_MODE,
+                suppress_local_maxima=SUPPRESS_LOCAL_MAXIMA,
+                maxima_reduction_factor=MAXIMA_REDUCTION_FACTOR,
+                use_shape_refinement=USE_SHAPE_REFINEMENT,
+                proportion_threshold=PROPORTION_THRESHOLD,
+                return_threshold_output=RETURN_INTERMEDIATE_OUTPUTS,
+            )
+            second_obj_masks, cell_second_obj_table, _updated_cytoplasms, *_opt = _result
+            _threshold_output = _opt[0] if _opt else None
+        else:
+            raise ValueError(f"Unknown SECOND_OBJ_METHOD: {SECOND_OBJ_METHOD}")
+
+        _summary = cell_second_obj_table["cell_summary"]
+        print(f"Found secondary objects in {_summary['has_second_obj'].sum()} of {len(_summary)} cells")
+        print(f"Mean objects per cell with objects: {_summary.loc[_summary['has_second_obj'], 'num_second_objs'].mean():.2f}")
+        print(f"Mean secondary object area ratio: {_summary['second_obj_area_ratio'].mean():.4f}")
+
+        print("Example microplots:")
+        create_second_obj_standard_visualization(
+            aligned_image,
+            SECOND_OBJ_CHANNEL_INDEX,
+            SECOND_OBJ_CHANNEL,
+            second_obj_masks,
+            threshold_output=_threshold_output,
+        )
+        plt.show()
+
+        print("Cell and secondary object boundaries:")
+        create_second_obj_boundary_visualization(
+            aligned_image,
+            SECOND_OBJ_CHANNEL_INDEX,
+            cell_masks=cells,
+            second_obj_masks=second_obj_masks,
+            channel_names=CHANNEL_NAMES,
+            channel_cmaps=CHANNEL_CMAPS,
+        )
+        plt.show()
+    else:
+        print("SECOND_OBJ_DETECTION is False, skipping secondary object segmentation")
+    return cell_second_obj_table, second_obj_masks
+
+
+@app.cell
+def _(
+    CHANNEL_NAMES,
+    FOCI_CHANNEL_INDEX,
+    SECOND_OBJ_DETECTION,
+    WILDCARDS,
+    aligned_image,
+    cell_second_obj_table,
+    second_obj_masks,
+):
+    # Extract secondary object features on the test image
+    if SECOND_OBJ_DETECTION:
+        from lib.phenotype.extract_phenotype_second_objs import extract_phenotype_second_objs
+
+        second_obj_phenotype = extract_phenotype_second_objs(
+            aligned_image,
+            second_objs=second_obj_masks,
+            second_obj_cell_mapping_df=cell_second_obj_table["second_obj_cell_mapping"],
+            wildcards=WILDCARDS,
+            foci_channel=FOCI_CHANNEL_INDEX,
+            channel_names=CHANNEL_NAMES,
+        )
+        print(f"Mean secondary object diameter: {second_obj_phenotype['second_obj_diameter'].mean():.2f}")
+        print(f"Mean secondary object area: {second_obj_phenotype['second_obj_area'].mean():.2f}")
+
+        _feature_cols = [
+            col for col in second_obj_phenotype.columns
+            if col not in ["label", "well", "tile", "cell_label"]
+        ]
+        print(f"Number of secondary object features: {len(_feature_cols)}")
+
+        def _strip_channels(feature):
+            for channel in CHANNEL_NAMES:
+                feature = feature.replace(f"_{channel}", "")
+            return feature
+
+        print("Unique secondary object feature types:")
+        sorted(set(_strip_channels(feature) for feature in _feature_cols))
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
     ## Add phenotype process parameters to config file
     """)
     return
@@ -722,23 +1038,50 @@ def _(
     CUSTOM_FEATURE_DEFINITIONS,
     CYTO_INDEX,
     DAPI_INDEX,
+    DECLUMP_METHOD,
+    DECLUMP_MODE,
+    FILL_HOLES,
     FOCI_CHANNEL_INDEX,
     GPU,
     HELPER_INDEX,
+    MAXIMA_REDUCTION_FACTOR,
+    MAX_OBJECTS_PER_CELL,
+    MAX_TOTAL_OBJECTS,
     NUCLEI_CELLPROB_THRESHOLD,
     NUCLEI_DIAMETER,
     NUCLEI_FLOW_THRESHOLD,
     NUCLEI_NMS_THRESHOLD,
     NUCLEI_PROB_THRESHOLD,
+    OPENING_DISK_RADIUS,
+    OVERLAP_THRESHOLD,
+    PROPORTION_THRESHOLD,
     RECONCILE,
     REMOVE_CHANNEL,
     RIDER_INDEXES,
+    SECOND_OBJ_CELLPOSE_MODEL,
+    SECOND_OBJ_CELLPROB_THRESHOLD,
+    SECOND_OBJ_CHANNEL_INDEX,
+    SECOND_OBJ_DETECTION,
+    SECOND_OBJ_DIAMETER,
+    SECOND_OBJ_FLOW_THRESHOLD,
+    SECOND_OBJ_MAX_SIZE,
+    SECOND_OBJ_METHOD,
+    SECOND_OBJ_MIN_SIZE,
+    SECOND_OBJ_NMS_THRESHOLD,
+    SECOND_OBJ_PROB_THRESHOLD,
+    SECOND_OBJ_STARDIST_MODEL,
     SEGMENTATION_METHOD,
     SEGMENT_CELLS,
+    SIZE_FILTER_METHOD,
     SOURCE_INDEX,
     STARDIST_MODEL,
+    SUPPRESS_LOCAL_MAXIMA,
     TARGET_INDEX,
+    THRESHOLD_METHOD,
+    THRESHOLD_SMOOTHING_SCALE,
     UPSAMPLE_FACTOR,
+    USE_MORPHOLOGICAL_OPENING,
+    USE_SHAPE_REFINEMENT,
     WINDOW,
     config,
     convert_tuples_to_lists,
@@ -758,6 +1101,16 @@ def _(
         config['phenotype']['remove_channel'] = REMOVE_CHANNEL
         config['phenotype']['upsample_factor'] = UPSAMPLE_FACTOR
         config['phenotype']['window'] = WINDOW
+    if SECOND_OBJ_DETECTION:
+        config['phenotype'].update({'second_obj_detection': SECOND_OBJ_DETECTION, 'second_obj_channel_index': SECOND_OBJ_CHANNEL_INDEX, 'second_obj_method': SECOND_OBJ_METHOD, 'use_ml_segmentation': SECOND_OBJ_METHOD in ['cellpose', 'stardist'], 'second_obj_min_size': SECOND_OBJ_MIN_SIZE, 'second_obj_max_size': SECOND_OBJ_MAX_SIZE, 'size_filter_method': SIZE_FILTER_METHOD, 'max_objects_per_cell': MAX_OBJECTS_PER_CELL, 'overlap_threshold': OVERLAP_THRESHOLD, 'max_total_objects': MAX_TOTAL_OBJECTS})
+        if SECOND_OBJ_METHOD == 'cellpose':
+            config['phenotype'].update({'second_obj_cellpose_model': SECOND_OBJ_CELLPOSE_MODEL, 'second_obj_diameter': SECOND_OBJ_DIAMETER, 'second_obj_flow_threshold': SECOND_OBJ_FLOW_THRESHOLD, 'second_obj_cellprob_threshold': SECOND_OBJ_CELLPROB_THRESHOLD})
+        elif SECOND_OBJ_METHOD == 'stardist':
+            config['phenotype'].update({'second_obj_stardist_model': SECOND_OBJ_STARDIST_MODEL, 'second_obj_prob_threshold': SECOND_OBJ_PROB_THRESHOLD, 'second_obj_nms_threshold': SECOND_OBJ_NMS_THRESHOLD})
+        elif SECOND_OBJ_METHOD == 'threshold':
+            config['phenotype'].update({'threshold_smoothing_scale': THRESHOLD_SMOOTHING_SCALE, 'threshold_method': THRESHOLD_METHOD, 'use_morphological_opening': USE_MORPHOLOGICAL_OPENING, 'opening_disk_radius': OPENING_DISK_RADIUS, 'fill_holes': FILL_HOLES, 'declump_method': DECLUMP_METHOD, 'declump_mode': DECLUMP_MODE, 'suppress_local_maxima': SUPPRESS_LOCAL_MAXIMA, 'maxima_reduction_factor': MAXIMA_REDUCTION_FACTOR, 'use_shape_refinement': USE_SHAPE_REFINEMENT, 'proportion_threshold': PROPORTION_THRESHOLD})
+    else:
+        config['phenotype']['second_obj_detection'] = False
     if CUSTOM_CHANNEL_OFFSETS:
         config['phenotype']['custom_channel_offsets'] = CUSTOM_CHANNEL_OFFSETS_INDEXED
     if CUSTOM_FEATURE_DEFINITIONS:

@@ -110,6 +110,8 @@ def _(CONFIG_FILE_PATH, Path, pd, yaml):
     print(f'Channel Combos: {CHANNEL_COMBOS}')
     CELL_CLASSES = list(aggregate_combos['cell_class'].unique())
     print(f'Cell classes: {CELL_CLASSES}')
+    if 'compartment_combo' in aggregate_combos.columns:
+        print(f"Compartment combos: {aggregate_combos['compartment_combo'].unique().tolist()}")
     return CHANNEL_COMBOS, ROOT_FP, config
 
 
@@ -120,6 +122,7 @@ def _(mo):
 
     ### Cluster preprocessing
 
+    - `TEST_COMPARTMENT_COMBO`: Compartment combo to load the test aggregated data from, ex `"nucleus"`. Only used when `aggregate.split_by_compartment` is on; leave `None` otherwise.
     - `MIN_CELL_CUTOFFS`: Dictionary with minimum cells for each gene to be used in clusetering analysis. More cells per gene increases confidence, but some dataset types (ex mitotic) may have an inherently low number of cells for a particular perturbation. Ex `{"mitotic": 0, "interphase": 3, "all": 3}`.
     """)
     return
@@ -129,15 +132,21 @@ def _(mo):
 def _(config):
     # === OPERATOR PARAMETERS ===
     MIN_CELL_CUTOFFS = None            # e.g., {"all": 5, "Interphase": 5, "Mitotic": 5}
+    TEST_COMPARTMENT_COMBO = None
     # === END OPERATOR PARAMETERS ===
 
     PERTURBATION_NAME_COL = config["aggregate"]["perturbation_name_col"]
-    return MIN_CELL_CUTOFFS, PERTURBATION_NAME_COL
+    # filename metadata for the compartment-specific aggregated tables
+    COMPARTMENT_METADATA = (
+        {"compartment_combo": TEST_COMPARTMENT_COMBO} if TEST_COMPARTMENT_COMBO else {}
+    )
+    return COMPARTMENT_METADATA, MIN_CELL_CUTOFFS, PERTURBATION_NAME_COL
 
 
 @app.cell
 def _(
     CHANNEL_COMBOS,
+    COMPARTMENT_METADATA,
     MIN_CELL_CUTOFFS,
     PERTURBATION_NAME_COL,
     ROOT_FP,
@@ -152,7 +161,7 @@ def _(
     # happens in a dedicated cell below.
     for cell_class, min_cell_cutoff in MIN_CELL_CUTOFFS.items():
         channel_combo = CHANNEL_COMBOS[0]
-        _aggregated_data_path = ROOT_FP / 'aggregate' / 'tsvs' / get_filename({'cell_class': cell_class, 'channel_combo': channel_combo}, 'aggregated', 'tsv')
+        _aggregated_data_path = ROOT_FP / 'aggregate' / 'tsvs' / get_filename({'cell_class': cell_class, 'channel_combo': channel_combo, **COMPARTMENT_METADATA}, 'aggregated', 'tsv')
         _data = pd.read_csv(_aggregated_data_path, sep='\t')
         print(f'Cell count distribution for: {cell_class}')
         plot_cell_histogram(_data, min_cell_cutoff, PERTURBATION_NAME_COL)
@@ -297,10 +306,18 @@ def _(config):
 
 
 @app.cell
-def _(ROOT_FP, TEST_CELL_CLASS, TEST_CHANNEL_COMBO, get_filename, mo, pd):
+def _(
+    COMPARTMENT_METADATA,
+    ROOT_FP,
+    TEST_CELL_CLASS,
+    TEST_CHANNEL_COMBO,
+    get_filename,
+    mo,
+    pd,
+):
     # Canonical load: aggregated data for the test class/combo pair. Used by
     # every downstream cell that needs the aggregated table.
-    _aggregated_data_path = ROOT_FP / 'aggregate' / 'tsvs' / get_filename({'cell_class': TEST_CELL_CLASS, 'channel_combo': TEST_CHANNEL_COMBO}, 'aggregated', 'tsv')
+    _aggregated_data_path = ROOT_FP / 'aggregate' / 'tsvs' / get_filename({'cell_class': TEST_CELL_CLASS, 'channel_combo': TEST_CHANNEL_COMBO, **COMPARTMENT_METADATA}, 'aggregated', 'tsv')
     aggregated_data = pd.read_csv(_aggregated_data_path, sep='\t')
     mo.ui.table(aggregated_data)
     return (aggregated_data,)
@@ -365,9 +382,10 @@ def _(CLUSTER_COMBO_FP, FINAL_LEIDEN_RESOLUTIONS, Path, config, pd):
     aggregate_wildcard_combos = pd.read_csv(AGGREGATE_COMBO_FP, sep="\t")
 
     # Generate cluster wildcard combos
-    cluster_wildcard_combos = aggregate_wildcard_combos[
-        ["cell_class", "channel_combo"]
-    ].drop_duplicates()
+    combo_cols = ["cell_class", "channel_combo"]
+    if "compartment_combo" in aggregate_wildcard_combos.columns:
+        combo_cols.append("compartment_combo")
+    cluster_wildcard_combos = aggregate_wildcard_combos[combo_cols].drop_duplicates()
     cluster_wildcard_combos["leiden_resolution"] = [FINAL_LEIDEN_RESOLUTIONS] * len(
         cluster_wildcard_combos
     )
