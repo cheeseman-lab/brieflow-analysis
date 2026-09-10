@@ -106,7 +106,7 @@ def _(mo):
     ### Paths to dataframes with sample information
     - `SBS_SAMPLES_DF_FP`/`PHENOTYPE_SAMPLES_DF_FP`: Path to dataframe where SBS/phenotype samples location and metadata will be stored.
     - `SBS_COMBO_DF_FP`/`PHENOTYPE_COMBO_DF_FP`: Path to dataframe where SBS/phenotype sample metadata combinations will be stored.
-    - `SBS_IMAGES_DIR_FP`/`PHENOTYPE_IMAGES_DIR_FP`: Path to directories with SBS/phenotype sample ND2 files. Set to `None` to ignore SBS/phenotype testing in this notebook.
+    - `SBS_IMAGES_DIR_FP`/`PHENOTYPE_IMAGES_DIR_FP`: Path to directories with SBS/phenotype sample image files (ND2, Imaris, or TIFF). Set to `None` to ignore SBS/phenotype testing in this notebook.
 
     ### Pattern configurations for metadata extraction
 
@@ -130,6 +130,7 @@ def _(mo):
 
     - `SBS_DATA_FORMAT`/`PHENOTYPE_DATA_FORMAT`:
       - `"nd2"`: Nikon ND2 files (most common)
+      - `"ims"`: Imaris files (metadata read from the file header)
       - `"tiff"`: TIFF files (requires external metadata)
 
     - `SBS_DATA_ORGANIZATION`/`PHENOTYPE_DATA_ORGANIZATION`:
