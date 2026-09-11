@@ -534,18 +534,27 @@ run_mozzarellm() {
     python3 << 'MOZZARELLM_SCRIPT'
 """Mozzarellm analysis - reads all configuration from config.yml"""
 
+import os
 import sys
 from pathlib import Path
 
-import pandas as pd
 import yaml
 from dotenv import load_dotenv
 
-from mozzarellm import ClusterAnalyzer, reshape_to_clusters
+sys.path.insert(0, "../brieflow/workflow")
+
+try:
+    from lib.cluster.mozzarellm_io import run_mozzarellm
+except ImportError as err:
+    print(f"ERROR: mozzarellm support is not installed ({err})")
+    print('Install it with: python -m pip install -e "../brieflow[mozzarellm]"')
+    sys.exit(1)
 
 load_dotenv()
 
 CONFIG_PATH = Path("config/config.yml")
+SCREEN_PATH = Path("screen.yaml")
+
 with open(CONFIG_PATH) as f:
     config = yaml.safe_load(f)
 
@@ -554,70 +563,100 @@ if "mozzarellm" not in config:
     print("Please run notebook 12 to configure mozzarellm parameters.")
     sys.exit(1)
 
+if not SCREEN_PATH.exists():
+    print(f"ERROR: screen description not found: {SCREEN_PATH}")
+    print("The screen context handed to the model is derived from screen.yaml.")
+    sys.exit(1)
+
+with open(SCREEN_PATH) as f:
+    screen = yaml.safe_load(f)
+
 mzlm_config = config["mozzarellm"]
 
 ROOT_FP = Path(config["all"]["root_fp"])
 CELL_CLASS = mzlm_config["cell_class"]
 CHANNEL_COMBO = mzlm_config["channel_combo"]
+COMPARTMENT_COMBO = mzlm_config.get("compartment_combo")
 RESOLUTION = mzlm_config["leiden_resolution"]
-MODEL = mzlm_config.get("model", "claude-sonnet-4-5-20250929")
-TEMPERATURE = mzlm_config.get("temperature", 0.0)
-SCREEN_CONTEXT = mzlm_config.get("screen_context", "")
-GENE_COL = config["aggregate"]["perturbation_name_col"]
+MODEL = mzlm_config.get("model", "claude-sonnet-5")
+MODE = mzlm_config.get("mode", "cot")
+MCP = mzlm_config.get("mcp", False)
+INCLUDE_FEATURES = mzlm_config.get("include_features", True)
+N_FEATURES = mzlm_config.get("n_features", 5)
+FDR_THRESHOLD = mzlm_config.get("fdr_threshold")
+MAX_TOKENS = mzlm_config.get("max_tokens", 16000)
 
-cluster_path = ROOT_FP / "cluster" / CHANNEL_COMBO / CELL_CLASS / str(RESOLUTION)
-cluster_file = cluster_path / "phate_leiden_clustering.tsv"
-output_dir = cluster_path / "mozzarellm"
+SPLIT_BY_COMPARTMENT = config["aggregate"].get("split_by_compartment", False)
 
-print(f"Mozzarellm Analysis")
+if SPLIT_BY_COMPARTMENT and not COMPARTMENT_COMBO:
+    print("ERROR: aggregate.split_by_compartment is on but mozzarellm.compartment_combo is not set")
+    print("Please rerun notebook 12 with COMPARTMENT_COMBO set.")
+    sys.exit(1)
+
+# mozzarellm picks the provider from the model prefix, so check that provider's key
+if MODEL.lower().startswith(("gpt", "o1", "o3", "o4")):
+    API_KEY_VAR = "OPENAI_API_KEY"
+elif MODEL.lower().startswith("gemini"):
+    API_KEY_VAR = "GOOGLE_API_KEY"
+else:
+    API_KEY_VAR = "ANTHROPIC_API_KEY"
+
+if not os.environ.get(API_KEY_VAR):
+    print(f"ERROR: {API_KEY_VAR} not found (required by model '{MODEL}')")
+    print("Add it to a .env file in the analysis directory.")
+    sys.exit(1)
+
+cluster_base = ROOT_FP / "cluster" / CHANNEL_COMBO
+if SPLIT_BY_COMPARTMENT:
+    cluster_base = cluster_base / COMPARTMENT_COMBO
+cluster_dir = cluster_base / CELL_CLASS / str(RESOLUTION)
+h5ad_path = cluster_base / CELL_CLASS / "h5ad" / "cluster.h5ad"
+
+print("Mozzarellm Analysis")
 print(f"{'=' * 60}")
 print(f"Model: {MODEL}")
+print(f"Mode: {MODE} (mcp={MCP}, include_features={INCLUDE_FEATURES})")
 print(f"Cell class: {CELL_CLASS}")
 print(f"Channel combo: {CHANNEL_COMBO}")
+if SPLIT_BY_COMPARTMENT:
+    print(f"Compartment combo: {COMPARTMENT_COMBO}")
 print(f"Resolution: {RESOLUTION}")
-print(f"Input: {cluster_file}")
-print(f"Output: {output_dir}")
+print(f"Input: {h5ad_path}")
+print(f"Output: {cluster_dir / 'mozzarellm'}")
 print(f"{'=' * 60}")
 print()
 
-if not cluster_file.exists():
-    print(f"ERROR: Clustering file not found: {cluster_file}")
-    print(f"Make sure you have run the cluster module first.")
+if not h5ad_path.exists():
+    print(f"ERROR: Cluster AnnData not found: {h5ad_path}")
+    print("Make sure you have run the cluster module first.")
     sys.exit(1)
 
-print("Loading clustering data...")
-gene_df = pd.read_csv(cluster_file, sep="\t")
-
-if GENE_COL not in gene_df.columns:
-    for alt in ["gene_symbol_0", "gene_symbol", "gene"]:
-        if alt in gene_df.columns:
-            gene_df = gene_df.rename(columns={alt: GENE_COL})
-            break
-
-print(f"Loaded {len(gene_df)} genes across {gene_df['cluster'].nunique()} clusters")
-
-print("Reshaping data to cluster format...")
-cluster_df, gene_annotations = reshape_to_clusters(
-    input_df=gene_df,
-    gene_col=GENE_COL,
-    cluster_col="cluster",
-    uniprot_col="uniprot_function",
-    verbose=True,
-)
-print(f"Reshaped to {len(cluster_df)} clusters")
-
-print("\nRunning LLM analysis...")
-analyzer = ClusterAnalyzer(model=MODEL, temperature=TEMPERATURE, show_progress=True)
-
-results = analyzer.analyze(
-    cluster_df,
-    gene_annotations=gene_annotations,
-    screen_context=SCREEN_CONTEXT,
-    output_dir=output_dir,
+result = run_mozzarellm(
+    h5ad_path,
+    cluster_dir,
+    screen,
+    config,
+    RESOLUTION,
+    MODEL,
+    mode=MODE,
+    mcp=MCP,
+    include_features=INCLUDE_FEATURES,
+    n_features=N_FEATURES,
+    fdr_threshold=FDR_THRESHOLD,
+    max_tokens=MAX_TOKENS,
 )
 
-print(f"\nDone!")
-print(f"Results saved to: {output_dir}")
+errors = result.get("errors") or {}
+
+print()
+print(f"Run directory: {result['run_dir']}")
+print(f"Total cost (USD): {result.get('total_cost_usd')}")
+if errors:
+    print(f"Clusters with errors: {len(errors)}")
+    for cluster_id, message in errors.items():
+        print(f"  cluster {cluster_id}: {message}")
+else:
+    print("No cluster errors")
 
 MOZZARELLM_SCRIPT
 }
@@ -632,7 +671,7 @@ run_viz() {
     export BRIEFLOW_OUTPUT_PATH="brieflow_output/"
     export CONFIG_PATH="config/config.yml"
     export SCREEN_PATH="screen.yaml"
-    exec streamlit run ../brieflow/visualization/Experimental_Overview.py --server.address=0.0.0.0 "$@"
+    exec streamlit run ../brieflow/visualization/Cluster_Analysis.py --server.address=0.0.0.0 "$@"
 }
 
 # ---------------------------------------------------------------------------
