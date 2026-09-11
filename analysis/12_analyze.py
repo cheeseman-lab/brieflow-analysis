@@ -961,7 +961,6 @@ def _(
         mozzarellm_cluster_table = cluster_table_from_h5ad(
             cluster_h5ad,
             LEIDEN_RESOLUTION,
-            control_key=CONTROL_KEY,
             n_features=MOZZARELLM_N_FEATURES,
             fdr_threshold=MOZZARELLM_FDR_THRESHOLD,
         )
