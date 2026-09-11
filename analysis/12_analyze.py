@@ -58,6 +58,7 @@ def _():
     from lib.shared.file_utils import get_filename, load_parquet_subset
     from lib.shared.metrics import get_all_stats
     from lib.shared.configuration_utils import CONFIG_FILE_HEADER, convert_tuples_to_lists
+    from lib.shared.compartment_utils import add_compartment_path
     from lib.aggregate.montage_utils import create_cell_montage, add_filenames
     from lib.cluster.cluster_analysis import (
         differential_analysis,
@@ -76,6 +77,7 @@ def _():
     return (
         CONFIG_FILE_HEADER,
         Path,
+        add_compartment_path,
         add_filenames,
         cluster_heatmap,
         convert_tuples_to_lists,
@@ -107,11 +109,20 @@ def _(CONFIG_FILE_PATH, Path, yaml):
     PERTURBATION_NAME_COL = config["aggregate"]["perturbation_name_col"]
     CONTROL_KEY = config["aggregate"]["control_key"]
     IMAGE_FORMAT = config["all"].get("image_format", "tiff")
+    SPLIT_BY_COMPARTMENT = config["aggregate"].get("split_by_compartment", False)
     print(f"Root path: {ROOT_FP}")
     print(f"Perturbation name column: {PERTURBATION_NAME_COL}")
     print(f"Control key: {CONTROL_KEY}")
     print(f"Image format: {IMAGE_FORMAT}")
-    return CONTROL_KEY, IMAGE_FORMAT, PERTURBATION_NAME_COL, ROOT_FP, config
+    print(f"Split by compartment: {SPLIT_BY_COMPARTMENT}")
+    return (
+        CONTROL_KEY,
+        IMAGE_FORMAT,
+        PERTURBATION_NAME_COL,
+        ROOT_FP,
+        SPLIT_BY_COMPARTMENT,
+        config,
+    )
 
 
 @app.cell(hide_code=True)
@@ -247,6 +258,7 @@ def _(mo):
     - `CHANNEL_COMBO`: Channel combination to analyze, from the channel combos listed above.
     - `CELL_CLASS`: Cell class to analyze, from the cell classes listed above.
     - `LEIDEN_RESOLUTION`: Leiden resolution to analyze, ideally the optimal resolution reported above.
+    - `COMPARTMENT_COMBO`: Compartment combo to analyze, ex `"nucleus"`. Only used when `aggregate.split_by_compartment` is on; leave `None` otherwise.
     """)
     return
 
@@ -257,41 +269,64 @@ def _():
     CHANNEL_COMBO = None
     CELL_CLASS = None
     LEIDEN_RESOLUTION = None
+    COMPARTMENT_COMBO = None
     # === END OPERATOR PARAMETERS ===
-    return CELL_CLASS, CHANNEL_COMBO, LEIDEN_RESOLUTION
+    return CELL_CLASS, CHANNEL_COMBO, COMPARTMENT_COMBO, LEIDEN_RESOLUTION
 
 
 @app.cell
 def _(
     CELL_CLASS,
     CHANNEL_COMBO,
+    COMPARTMENT_COMBO,
     LEIDEN_RESOLUTION,
     ROOT_FP,
+    SPLIT_BY_COMPARTMENT,
+    add_compartment_path,
     get_filename,
 ):
-    _selection_set = None not in (CHANNEL_COMBO, CELL_CLASS, LEIDEN_RESOLUTION)
+    _selection_set = None not in (CHANNEL_COMBO, CELL_CLASS, LEIDEN_RESOLUTION) and (
+        COMPARTMENT_COMBO is not None or not SPLIT_BY_COMPARTMENT
+    )
 
     if _selection_set:
+        # compartment segment/metadata only when the aggregate step split by compartment
+        _compartment_metadata = (
+            {"compartment_combo": COMPARTMENT_COMBO} if SPLIT_BY_COMPARTMENT else {}
+        )
         aggregate_file = (
             ROOT_FP
             / "aggregate"
             / "tsvs"
             / get_filename(
-                {"cell_class": CELL_CLASS, "channel_combo": CHANNEL_COMBO},
+                {
+                    "cell_class": CELL_CLASS,
+                    "channel_combo": CHANNEL_COMBO,
+                    **_compartment_metadata,
+                },
                 "features_genes",
                 "tsv",
             )
         )
-        cluster_path = ROOT_FP / "cluster" / CHANNEL_COMBO / CELL_CLASS / str(LEIDEN_RESOLUTION)
+        _cluster_base = add_compartment_path(
+            ROOT_FP / "cluster" / CHANNEL_COMBO,
+            COMPARTMENT_COMBO,
+            SPLIT_BY_COMPARTMENT,
+        )
+        cluster_path = _cluster_base / CELL_CLASS / str(LEIDEN_RESOLUTION)
+        cluster_h5ad = _cluster_base / CELL_CLASS / "h5ad" / get_filename({}, "cluster", "h5ad")
         print(f"Aggregate file: {aggregate_file}")
         print(f"  found: {aggregate_file.exists()}")
         print(f"Cluster path: {cluster_path}")
         print(f"  found: {cluster_path.exists()}")
+        print(f"Cluster h5ad: {cluster_h5ad}")
+        print(f"  found: {cluster_h5ad.exists()}")
     else:
         aggregate_file = None
         cluster_path = None
+        cluster_h5ad = None
         print("Set CHANNEL_COMBO, CELL_CLASS and LEIDEN_RESOLUTION to continue")
-    return aggregate_file, cluster_path
+    return aggregate_file, cluster_h5ad, cluster_path
 
 
 @app.cell(hide_code=True)
@@ -763,17 +798,17 @@ def _(mo):
     mo.md(r"""
     ## Mozzarellm: LLM-based gene cluster analysis
 
-    [Mozzarellm](https://github.com/cheeseman-lab/mozzarellm) uses a large language model to annotate gene clusters with candidate pathways and to flag genes with novel or uncharacterized roles.
+    [Mozzarellm](https://github.com/cheeseman-lab/mozzarellm) reads the cluster AnnData written by the cluster module, builds one evidence bundle per cluster (functional annotations for every gene, plus that gene's strongest phenotypic features), and asks a large language model to name the pathway behind each cluster and to categorize every gene as established, novel-role or uncharacterized.
 
     ### Prerequisites
 
-    Install mozzarellm in your Brieflow environment:
+    Install the mozzarellm extra in your Brieflow environment:
 
     ```bash
-    python -m pip install git+https://github.com/cheeseman-lab/mozzarellm.git
+    python -m pip install -e "../brieflow[mozzarellm]"
     ```
 
-    Set up API keys in a `.env` file in the analysis directory:
+    Set up the API key for your model's provider in a `.env` file in the analysis directory:
 
     ```bash
     ANTHROPIC_API_KEY=your_key_here
@@ -782,9 +817,9 @@ def _(mo):
     ### Workflow
 
     1. Configure the parameters below and write them to `config.yml` with the last cell of this notebook.
-    2. Run `bash flow.sh mozzarellm`, which reads the `mozzarellm` config section and writes its results to `{cluster_path}/mozzarellm/`.
+    2. Run `bash flow.sh mozzarellm`, which reads the `mozzarellm` config section and writes each run to `{cluster_path}/mozzarellm/run_<timestamp>/`.
 
-    The clustering result analyzed is the one selected above: `CHANNEL_COMBO` / `CELL_CLASS` / `LEIDEN_RESOLUTION`.
+    The clustering analyzed is the one selected above: `CHANNEL_COMBO` / `CELL_CLASS` / `LEIDEN_RESOLUTION` (and `COMPARTMENT_COMBO` when splitting). The screen description handed to the model is derived from `screen.yaml` rather than written by hand, so keep that file up to date.
     """)
     return
 
@@ -796,9 +831,13 @@ def _(mo):
 
     ### Mozzarellm configuration
 
-    - `MOZZARELLM_MODEL`: LLM model identifier passed to mozzarellm, ex `"claude-sonnet-4-5-20250929"`, `"gpt-4o"` or `"gemini-2.0-flash"`. The API key for the corresponding provider must be present in `.env`.
-    - `MOZZARELLM_TEMPERATURE`: Sampling temperature for the model. `0.0` gives the most reproducible annotations.
-    - `SCREEN_CONTEXT`: Free-text description of the screen handed to the model as context: cell line, perturbation modality, imaging panel and what a cluster means in this screen. An empty string sends no context.
+    - `MOZZARELLM_MODEL`: LLM model identifier passed to mozzarellm, ex `"claude-sonnet-5"`, `"gpt-5"` or `"gemini-2.5-pro"`. The API key for the corresponding provider must be present in `.env`.
+    - `MOZZARELLM_MODE`: Prompting mode. `"cot"` reasons through the cluster in one call, `"standard"` is a single flat prompt, `"stepwise"` spends one API call per reasoning step.
+    - `MOZZARELLM_MCP`: Give the model PubMed search tools so novel-role and uncharacterized calls are checked against retrieved literature. Substantially more expensive and slower (several extra API turns per cluster), and not combinable with phenotypic features.
+    - `MOZZARELLM_INCLUDE_FEATURES`: Put each gene's phenotypic features into the bundle so the pathway call has to be consistent with the observed morphology. Supported for `"cot"` mode without MCP.
+    - `MOZZARELLM_N_FEATURES`: Number of up and down features kept per gene when building the cluster table.
+    - `MOZZARELLM_FDR_THRESHOLD`: FDR cutoff a feature must pass to be listed for a gene. `None` keeps the strongest features regardless of significance.
+    - `MOZZARELLM_MAX_TOKENS`: Maximum tokens per model response. Raise it if long reasoning traces are being truncated.
     """)
     return
 
@@ -806,27 +845,137 @@ def _(mo):
 @app.cell
 def _():
     # === OPERATOR PARAMETERS ===
-    MOZZARELLM_MODEL = "claude-sonnet-4-5-20250929"
-    MOZZARELLM_TEMPERATURE = 0.0
-    SCREEN_CONTEXT = ""
+    MOZZARELLM_MODEL = "claude-sonnet-5"
+    MOZZARELLM_MODE = "cot"
+    MOZZARELLM_MCP = False
+    MOZZARELLM_INCLUDE_FEATURES = True
+    MOZZARELLM_N_FEATURES = 5
+    MOZZARELLM_FDR_THRESHOLD = None
+    MOZZARELLM_MAX_TOKENS = 16000
     # === END OPERATOR PARAMETERS ===
-    return MOZZARELLM_MODEL, MOZZARELLM_TEMPERATURE, SCREEN_CONTEXT
+    return (
+        MOZZARELLM_FDR_THRESHOLD,
+        MOZZARELLM_INCLUDE_FEATURES,
+        MOZZARELLM_MAX_TOKENS,
+        MOZZARELLM_MCP,
+        MOZZARELLM_MODE,
+        MOZZARELLM_MODEL,
+        MOZZARELLM_N_FEATURES,
+    )
 
 
 @app.cell
-def _(cluster_path, pd):
-    # verify the clustering file mozzarellm will read
-    if cluster_path is None:
-        print("Set CHANNEL_COMBO, CELL_CLASS and LEIDEN_RESOLUTION to select a clustering result")
-    else:
-        _cluster_file = cluster_path / "phate_leiden_clustering.tsv"
-        print(f"Mozzarellm will analyze: {_cluster_file}")
-        if _cluster_file.exists():
-            _preview = pd.read_csv(_cluster_file, sep="\t")
-            print(f"File exists: {len(_preview)} genes, {_preview['cluster'].nunique()} clusters")
-        else:
-            print("File not found - make sure clustering has been run")
+def _():
+    # the mozzarellm adapter only imports if the brieflow mozzarellm extra is installed
+    try:
+        from lib.cluster.mozzarellm_io import (
+            cluster_table_from_h5ad,
+            screen_context_from_screen,
+        )
+
+        mozzarellm_import_error = None
+    except ImportError as _err:
+        cluster_table_from_h5ad = None
+        screen_context_from_screen = None
+        mozzarellm_import_error = _err
+        print(f"mozzarellm support not available: {_err}")
+        print('Install it with: python -m pip install -e "../brieflow[mozzarellm]"')
+    return (
+        cluster_table_from_h5ad,
+        mozzarellm_import_error,
+        screen_context_from_screen,
+    )
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ### Derived screen context
+
+    The description of the screen handed to the model is built from `screen.yaml` and `config.yml`: organism and cell line, perturbation library, imaging readout, clustering parameters and controls. Review it below and fix `screen.yaml` if anything is wrong or missing, since this is what the model reasons from.
+    """)
     return
+
+
+@app.cell
+def _(
+    LEIDEN_RESOLUTION,
+    Path,
+    config,
+    mozzarellm_import_error,
+    screen_context_from_screen,
+    yaml,
+):
+    _screen_file = Path("screen.yaml")
+
+    if mozzarellm_import_error is not None:
+        screen_context = None
+        print("mozzarellm support not available - see the cell above")
+    elif not _screen_file.exists():
+        screen_context = None
+        print(f"screen.yaml not found: {_screen_file.resolve()}")
+    elif LEIDEN_RESOLUTION is None:
+        screen_context = None
+        print("Set LEIDEN_RESOLUTION to build the screen context")
+    else:
+        with open(_screen_file, "r") as _screen_fh:
+            screen = yaml.safe_load(_screen_fh)
+        screen_context = screen_context_from_screen(screen, config, LEIDEN_RESOLUTION)
+        print(yaml.dump(screen_context, default_flow_style=False, sort_keys=False))
+    return (screen_context,)
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ### Cluster table preview
+
+    The table below is exactly what mozzarellm receives: one row per gene, its cluster, its strongest up and down features, and its phenotypic strength. No API call is made here.
+    """)
+    return
+
+
+@app.cell
+def _(
+    CONTROL_KEY,
+    LEIDEN_RESOLUTION,
+    MOZZARELLM_FDR_THRESHOLD,
+    MOZZARELLM_N_FEATURES,
+    cluster_h5ad,
+    cluster_table_from_h5ad,
+    mo,
+    mozzarellm_import_error,
+    pd,
+):
+    if mozzarellm_import_error is not None:
+        mozzarellm_cluster_table = None
+        print("mozzarellm support not available - see the cell above")
+    elif cluster_h5ad is None:
+        mozzarellm_cluster_table = None
+        print("Set the cluster selection above to preview the cluster table")
+    elif not cluster_h5ad.exists():
+        mozzarellm_cluster_table = None
+        print(f"Cluster h5ad not found: {cluster_h5ad}")
+        print("Run the cluster module first")
+    else:
+        mozzarellm_cluster_table = cluster_table_from_h5ad(
+            cluster_h5ad,
+            LEIDEN_RESOLUTION,
+            control_key=CONTROL_KEY,
+            n_features=MOZZARELLM_N_FEATURES,
+            fdr_threshold=MOZZARELLM_FDR_THRESHOLD,
+        )
+        print(
+            f"Cluster table: {len(mozzarellm_cluster_table)} genes, "
+            f"{mozzarellm_cluster_table['cluster'].nunique()} clusters"
+        )
+
+    mo.ui.table(
+        mozzarellm_cluster_table.head(20)
+        if mozzarellm_cluster_table is not None
+        else pd.DataFrame()
+    )
+    return (mozzarellm_cluster_table,)
 
 
 @app.cell(hide_code=True)
@@ -841,12 +990,18 @@ def _(mo):
 def _(
     CELL_CLASS,
     CHANNEL_COMBO,
+    COMPARTMENT_COMBO,
     CONFIG_FILE_HEADER,
     CONFIG_FILE_PATH,
     LEIDEN_RESOLUTION,
+    MOZZARELLM_FDR_THRESHOLD,
+    MOZZARELLM_INCLUDE_FEATURES,
+    MOZZARELLM_MAX_TOKENS,
+    MOZZARELLM_MCP,
+    MOZZARELLM_MODE,
     MOZZARELLM_MODEL,
-    MOZZARELLM_TEMPERATURE,
-    SCREEN_CONTEXT,
+    MOZZARELLM_N_FEATURES,
+    SPLIT_BY_COMPARTMENT,
     config,
     convert_tuples_to_lists,
     yaml,
@@ -857,9 +1012,15 @@ def _(
         "channel_combo": CHANNEL_COMBO,
         "leiden_resolution": LEIDEN_RESOLUTION,
         "model": MOZZARELLM_MODEL,
-        "temperature": MOZZARELLM_TEMPERATURE,
-        "screen_context": SCREEN_CONTEXT.strip(),
+        "mode": MOZZARELLM_MODE,
+        "mcp": MOZZARELLM_MCP,
+        "include_features": MOZZARELLM_INCLUDE_FEATURES,
+        "n_features": MOZZARELLM_N_FEATURES,
+        "fdr_threshold": MOZZARELLM_FDR_THRESHOLD,
+        "max_tokens": MOZZARELLM_MAX_TOKENS,
     }
+    if SPLIT_BY_COMPARTMENT:
+        config["mozzarellm"]["compartment_combo"] = COMPARTMENT_COMBO
     safe_config = convert_tuples_to_lists(config)
     with open(CONFIG_FILE_PATH, "w") as _config_file:
         _config_file.write(CONFIG_FILE_HEADER)
