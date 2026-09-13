@@ -833,11 +833,12 @@ def _(mo):
 
     - `MOZZARELLM_MODEL`: LLM model identifier passed to mozzarellm, ex `"claude-sonnet-5"`, `"gpt-5"` or `"gemini-2.5-pro"`. The API key for the corresponding provider must be present in `.env`.
     - `MOZZARELLM_MODE`: Prompting mode. `"cot"` reasons through the cluster in one call, `"standard"` is a single flat prompt, `"stepwise"` spends one API call per reasoning step.
-    - `MOZZARELLM_MCP`: Give the model PubMed search tools so novel-role and uncharacterized calls are checked against retrieved literature. Substantially more expensive and slower (several extra API turns per cluster), and not combinable with phenotypic features.
-    - `MOZZARELLM_INCLUDE_FEATURES`: Put each gene's phenotypic features into the bundle so the pathway call has to be consistent with the observed morphology. Supported for `"cot"` mode without MCP.
+    - `MOZZARELLM_MCP`: Give the model PubMed search tools so genes left unannotated are filled in from retrieved literature. On by default, with `"cot"`, as mozzarellm's benchmark-selected configuration; it costs several extra API turns per cluster.
+    - `MOZZARELLM_INCLUDE_FEATURES`: Put each gene's phenotypic features into the bundle so the pathway call has to be consistent with the observed morphology. `"auto"` lets mozzarellm include them whenever the bundles carry them; `True` requires them and `False` strips them.
+    - `MOZZARELLM_INCLUDE_STRENGTH`: Put each gene's perturbation strength rank into the bundle so the model can weigh how strongly a gene moves the phenotype. Same `"auto"` / `True` / `False` contract as the features.
     - `MOZZARELLM_N_FEATURES`: Number of up and down features kept per gene when building the cluster table.
     - `MOZZARELLM_FDR_THRESHOLD`: FDR cutoff a feature must pass to be listed for a gene. `None` keeps the strongest features regardless of significance.
-    - `MOZZARELLM_MAX_TOKENS`: Maximum tokens per model response. Raise it if long reasoning traces are being truncated.
+    - `MOZZARELLM_MAX_TOKENS`: Maximum tokens per model response. 64000 is the ceiling a feature-augmented run needs; lower it only to cap spend.
     """)
     return
 
@@ -847,15 +848,17 @@ def _():
     # === OPERATOR PARAMETERS ===
     MOZZARELLM_MODEL = "claude-sonnet-5"
     MOZZARELLM_MODE = "cot"
-    MOZZARELLM_MCP = False
-    MOZZARELLM_INCLUDE_FEATURES = True
+    MOZZARELLM_MCP = True
+    MOZZARELLM_INCLUDE_FEATURES = "auto"
+    MOZZARELLM_INCLUDE_STRENGTH = "auto"
     MOZZARELLM_N_FEATURES = 5
     MOZZARELLM_FDR_THRESHOLD = None
-    MOZZARELLM_MAX_TOKENS = 16000
+    MOZZARELLM_MAX_TOKENS = 64000
     # === END OPERATOR PARAMETERS ===
     return (
         MOZZARELLM_FDR_THRESHOLD,
         MOZZARELLM_INCLUDE_FEATURES,
+        MOZZARELLM_INCLUDE_STRENGTH,
         MOZZARELLM_MAX_TOKENS,
         MOZZARELLM_MCP,
         MOZZARELLM_MODE,
@@ -930,7 +933,7 @@ def _(mo):
     mo.md(r"""
     ### Cluster table preview
 
-    The table below is exactly what mozzarellm receives: one row per gene, its cluster, its strongest up and down features, and its phenotypic strength. No API call is made here.
+    The table below is exactly what mozzarellm receives: one row per gene, its cluster, its strongest up and down features, and its perturbation strength (`perturbation_auc`). No API call is made here.
     """)
     return
 
@@ -995,6 +998,7 @@ def _(
     LEIDEN_RESOLUTION,
     MOZZARELLM_FDR_THRESHOLD,
     MOZZARELLM_INCLUDE_FEATURES,
+    MOZZARELLM_INCLUDE_STRENGTH,
     MOZZARELLM_MAX_TOKENS,
     MOZZARELLM_MCP,
     MOZZARELLM_MODE,
@@ -1014,6 +1018,7 @@ def _(
         "mode": MOZZARELLM_MODE,
         "mcp": MOZZARELLM_MCP,
         "include_features": MOZZARELLM_INCLUDE_FEATURES,
+        "include_strength": MOZZARELLM_INCLUDE_STRENGTH,
         "n_features": MOZZARELLM_N_FEATURES,
         "fdr_threshold": MOZZARELLM_FDR_THRESHOLD,
         "max_tokens": MOZZARELLM_MAX_TOKENS,

@@ -580,11 +580,12 @@ COMPARTMENT_COMBO = mzlm_config.get("compartment_combo")
 RESOLUTION = mzlm_config["leiden_resolution"]
 MODEL = mzlm_config.get("model", "claude-sonnet-5")
 MODE = mzlm_config.get("mode", "cot")
-MCP = mzlm_config.get("mcp", False)
-INCLUDE_FEATURES = mzlm_config.get("include_features", True)
+MCP = mzlm_config.get("mcp", True)
+INCLUDE_FEATURES = mzlm_config.get("include_features", "auto")
+INCLUDE_STRENGTH = mzlm_config.get("include_strength", "auto")
 N_FEATURES = mzlm_config.get("n_features", 5)
 FDR_THRESHOLD = mzlm_config.get("fdr_threshold")
-MAX_TOKENS = mzlm_config.get("max_tokens", 16000)
+MAX_TOKENS = mzlm_config.get("max_tokens", 64000)
 
 SPLIT_BY_COMPARTMENT = config["aggregate"].get("split_by_compartment", False)
 
@@ -615,7 +616,10 @@ h5ad_path = cluster_base / CELL_CLASS / "h5ad" / "cluster.h5ad"
 print("Mozzarellm Analysis")
 print(f"{'=' * 60}")
 print(f"Model: {MODEL}")
-print(f"Mode: {MODE} (mcp={MCP}, include_features={INCLUDE_FEATURES})")
+print(
+    f"Mode: {MODE} (mcp={MCP}, include_features={INCLUDE_FEATURES}, "
+    f"include_strength={INCLUDE_STRENGTH})"
+)
 print(f"Cell class: {CELL_CLASS}")
 print(f"Channel combo: {CHANNEL_COMBO}")
 if SPLIT_BY_COMPARTMENT:
@@ -641,6 +645,7 @@ result = run_mozzarellm(
     mode=MODE,
     mcp=MCP,
     include_features=INCLUDE_FEATURES,
+    include_strength=INCLUDE_STRENGTH,
     n_features=N_FEATURES,
     fdr_threshold=FDR_THRESHOLD,
     max_tokens=MAX_TOKENS,
