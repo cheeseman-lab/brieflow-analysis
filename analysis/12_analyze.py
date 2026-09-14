@@ -46,6 +46,9 @@ def _():
 @app.cell
 def _():
     from pathlib import Path
+    import json
+    import os
+    import re
     import warnings
 
     warnings.filterwarnings("ignore", category=UserWarning)
@@ -86,12 +89,15 @@ def _():
         find_optimal_resolution,
         get_all_stats,
         get_filename,
+        json,
         load_parquet_subset,
         merge_bootstrap_with_genes,
+        os,
         pd,
         plot_phate_leiden_clusters,
         plot_resolution_comparison,
         plt,
+        re,
         rescale_intensity,
         two_feature_plot,
         volcano_plot,
@@ -169,7 +175,7 @@ def _(config, mo, pd):
     print(f"Channel Combos: {CHANNEL_COMBOS}")
     print(f"Cell classes: {CELL_CLASSES}")
     mo.ui.table(cluster_combos)
-    return CELL_CLASSES, CHANNEL_COMBOS
+    return CELL_CLASSES, CHANNEL_COMBOS, cluster_combos
 
 
 @app.cell(hide_code=True)
@@ -816,10 +822,11 @@ def _(mo):
 
     ### Workflow
 
-    1. Configure the parameters below and write them to `config.yml` with the last cell of this notebook.
-    2. Run `bash flow.sh mozzarellm`, which reads the `mozzarellm` config section and writes each run to `{cluster_path}/mozzarellm/run_<timestamp>/`.
+    1. Configure the parameters below. The cells that follow write one screen context per selected clustering into `config/mozzarellm_context/`, the combo table `config/mozzarellm_combo.tsv`, and the `mozzarellm` config section.
+    2. Read the dry run at the end of this notebook, which prices the whole selection before any model is called.
+    3. Run `bash flow.sh mozzarellm --backend slurm`, which submits one low-memory job per row of the combo table and writes each run to `{cluster_path}/mozzarellm/{MOZZARELLM_RUN_NAME}/`.
 
-    The clustering analyzed is the one selected above: `CHANNEL_COMBO` / `CELL_CLASS` / `LEIDEN_RESOLUTION` (and `COMPARTMENT_COMBO` when splitting). The screen description handed to the model is derived from `screen.yaml` rather than written by hand, so keep that file up to date.
+    Which clusterings get annotated is the selection configured below, not the single `CHANNEL_COMBO` / `CELL_CLASS` / `LEIDEN_RESOLUTION` picked above for the plots. The screen description handed to the model is derived from `screen.yaml` rather than written by hand, so keep that file up to date.
     """)
     return
 
@@ -839,6 +846,8 @@ def _(mo):
     - `MOZZARELLM_N_FEATURES`: Number of up and down features kept per gene when building the cluster table.
     - `MOZZARELLM_FDR_THRESHOLD`: FDR cutoff a feature must pass to be listed for a gene. `None` keeps the strongest features regardless of significance.
     - `MOZZARELLM_MAX_TOKENS`: Maximum tokens per model response. 64000 is the ceiling a feature-augmented run needs; lower it only to cap spend.
+    - `MOZZARELLM_RUN_NAME`: Name of the run directory each annotation writes into, under `{cluster_path}/mozzarellm/`. Keep it stable to resume an interrupted run; change it to annotate the same clusterings again beside the answers already there.
+    - `MOZZARELLM_MAX_WORKERS`: Clusters one job answers concurrently, and the cores that job asks slurm for.
     """)
     return
 
@@ -854,16 +863,50 @@ def _():
     MOZZARELLM_N_FEATURES = 5
     MOZZARELLM_FDR_THRESHOLD = None
     MOZZARELLM_MAX_TOKENS = 64000
+    MOZZARELLM_RUN_NAME = "run1"
+    MOZZARELLM_MAX_WORKERS = 8
     # === END OPERATOR PARAMETERS ===
     return (
         MOZZARELLM_FDR_THRESHOLD,
         MOZZARELLM_INCLUDE_FEATURES,
         MOZZARELLM_INCLUDE_STRENGTH,
         MOZZARELLM_MAX_TOKENS,
+        MOZZARELLM_MAX_WORKERS,
         MOZZARELLM_MCP,
         MOZZARELLM_MODE,
         MOZZARELLM_MODEL,
         MOZZARELLM_N_FEATURES,
+        MOZZARELLM_RUN_NAME,
+    )
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## <font color='red'>SET PARAMETERS</font>
+
+    ### Mozzarellm clustering selection
+
+    Which clusterings are annotated, and at what resolution. One combo table row, and so one job, is written per selected channel combo and cell class.
+
+    - `MOZZARELLM_CHANNEL_COMBOS`: Channel combos to annotate. `"auto"` applies the lab's policy: every full panel, every grouped panel, every single marker and the DNA-only baseline, dropping the DNA-plus-one-marker combos, whose clusters a grouped panel already covers. Give a list of combo strings to choose them by hand.
+    - `MOZZARELLM_RESOLUTION`: Leiden resolution annotated for every selected combo. `None` takes each combo's optimal resolution from the search above. Set it when the screen is annotated at one resolution throughout, which may be coarser than the resolution its clustering was benchmarked at.
+    - `MOZZARELLM_RESOLUTION_OVERRIDES`: Per-combo exceptions to `MOZZARELLM_RESOLUTION`, ex `{"DAPI_WGA": 6}`.
+    """)
+    return
+
+
+@app.cell
+def _():
+    # === OPERATOR PARAMETERS ===
+    MOZZARELLM_CHANNEL_COMBOS = "auto"
+    MOZZARELLM_RESOLUTION = None
+    MOZZARELLM_RESOLUTION_OVERRIDES = {}
+    # === END OPERATOR PARAMETERS ===
+    return (
+        MOZZARELLM_CHANNEL_COMBOS,
+        MOZZARELLM_RESOLUTION,
+        MOZZARELLM_RESOLUTION_OVERRIDES,
     )
 
 
@@ -871,23 +914,60 @@ def _():
 def _():
     # the mozzarellm adapter only imports if the brieflow mozzarellm extra is installed
     try:
+        from dotenv import load_dotenv
+
         from lib.cluster.mozzarellm_io import (
+            PROVIDER_KEY_ENV,
             cluster_table_from_h5ad,
+            organism_id_from_context,
+            run_mozzarellm,
+            screen_context_for_combo,
             screen_context_from_screen,
         )
 
+        load_dotenv()
         mozzarellm_import_error = None
     except ImportError as _err:
+        PROVIDER_KEY_ENV = {}
         cluster_table_from_h5ad = None
+        organism_id_from_context = None
+        run_mozzarellm = None
+        screen_context_for_combo = None
         screen_context_from_screen = None
         mozzarellm_import_error = _err
         print(f"mozzarellm support not available: {_err}")
         print('Install it with: python -m pip install -e "../brieflow[mozzarellm]"')
     return (
+        PROVIDER_KEY_ENV,
         cluster_table_from_h5ad,
         mozzarellm_import_error,
+        organism_id_from_context,
+        run_mozzarellm,
+        screen_context_for_combo,
         screen_context_from_screen,
     )
+
+
+@app.cell
+def _(Path, re, yaml):
+    _screen_file = Path("screen.yaml")
+
+    if _screen_file.exists():
+        with open(_screen_file, "r") as _screen_fh:
+            screen = yaml.safe_load(_screen_fh)
+    else:
+        screen = None
+        print(f"screen.yaml not found: {_screen_file.resolve()}")
+
+    # every run's output files are prefixed with this label, so keep it file-safe
+    _screen_title = ((screen or {}).get("experiment") or {}).get("screen_title")
+    MOZZARELLM_SCREEN_NAME = (
+        re.sub(r"[^0-9A-Za-z_.-]+", "_", str(_screen_title)).strip("_")
+        if _screen_title
+        else ""
+    ) or "screen"
+    print(f"Screen name: {MOZZARELLM_SCREEN_NAME}")
+    return MOZZARELLM_SCREEN_NAME, screen
 
 
 @app.cell(hide_code=True)
@@ -903,26 +983,22 @@ def _(mo):
 @app.cell
 def _(
     LEIDEN_RESOLUTION,
-    Path,
     config,
     mozzarellm_import_error,
+    screen,
     screen_context_from_screen,
     yaml,
 ):
-    _screen_file = Path("screen.yaml")
-
     if mozzarellm_import_error is not None:
         screen_context = None
         print("mozzarellm support not available - see the cell above")
-    elif not _screen_file.exists():
+    elif screen is None:
         screen_context = None
-        print(f"screen.yaml not found: {_screen_file.resolve()}")
+        print("screen.yaml not found - see the cell above")
     elif LEIDEN_RESOLUTION is None:
         screen_context = None
         print("Set LEIDEN_RESOLUTION to build the screen context")
     else:
-        with open(_screen_file, "r") as _screen_fh:
-            screen = yaml.safe_load(_screen_fh)
         screen_context = screen_context_from_screen(screen, config, LEIDEN_RESOLUTION)
         print(yaml.dump(screen_context, default_flow_style=False, sort_keys=False))
     return (screen_context,)
@@ -983,6 +1059,306 @@ def _(
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
+    ### Selected clusterings
+
+    The clusterings the selection above keeps, one row per job. Every clustering the cluster phase produced is considered, so a combo left out is reported rather than silently absent.
+    """)
+    return
+
+
+@app.cell
+def _(
+    LEIDEN_RESOLUTION,
+    MOZZARELLM_CHANNEL_COMBOS,
+    MOZZARELLM_RESOLUTION,
+    MOZZARELLM_RESOLUTION_OVERRIDES,
+    SPLIT_BY_COMPARTMENT,
+    cluster_combos,
+    config,
+    mo,
+    optimal_resolutions,
+    pd,
+    re,
+    screen,
+):
+    _channel_names = config.get("phenotype", {}).get("channel_names") or []
+    _dna_channel = (
+        ((screen or {}).get("phenotype") or {}).get("background_channel_nucleus")
+        or "DAPI"
+    )
+
+    def _combo_channels(combo):
+        # a channel name can itself hold an underscore, so match whole names rather than split
+        named = [
+            channel
+            for channel in _channel_names
+            if re.search(rf"(?:^|_){re.escape(channel)}(?:_|$)", combo)
+        ]
+
+        return named or combo.split("_")
+
+    def _panel_of(combo):
+        channels = _combo_channels(combo)
+        markers = [channel for channel in channels if channel != _dna_channel]
+        if not markers:
+            return "DNA-only baseline"
+        if len(markers) == 1:
+            return "single marker" if len(markers) == len(channels) else "DNA plus one marker"
+
+        return "full panel" if len(channels) == len(_channel_names) else "grouped panel"
+
+    _combo_cols = ["cell_class", "channel_combo"]
+    if SPLIT_BY_COMPARTMENT and "compartment_combo" in cluster_combos.columns:
+        _combo_cols.append("compartment_combo")
+
+    _kept, _skipped = [], []
+    for _clustering in cluster_combos[_combo_cols].drop_duplicates().to_dict("records"):
+        _combo = _clustering["channel_combo"]
+        _panel = _panel_of(_combo)
+        _selected = (
+            _panel != "DNA plus one marker"
+            if MOZZARELLM_CHANNEL_COMBOS == "auto"
+            else _combo in MOZZARELLM_CHANNEL_COMBOS
+        )
+        _resolution = MOZZARELLM_RESOLUTION_OVERRIDES.get(_combo)
+        if _resolution is None:
+            _resolution = MOZZARELLM_RESOLUTION
+        if _resolution is None:
+            _optimal = optimal_resolutions.get(
+                f"{_clustering['cell_class']}_{_combo}", {}
+            )
+            _resolution = _optimal.get("optimal_resolution")
+        if _resolution is None:
+            _resolution = LEIDEN_RESOLUTION
+
+        if not _selected:
+            _skipped.append((_combo, _clustering["cell_class"], _panel))
+        elif _resolution is None:
+            _skipped.append((_combo, _clustering["cell_class"], "no resolution to annotate"))
+        else:
+            _kept.append(
+                {**_clustering, "panel": _panel, "leiden_resolution": _resolution}
+            )
+
+    mozzarellm_selection = pd.DataFrame(_kept)
+    print(f"Annotating {len(mozzarellm_selection)} of {len(_kept) + len(_skipped)} clusterings")
+    for _combo, _cell_class, _reason in _skipped:
+        print(f"  skipped {_combo} / {_cell_class}: {_reason}")
+
+    mo.ui.table(mozzarellm_selection)
+    return (mozzarellm_selection,)
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ### Screen contexts and combo table
+
+    Each selected clustering gets its own screen context, describing the channels that clustering was built from rather than the screen's whole panel, and the combo table points each row at its context file. The rule reads these files, so they are written here before the stage runs; a context whose content has not changed is left untouched, so rewriting the table never invalidates a finished annotation.
+    """)
+    return
+
+
+@app.cell
+def _(
+    Path,
+    config,
+    get_filename,
+    json,
+    mozzarellm_import_error,
+    mozzarellm_selection,
+    screen,
+    screen_context_for_combo,
+):
+    MOZZARELLM_CONTEXT_DIR = Path("config/mozzarellm_context")
+
+    mozzarellm_context_paths = []
+    if mozzarellm_import_error is not None:
+        print("mozzarellm support not available - see the cell above")
+    elif screen is None:
+        print("screen.yaml not found - see the cell above")
+    elif mozzarellm_selection.empty:
+        print("No clusterings selected - no screen contexts written")
+    else:
+        MOZZARELLM_CONTEXT_DIR.mkdir(parents=True, exist_ok=True)
+        for _selected in mozzarellm_selection.to_dict("records"):
+            _metadata = {"channel_combo": _selected["channel_combo"]}
+            if "compartment_combo" in _selected:
+                _metadata["compartment_combo"] = _selected["compartment_combo"]
+            _metadata["cell_class"] = _selected["cell_class"]
+            _metadata["leiden_resolution"] = _selected["leiden_resolution"]
+            _context_fp = MOZZARELLM_CONTEXT_DIR / get_filename(
+                _metadata, "screen_context", "json"
+            )
+            _payload = json.dumps(
+                screen_context_for_combo(
+                    screen,
+                    config,
+                    _selected["channel_combo"],
+                    _selected["cell_class"],
+                    _selected["leiden_resolution"],
+                ),
+                indent=2,
+            )
+            # restamping an unchanged context would make snakemake redo a finished annotation
+            if (
+                not _context_fp.exists()
+                or _context_fp.read_text(encoding="utf-8") != _payload
+            ):
+                _context_fp.write_text(_payload, encoding="utf-8")
+            mozzarellm_context_paths.append(str(_context_fp))
+        print(f"Screen contexts in {MOZZARELLM_CONTEXT_DIR}: {len(mozzarellm_context_paths)}")
+    return MOZZARELLM_CONTEXT_DIR, mozzarellm_context_paths
+
+
+@app.cell
+def _(mo, mozzarellm_context_paths, mozzarellm_selection, pd):
+    MOZZARELLM_COMBO_FP = "config/mozzarellm_combo.tsv"
+
+    if not mozzarellm_context_paths:
+        mozzarellm_combos = pd.DataFrame()
+        print(f"No clusterings selected - {MOZZARELLM_COMBO_FP} not written")
+    else:
+        mozzarellm_combos = mozzarellm_selection.drop(columns=["panel"]).copy()
+        mozzarellm_combos["screen_context_fp"] = mozzarellm_context_paths
+        mozzarellm_combos.to_csv(MOZZARELLM_COMBO_FP, sep="\t", index=False)
+        print(f"Wrote {len(mozzarellm_combos)} rows to {MOZZARELLM_COMBO_FP}")
+
+    mo.ui.table(mozzarellm_combos)
+    return MOZZARELLM_COMBO_FP, mozzarellm_combos
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ### Dry run: what the selection costs
+
+    Assembles every prompt for every selected clustering and prices the input side, without calling the model. mozzarellm still builds its client to price the prompts, so the provider's API key has to be in `.env` even though no request is made.
+    """)
+    return
+
+
+@app.cell
+def _(
+    MOZZARELLM_FDR_THRESHOLD,
+    MOZZARELLM_INCLUDE_FEATURES,
+    MOZZARELLM_INCLUDE_STRENGTH,
+    MOZZARELLM_MAX_TOKENS,
+    MOZZARELLM_MCP,
+    MOZZARELLM_MODE,
+    MOZZARELLM_MODEL,
+    MOZZARELLM_N_FEATURES,
+    MOZZARELLM_RUN_NAME,
+    MOZZARELLM_SCREEN_NAME,
+    PROVIDER_KEY_ENV,
+    Path,
+    ROOT_FP,
+    SPLIT_BY_COMPARTMENT,
+    add_compartment_path,
+    get_filename,
+    json,
+    mo,
+    mozzarellm_combos,
+    mozzarellm_import_error,
+    organism_id_from_context,
+    os,
+    pd,
+    run_mozzarellm,
+):
+    _key_var = next(
+        (
+            env_var
+            for prefix, env_var in PROVIDER_KEY_ENV.items()
+            if str(MOZZARELLM_MODEL).lower().startswith(prefix)
+        ),
+        "ANTHROPIC_API_KEY",
+    )
+
+    _estimates = []
+    if mozzarellm_import_error is not None:
+        print("mozzarellm support not available - see the cell above")
+    elif mozzarellm_combos.empty:
+        print("No clusterings selected - nothing to price")
+    elif not os.environ.get(_key_var):
+        print(f"{_key_var} is not set, and the dry run still builds a {MOZZARELLM_MODEL} client")
+        print("Add the key to a .env file in this directory to price the run")
+    else:
+        for _combo_row in mozzarellm_combos.to_dict("records"):
+            _cluster_base = add_compartment_path(
+                ROOT_FP / "cluster" / _combo_row["channel_combo"],
+                _combo_row.get("compartment_combo"),
+                SPLIT_BY_COMPARTMENT,
+            )
+            _h5ad = (
+                _cluster_base
+                / _combo_row["cell_class"]
+                / "h5ad"
+                / get_filename({}, "cluster", "h5ad")
+            )
+            if not _h5ad.exists():
+                print(f"Cluster h5ad not found, skipping: {_h5ad}")
+                continue
+
+            _context = json.loads(
+                Path(_combo_row["screen_context_fp"]).read_text(encoding="utf-8")
+            )
+            try:
+                _result = run_mozzarellm(
+                    _h5ad,
+                    _cluster_base
+                    / _combo_row["cell_class"]
+                    / str(_combo_row["leiden_resolution"]),
+                    {},
+                    {},
+                    _combo_row["leiden_resolution"],
+                    MOZZARELLM_MODEL,
+                    mode=MOZZARELLM_MODE,
+                    mcp=MOZZARELLM_MCP,
+                    include_features=MOZZARELLM_INCLUDE_FEATURES,
+                    include_strength=MOZZARELLM_INCLUDE_STRENGTH,
+                    n_features=MOZZARELLM_N_FEATURES,
+                    fdr_threshold=MOZZARELLM_FDR_THRESHOLD,
+                    max_tokens=MOZZARELLM_MAX_TOKENS,
+                    screen_name=MOZZARELLM_SCREEN_NAME,
+                    screen_context=_context,
+                    organism_id=organism_id_from_context(_context),
+                    run_name=MOZZARELLM_RUN_NAME,
+                    dry_run=True,
+                )
+            except Exception as _err:
+                print(
+                    f"Dry run failed for {_combo_row['channel_combo']} / "
+                    f"{_combo_row['cell_class']}: {_err}"
+                )
+                continue
+
+            _clusters = _result["estimates"]
+            _estimates.append(
+                {
+                    "channel_combo": _combo_row["channel_combo"],
+                    "cell_class": _combo_row["cell_class"],
+                    "leiden_resolution": _combo_row["leiden_resolution"],
+                    "clusters": len(_clusters),
+                    "genes": int(_clusters["n_genes"].sum()),
+                    "est_input_cost_usd": float(_clusters["est_input_cost_usd"].sum()),
+                }
+            )
+
+    mozzarellm_estimates = pd.DataFrame(_estimates)
+    if not mozzarellm_estimates.empty:
+        print(
+            f"{mozzarellm_estimates['clusters'].sum()} clusters over "
+            f"{len(mozzarellm_estimates)} clusterings, estimated input cost "
+            f"${mozzarellm_estimates['est_input_cost_usd'].sum():.2f}"
+        )
+
+    mo.ui.table(mozzarellm_estimates)
+    return (mozzarellm_estimates,)
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
     ## Add mozzarellm parameters to config file
     """)
     return
@@ -996,24 +1372,31 @@ def _(
     CONFIG_FILE_HEADER,
     CONFIG_FILE_PATH,
     LEIDEN_RESOLUTION,
+    MOZZARELLM_COMBO_FP,
     MOZZARELLM_FDR_THRESHOLD,
     MOZZARELLM_INCLUDE_FEATURES,
     MOZZARELLM_INCLUDE_STRENGTH,
     MOZZARELLM_MAX_TOKENS,
+    MOZZARELLM_MAX_WORKERS,
     MOZZARELLM_MCP,
     MOZZARELLM_MODE,
     MOZZARELLM_MODEL,
     MOZZARELLM_N_FEATURES,
+    MOZZARELLM_RUN_NAME,
+    MOZZARELLM_SCREEN_NAME,
     SPLIT_BY_COMPARTMENT,
     config,
     convert_tuples_to_lists,
     yaml,
 ):
-    # Add mozzarellm section
+    # the first three keys are the clustering the visualizer opens on; the stage reads combo_fp
     config["mozzarellm"] = {
         "cell_class": CELL_CLASS,
         "channel_combo": CHANNEL_COMBO,
         "leiden_resolution": LEIDEN_RESOLUTION,
+        "combo_fp": MOZZARELLM_COMBO_FP,
+        "run_name": MOZZARELLM_RUN_NAME,
+        "screen_name": MOZZARELLM_SCREEN_NAME,
         "model": MOZZARELLM_MODEL,
         "mode": MOZZARELLM_MODE,
         "mcp": MOZZARELLM_MCP,
@@ -1022,6 +1405,7 @@ def _(
         "n_features": MOZZARELLM_N_FEATURES,
         "fdr_threshold": MOZZARELLM_FDR_THRESHOLD,
         "max_tokens": MOZZARELLM_MAX_TOKENS,
+        "max_workers": MOZZARELLM_MAX_WORKERS,
     }
     if SPLIT_BY_COMPARTMENT:
         config["mozzarellm"]["compartment_combo"] = COMPARTMENT_COMBO

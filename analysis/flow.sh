@@ -31,7 +31,7 @@
 #   bash flow.sh sbs phenotype --backend slurm --sequential-plates
 #   bash flow.sh aggregate --backend slurm --profile
 #   bash flow.sh all --dry-run
-#   bash flow.sh mozzarellm
+#   bash flow.sh mozzarellm --backend slurm
 #   bash flow.sh viz
 #
 # =============================================================================
@@ -219,7 +219,7 @@ if [[ " ${MODULES[*]} " == *" all "* ]]; then
 fi
 
 PHASE_GATE_CONFIG=""
-ALL_PIPELINE_PHASES=(preprocess sbs phenotype merge aggregate cluster)
+ALL_PIPELINE_PHASES=(preprocess sbs phenotype merge aggregate cluster mozzarellm)
 disabled_phases=()
 for phase in "${ALL_PIPELINE_PHASES[@]}"; do
     if [[ ! " ${MODULES[*]} " == *" ${phase} "* ]]; then
@@ -524,146 +524,14 @@ run_snakemake_module() {
     echo "${module^^} completed in $(elapsed $((module_end - module_start)))"
 }
 
-run_mozzarellm() {
-    echo ""
-    echo "===== MOZZARELLM ====="
-    echo "Started: $(date)"
-    echo ""
-
-    cd "$SCRIPT_DIR"
-    python3 << 'MOZZARELLM_SCRIPT'
-"""Mozzarellm analysis - reads all configuration from config.yml"""
-
-import os
-import sys
-from pathlib import Path
-
-import yaml
-from dotenv import load_dotenv
-
-sys.path.insert(0, "../brieflow/workflow")
-
-try:
-    from lib.cluster.mozzarellm_io import run_mozzarellm
-except ImportError as err:
-    print(f"ERROR: mozzarellm support is not installed ({err})")
-    print('Install it with: python -m pip install -e "../brieflow[mozzarellm]"')
-    sys.exit(1)
-
-load_dotenv()
-
-CONFIG_PATH = Path("config/config.yml")
-SCREEN_PATH = Path("screen.yaml")
-
-with open(CONFIG_PATH) as f:
-    config = yaml.safe_load(f)
-
-if "mozzarellm" not in config:
-    print("ERROR: mozzarellm section not found in config.yml")
-    print("Please run notebook 12 to configure mozzarellm parameters.")
-    sys.exit(1)
-
-if not SCREEN_PATH.exists():
-    print(f"ERROR: screen description not found: {SCREEN_PATH}")
-    print("The screen context handed to the model is derived from screen.yaml.")
-    sys.exit(1)
-
-with open(SCREEN_PATH) as f:
-    screen = yaml.safe_load(f)
-
-mzlm_config = config["mozzarellm"]
-
-ROOT_FP = Path(config["all"]["root_fp"])
-CELL_CLASS = mzlm_config["cell_class"]
-CHANNEL_COMBO = mzlm_config["channel_combo"]
-COMPARTMENT_COMBO = mzlm_config.get("compartment_combo")
-RESOLUTION = mzlm_config["leiden_resolution"]
-MODEL = mzlm_config.get("model", "claude-sonnet-5")
-MODE = mzlm_config.get("mode", "cot")
-MCP = mzlm_config.get("mcp", True)
-INCLUDE_FEATURES = mzlm_config.get("include_features", "auto")
-INCLUDE_STRENGTH = mzlm_config.get("include_strength", "auto")
-N_FEATURES = mzlm_config.get("n_features", 5)
-FDR_THRESHOLD = mzlm_config.get("fdr_threshold")
-MAX_TOKENS = mzlm_config.get("max_tokens", 64000)
-
-SPLIT_BY_COMPARTMENT = config["aggregate"].get("split_by_compartment", False)
-
-if SPLIT_BY_COMPARTMENT and not COMPARTMENT_COMBO:
-    print("ERROR: aggregate.split_by_compartment is on but mozzarellm.compartment_combo is not set")
-    print("Please rerun notebook 12 with COMPARTMENT_COMBO set.")
-    sys.exit(1)
-
-# mozzarellm picks the provider from the model prefix, so check that provider's key
-if MODEL.lower().startswith(("gpt", "o1", "o3", "o4")):
-    API_KEY_VAR = "OPENAI_API_KEY"
-elif MODEL.lower().startswith("gemini"):
-    API_KEY_VAR = "GOOGLE_API_KEY"
-else:
-    API_KEY_VAR = "ANTHROPIC_API_KEY"
-
-if not os.environ.get(API_KEY_VAR):
-    print(f"ERROR: {API_KEY_VAR} not found (required by model '{MODEL}')")
-    print("Add it to a .env file in the analysis directory.")
-    sys.exit(1)
-
-cluster_base = ROOT_FP / "cluster" / CHANNEL_COMBO
-if SPLIT_BY_COMPARTMENT:
-    cluster_base = cluster_base / COMPARTMENT_COMBO
-cluster_dir = cluster_base / CELL_CLASS / str(RESOLUTION)
-h5ad_path = cluster_base / CELL_CLASS / "h5ad" / "cluster.h5ad"
-
-print("Mozzarellm Analysis")
-print(f"{'=' * 60}")
-print(f"Model: {MODEL}")
-print(
-    f"Mode: {MODE} (mcp={MCP}, include_features={INCLUDE_FEATURES}, "
-    f"include_strength={INCLUDE_STRENGTH})"
-)
-print(f"Cell class: {CELL_CLASS}")
-print(f"Channel combo: {CHANNEL_COMBO}")
-if SPLIT_BY_COMPARTMENT:
-    print(f"Compartment combo: {COMPARTMENT_COMBO}")
-print(f"Resolution: {RESOLUTION}")
-print(f"Input: {h5ad_path}")
-print(f"Output: {cluster_dir / 'mozzarellm'}")
-print(f"{'=' * 60}")
-print()
-
-if not h5ad_path.exists():
-    print(f"ERROR: Cluster AnnData not found: {h5ad_path}")
-    print("Make sure you have run the cluster module first.")
-    sys.exit(1)
-
-result = run_mozzarellm(
-    h5ad_path,
-    cluster_dir,
-    screen,
-    config,
-    RESOLUTION,
-    MODEL,
-    mode=MODE,
-    mcp=MCP,
-    include_features=INCLUDE_FEATURES,
-    include_strength=INCLUDE_STRENGTH,
-    n_features=N_FEATURES,
-    fdr_threshold=FDR_THRESHOLD,
-    max_tokens=MAX_TOKENS,
-)
-
-errors = result.get("errors") or {}
-
-print()
-print(f"Run directory: {result['run_dir']}")
-print(f"Total cost (USD): {result.get('total_cost_usd')}")
-if errors:
-    print(f"Clusters with errors: {len(errors)}")
-    for cluster_id, message in errors.items():
-        print(f"  cluster {cluster_id}: {message}")
-else:
-    print("No cluster errors")
-
-MOZZARELLM_SCRIPT
+load_provider_key() {
+    # mozzarellm's jobs inherit the submitting environment, so the provider key is exported here
+    local env_file="${SCRIPT_DIR}/.env"
+    if [[ -f "$env_file" ]]; then
+        set -a
+        source "$env_file"
+        set +a
+    fi
 }
 
 run_viz() {
@@ -717,7 +585,8 @@ for module in "${MODULES[@]}"; do
             run_snakemake_module "$module"
             ;;
         mozzarellm)
-            run_mozzarellm
+            load_provider_key
+            run_snakemake_module "$module"
             ;;
         viz)
             run_viz
