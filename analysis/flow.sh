@@ -31,7 +31,7 @@
 #   bash flow.sh sbs phenotype --backend slurm --sequential-plates
 #   bash flow.sh aggregate --backend slurm --profile
 #   bash flow.sh all --dry-run
-#   bash flow.sh mozzarellm
+#   bash flow.sh mozzarellm --backend slurm
 #   bash flow.sh viz
 #
 # =============================================================================
@@ -219,7 +219,7 @@ if [[ " ${MODULES[*]} " == *" all "* ]]; then
 fi
 
 PHASE_GATE_CONFIG=""
-ALL_PIPELINE_PHASES=(preprocess sbs phenotype merge aggregate cluster)
+ALL_PIPELINE_PHASES=(preprocess sbs phenotype merge aggregate cluster mozzarellm)
 disabled_phases=()
 for phase in "${ALL_PIPELINE_PHASES[@]}"; do
     if [[ ! " ${MODULES[*]} " == *" ${phase} "* ]]; then
@@ -524,102 +524,14 @@ run_snakemake_module() {
     echo "${module^^} completed in $(elapsed $((module_end - module_start)))"
 }
 
-run_mozzarellm() {
-    echo ""
-    echo "===== MOZZARELLM ====="
-    echo "Started: $(date)"
-    echo ""
-
-    cd "$SCRIPT_DIR"
-    python3 << 'MOZZARELLM_SCRIPT'
-"""Mozzarellm analysis - reads all configuration from config.yml"""
-
-import sys
-from pathlib import Path
-
-import pandas as pd
-import yaml
-from dotenv import load_dotenv
-
-from mozzarellm import ClusterAnalyzer, reshape_to_clusters
-
-load_dotenv()
-
-CONFIG_PATH = Path("config/config.yml")
-with open(CONFIG_PATH) as f:
-    config = yaml.safe_load(f)
-
-if "mozzarellm" not in config:
-    print("ERROR: mozzarellm section not found in config.yml")
-    print("Please run notebook 12 to configure mozzarellm parameters.")
-    sys.exit(1)
-
-mzlm_config = config["mozzarellm"]
-
-ROOT_FP = Path(config["all"]["root_fp"])
-CELL_CLASS = mzlm_config["cell_class"]
-CHANNEL_COMBO = mzlm_config["channel_combo"]
-RESOLUTION = mzlm_config["leiden_resolution"]
-MODEL = mzlm_config.get("model", "claude-sonnet-4-5-20250929")
-TEMPERATURE = mzlm_config.get("temperature", 0.0)
-SCREEN_CONTEXT = mzlm_config.get("screen_context", "")
-GENE_COL = config["aggregate"]["perturbation_name_col"]
-
-cluster_path = ROOT_FP / "cluster" / CHANNEL_COMBO / CELL_CLASS / str(RESOLUTION)
-cluster_file = cluster_path / "phate_leiden_clustering.tsv"
-output_dir = cluster_path / "mozzarellm"
-
-print(f"Mozzarellm Analysis")
-print(f"{'=' * 60}")
-print(f"Model: {MODEL}")
-print(f"Cell class: {CELL_CLASS}")
-print(f"Channel combo: {CHANNEL_COMBO}")
-print(f"Resolution: {RESOLUTION}")
-print(f"Input: {cluster_file}")
-print(f"Output: {output_dir}")
-print(f"{'=' * 60}")
-print()
-
-if not cluster_file.exists():
-    print(f"ERROR: Clustering file not found: {cluster_file}")
-    print(f"Make sure you have run the cluster module first.")
-    sys.exit(1)
-
-print("Loading clustering data...")
-gene_df = pd.read_csv(cluster_file, sep="\t")
-
-if GENE_COL not in gene_df.columns:
-    for alt in ["gene_symbol_0", "gene_symbol", "gene"]:
-        if alt in gene_df.columns:
-            gene_df = gene_df.rename(columns={alt: GENE_COL})
-            break
-
-print(f"Loaded {len(gene_df)} genes across {gene_df['cluster'].nunique()} clusters")
-
-print("Reshaping data to cluster format...")
-cluster_df, gene_annotations = reshape_to_clusters(
-    input_df=gene_df,
-    gene_col=GENE_COL,
-    cluster_col="cluster",
-    uniprot_col="uniprot_function",
-    verbose=True,
-)
-print(f"Reshaped to {len(cluster_df)} clusters")
-
-print("\nRunning LLM analysis...")
-analyzer = ClusterAnalyzer(model=MODEL, temperature=TEMPERATURE, show_progress=True)
-
-results = analyzer.analyze(
-    cluster_df,
-    gene_annotations=gene_annotations,
-    screen_context=SCREEN_CONTEXT,
-    output_dir=output_dir,
-)
-
-print(f"\nDone!")
-print(f"Results saved to: {output_dir}")
-
-MOZZARELLM_SCRIPT
+load_provider_key() {
+    # mozzarellm's jobs inherit the submitting environment, so the provider key is exported here
+    local env_file="${SCRIPT_DIR}/.env"
+    if [[ -f "$env_file" ]]; then
+        set -a
+        source "$env_file"
+        set +a
+    fi
 }
 
 run_viz() {
@@ -632,7 +544,7 @@ run_viz() {
     export BRIEFLOW_OUTPUT_PATH="brieflow_output/"
     export CONFIG_PATH="config/config.yml"
     export SCREEN_PATH="screen.yaml"
-    exec streamlit run ../brieflow/visualization/Experimental_Overview.py --server.address=0.0.0.0 "$@"
+    exec streamlit run ../brieflow/visualization/Cluster_Analysis.py --server.address=0.0.0.0 "$@"
 }
 
 # ---------------------------------------------------------------------------
@@ -673,7 +585,8 @@ for module in "${MODULES[@]}"; do
             run_snakemake_module "$module"
             ;;
         mozzarellm)
-            run_mozzarellm
+            load_provider_key
+            run_snakemake_module "$module"
             ;;
         viz)
             run_viz

@@ -100,6 +100,7 @@ phenotype:
     # The wizard uses this mapping to skip the F-014 channel-mapping interview prompt.
     - biological_name: null                       # e.g. "DAPI"  -> channels_metadata.name
       marker_of: null                             # e.g. "Nuclei" -> biological_annotation.biological_target
+      description: null                           # free text used verbatim where marker_of would be, e.g. "sialylated glycoRNA at the cell surface, not RNA abundance"; every mozzarellm screen context containing this channel inherits it
       marker: null                                # gene/protein stained, e.g. "HSPA1B" -> biological_annotation.marker
       marker_type: null                           # "dye" | "antibody" | "endogenous_tag" -> biological_annotation.marker_type
       fluorophore_token: null                     # filename token (e.g. "GFP" stains "COXIV")
