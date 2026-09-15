@@ -1112,10 +1112,21 @@ def _(
     optimal_resolutions,
     pd,
 ):
+    # a row that names its own combo, class and resolution needs nothing from the
+    # selection above, so a whole-screen sweep does not require picking one clustering
+    _mozzarellm_needs_current_selection = MOZZARELLM_ANNOTATE_SELECTED or any(
+        _key not in _entry
+        for _entry in MOZZARELLM_EXTRA_CLUSTERINGS
+        for _key in ("cell_class", "channel_combo", "leiden_resolution")
+    )
     if mozzarellm_import_error is not None:
         mozzarellm_selection = pd.DataFrame()
         print("mozzarellm support not available - see the cell above")
-    elif None in (CHANNEL_COMBO, CELL_CLASS, LEIDEN_RESOLUTION):
+    elif _mozzarellm_needs_current_selection and None in (
+        CHANNEL_COMBO,
+        CELL_CLASS,
+        LEIDEN_RESOLUTION,
+    ):
         mozzarellm_selection = pd.DataFrame()
         print("Set the cluster selection above to choose what is annotated")
     else:
