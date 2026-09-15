@@ -845,6 +845,7 @@ def _(mo):
     - `MOZZARELLM_MODEL`: LLM model identifier passed to mozzarellm, ex `"claude-sonnet-5"`, `"gpt-5"` or `"gemini-2.5-pro"`. The API key for the corresponding provider must be present in `.env`.
     - `MOZZARELLM_MODE`: Prompting mode. `"cot"` reasons through the cluster in one call, `"standard"` is a single flat prompt, `"stepwise"` spends one API call per reasoning step.
     - `MOZZARELLM_MCP`: Give the model PubMed search tools so genes left unannotated are filled in from retrieved literature. On by default, with `"cot"`, as mozzarellm's benchmark-selected configuration; it costs several extra API turns per cluster.
+    - `MOZZARELLM_SOURCE`: Which functional annotation each gene's bundle carries. `"affinage"` uses Affinage's mechanistic narratives and is mozzarellm's benchmark-selected source; `"uniprot"` uses UniProt FUNCTION comments; `"both"` fetches each side by side as its own column. No source silently backfills another, so a gene one source has nothing for reaches the model as a visible gap rather than as another source's text. Stable accessions always come from UniProt regardless, because they are UniProt identifiers.
     - `MOZZARELLM_INCLUDE_FEATURES`: Put each gene's phenotypic features into the bundle so the pathway call has to be consistent with the observed morphology. `"auto"` lets mozzarellm include them whenever the bundles carry them; `True` requires them and `False` strips them.
     - `MOZZARELLM_INCLUDE_STRENGTH`: Put each gene's perturbation strength rank into the bundle so the model can weigh how strongly a gene moves the phenotype. Same `"auto"` / `True` / `False` contract as the features.
     - `MOZZARELLM_N_FEATURES`: Number of up and down features kept per gene when building the cluster table.
@@ -864,6 +865,7 @@ def _():
     MOZZARELLM_MODEL = "claude-sonnet-5"
     MOZZARELLM_MODE = "cot"
     MOZZARELLM_MCP = True
+    MOZZARELLM_SOURCE = "affinage"
     MOZZARELLM_INCLUDE_FEATURES = "auto"
     MOZZARELLM_INCLUDE_STRENGTH = "auto"
     MOZZARELLM_N_FEATURES = 5
@@ -887,6 +889,7 @@ def _():
         MOZZARELLM_N_FEATURES,
         MOZZARELLM_RUNTIME,
         MOZZARELLM_RUN_NAME,
+        MOZZARELLM_SOURCE,
     )
 
 
@@ -1243,6 +1246,7 @@ def _(
     MOZZARELLM_N_FEATURES,
     MOZZARELLM_RUN_NAME,
     MOZZARELLM_SCREEN_NAME,
+    MOZZARELLM_SOURCE,
     PROVIDER_KEY_ENV,
     Path,
     ROOT_FP,
@@ -1305,6 +1309,7 @@ def _(
                     _context,
                     mode=MOZZARELLM_MODE,
                     mcp=MOZZARELLM_MCP,
+                    annotation_source=MOZZARELLM_SOURCE,
                     include_features=MOZZARELLM_INCLUDE_FEATURES,
                     include_strength=MOZZARELLM_INCLUDE_STRENGTH,
                     n_features=MOZZARELLM_N_FEATURES,
@@ -1375,6 +1380,7 @@ def _(
     MOZZARELLM_RUNTIME,
     MOZZARELLM_RUN_NAME,
     MOZZARELLM_SCREEN_NAME,
+    MOZZARELLM_SOURCE,
     SPLIT_BY_COMPARTMENT,
     config,
     convert_tuples_to_lists,
@@ -1391,6 +1397,7 @@ def _(
         "model": MOZZARELLM_MODEL,
         "mode": MOZZARELLM_MODE,
         "mcp": MOZZARELLM_MCP,
+        "source": MOZZARELLM_SOURCE,
         "include_features": MOZZARELLM_INCLUDE_FEATURES,
         "include_strength": MOZZARELLM_INCLUDE_STRENGTH,
         "n_features": MOZZARELLM_N_FEATURES,
