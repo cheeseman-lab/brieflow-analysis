@@ -845,10 +845,10 @@ def _(mo):
     - `MOZZARELLM_MODEL`: LLM model identifier passed to mozzarellm, ex `"claude-sonnet-5"`, `"gpt-5"` or `"gemini-2.5-pro"`. The API key for the corresponding provider must be present in `.env`.
     - `MOZZARELLM_MODE`: Prompting mode. `"cot"` reasons through the cluster in one call, `"standard"` is a single flat prompt, `"stepwise"` spends one API call per reasoning step.
     - `MOZZARELLM_MCP`: Give the model PubMed search tools so genes left unannotated are filled in from retrieved literature. On by default, with `"cot"`, as mozzarellm's benchmark-selected configuration; it costs several extra API turns per cluster.
-    - `MOZZARELLM_SOURCE`: Which functional annotation each gene's bundle carries. `"affinage"` uses Affinage's mechanistic narratives and is mozzarellm's benchmark-selected source; `"uniprot"` uses UniProt FUNCTION comments; `"both"` fetches each side by side as its own column. No source silently backfills another, so a gene one source has nothing for reaches the model as a visible gap rather than as another source's text. Stable accessions always come from UniProt regardless, because they are UniProt identifiers.
+    - `MOZZARELLM_SOURCE`: Which functional annotation each gene's bundle carries. `"affinage_then_uniprot"`, the default, uses Affinage's mechanistic narratives and falls back to UniProt's FUNCTION comment for the genes Affinage has nothing on, with each gene's `annotation_source` recording which one it got; `"affinage"` and `"uniprot"` use one source alone, leaving a gene that source lacks as a visible gap; `"both"` fetches each side by side as its own column. Stable accessions always come from UniProt regardless, because they are UniProt identifiers.
     - `MOZZARELLM_INCLUDE_FEATURES`: Put each gene's phenotypic features into the bundle so the pathway call has to be consistent with the observed morphology. `"auto"` lets mozzarellm include them whenever the bundles carry them; `True` requires them and `False` strips them.
     - `MOZZARELLM_INCLUDE_STRENGTH`: Put each gene's perturbation strength rank into the bundle so the model can weigh how strongly a gene moves the phenotype. Same `"auto"` / `True` / `False` contract as the features.
-    - `MOZZARELLM_N_FEATURES`: Number of up and down features kept per gene when building the cluster table.
+    - `MOZZARELLM_N_FEATURES`: Number of up and down features kept per gene when building the cluster table. mozzarellm only shows the model features shared by at least a quarter of a cluster's genes, so this has to be large enough for neighbouring genes' lists to overlap: at 5 most clusters show no feature at all, at 20 nearly every cluster does, and the shown table is bounded either way.
     - `MOZZARELLM_FDR_THRESHOLD`: FDR cutoff a feature must pass to be listed for a gene. `None` keeps the strongest features regardless of significance.
     - `MOZZARELLM_MAX_TOKENS`: Maximum tokens per model response. 64000 is the ceiling a feature-augmented run needs; lower it only to cap spend.
     - `MOZZARELLM_RUN_NAME`: Name of the run directory each annotation writes into, under `{cluster_path}/mozzarellm/`. Keep it stable to resume an interrupted run; change it to annotate the same clusterings again beside the answers already there.
@@ -865,10 +865,10 @@ def _():
     MOZZARELLM_MODEL = "claude-sonnet-5"
     MOZZARELLM_MODE = "cot"
     MOZZARELLM_MCP = True
-    MOZZARELLM_SOURCE = "affinage"
+    MOZZARELLM_SOURCE = "affinage_then_uniprot"
     MOZZARELLM_INCLUDE_FEATURES = "auto"
     MOZZARELLM_INCLUDE_STRENGTH = "auto"
-    MOZZARELLM_N_FEATURES = 5
+    MOZZARELLM_N_FEATURES = 20
     MOZZARELLM_FDR_THRESHOLD = None
     MOZZARELLM_MAX_TOKENS = 64000
     MOZZARELLM_RUN_NAME = "run1"
