@@ -271,6 +271,7 @@ def _(mo):
     - `PERTURBATION_AUC_THRESHOLD`: AUC value used to filter out perturbations. Higher AUC value means more selective, usually `0.6`. Can be left as `None` for no filtering.
     - `CONTROL_SCOPE`: Controls that `mean_potential_to_nontargeting` averages each point's distance over. `"pooled"` uses all controls; `"within_group"` uses controls sharing the point's own `GROUP_COLS` group; `"reference_group"` uses controls in `CONTROL_REFERENCE_GROUP` whatever the point's own group. Only matters when `GROUP_COLS` is set in notebook 8 — otherwise every scope is the same set. Use `"reference_group"` when the group is a treatment acting on the perturbation itself, so the null has to be the untreated state.
     - `CONTROL_REFERENCE_GROUP`: The `GROUP_COLS` value the null is pinned to — the untreated or vehicle group. Several `GROUP_COLS` join their values with `=`. Ignored by the other scopes.
+    - `CLUSTER_CONTROL_KEY`: Control perturbations for the cluster-space null, when they differ from the aggregate `CONTROL_KEY` (optional; `None` inherits it). Needed when the aggregate key names a treatment through `CONTROL_NAME_COL`: the alignment reference is then a treatment, but `mean_potential_to_nontargeting` under `"reference_group"` still needs control *perturbations* to pin the null to, e.g. the non-responding constructs' vehicle arms.
     - `TEST_LEIDEN_RESOLUTIONS`: Resolutions for Leiden clustering. Higher means more clusters (and therefore less genes per cluster). Should be a list of numbers. We recommend `[0.1, 1, 5, 7, 9, 11, 13, 15, 20, 100]`.
 
     **Notes**:
@@ -289,11 +290,17 @@ def _(config):
     PERTURBATION_AUC_THRESHOLD = None
     CONTROL_SCOPE = 'pooled'               # "pooled" | "within_group" | "reference_group"
     CONTROL_REFERENCE_GROUP = None         # the vehicle group; required by "reference_group"
+    CLUSTER_CONTROL_KEY = None             # None inherits the aggregate CONTROL_KEY
     TEST_LEIDEN_RESOLUTIONS = None     # e.g., [2, 3, 4, 5]
     # === END OPERATOR PARAMETERS ===
 
-    CONTROL_KEY = config["aggregate"]["control_key"]
+    CONTROL_KEY = (
+        CLUSTER_CONTROL_KEY
+        if CLUSTER_CONTROL_KEY is not None
+        else config["aggregate"]["control_key"]
+    )
     return (
+        CLUSTER_CONTROL_KEY,
         CONTROL_KEY,
         CONTROL_REFERENCE_GROUP,
         CONTROL_SCOPE,
@@ -523,6 +530,7 @@ def _(
     CLUSTER_COMBO_FP,
     CONFIG_FILE_HEADER,
     CONFIG_FILE_PATH,
+    CLUSTER_CONTROL_KEY,
     CONTROL_REFERENCE_GROUP,
     CONTROL_SCOPE,
     CORUM_GROUP_BENCHMARK_FP,
@@ -539,6 +547,8 @@ def _(
 ):
     # Add cluster section
     config['cluster'] = {'min_cell_cutoffs': MIN_CELL_CUTOFFS, 'leiden_resolutions': FINAL_LEIDEN_RESOLUTIONS, 'phate_distance_metric': PHATE_DISTANCE_METRIC, 'cluster_combo_fp': CLUSTER_COMBO_FP, 'uniprot_data_fp': UNIPROT_DATA_FP, 'string_pair_benchmark_fp': STRING_PAIR_BENCHMARK_FP, 'corum_group_benchmark_fp': CORUM_GROUP_BENCHMARK_FP, 'kegg_group_benchmark_fp': KEGG_GROUP_BENCHMARK_FP, 'perturbation_auc_threshold': PERTURBATION_AUC_THRESHOLD, 'control_scope': CONTROL_SCOPE, 'control_reference_group': CONTROL_REFERENCE_GROUP}
+    if CLUSTER_CONTROL_KEY is not None:
+        config['cluster']['control_key'] = CLUSTER_CONTROL_KEY
     safe_config = convert_tuples_to_lists(config)
     with open(CONFIG_FILE_PATH, 'w') as _config_file:
         _config_file.write(CONFIG_FILE_HEADER)
