@@ -188,7 +188,7 @@ def _(mo):
     - `WELL_ANNOTATIONS_FP`: TSV of per-well experimental variables (`plate`, `well`, then any annotation columns, e.g. `treatment`). Joined onto cell metadata so they can be split or grouped on. `None` to skip.
     - `SPLIT_COL`: Column to split datasets on. Each value gets its own dataset and its own embedding space. `"class"` is the classifier output; set to an annotation column to split by it instead.
     - `GROUP_COLS`: Extra columns to aggregate within, so a point becomes perturbation x these. Keeps one shared embedding space. Ex `["treatment"]`.
-    - `BOOTSTRAP_CONTROL_SCOPE`: `"pooled"` draws the bootstrap null from all controls; `"within_group"` restricts it to controls sharing the point's group; `"reference_group"` restricts it to controls in `BOOTSTRAP_REFERENCE_GROUP` whatever the point's own group. Use `"within_group"` when groups have different baselines, or the null spans them and real hits are lost. Use `"reference_group"` when the group is a treatment acting on the perturbation itself, so the null has to be the untreated state.
+    - `BOOTSTRAP_CONTROL_SCOPE`: `"pooled"` draws the bootstrap null from all controls; `"within_group"` restricts it to controls sharing the point's group; `"reference_group"` restricts it to controls in `BOOTSTRAP_REFERENCE_GROUP` whatever the point's own group; `"within_perturbation"` draws it from the point's own perturbation in `BOOTSTRAP_REFERENCE_GROUP`, so every perturbation is its own control and `CONTROL_KEY` plays no part. Use `"within_group"` when groups have different baselines, or the null spans them and real hits are lost. Use `"reference_group"` when the group is a treatment acting on the perturbation itself, so the null has to be the untreated state. Use `"within_perturbation"` when perturbations are not knockouts (an over-expression library under ligands), so each arm is scored against its own vehicle arm; perturbations with no reference arm are left out of the bootstrap.
     - `BOOTSTRAP_REFERENCE_GROUP`: The `GROUP_COLS` value the null is pinned to — the untreated or vehicle group. Several `GROUP_COLS` join their values with `=`. Ignored by the other scopes.
     """)
     return
@@ -200,8 +200,8 @@ def _():
     WELL_ANNOTATIONS_FP = None              # e.g., "config/well_annotations.tsv"
     SPLIT_COL = 'class'                     # "class" (classifier) or an annotation column
     GROUP_COLS = []                         # e.g., ["treatment"]
-    BOOTSTRAP_CONTROL_SCOPE = 'pooled'      # "pooled" | "within_group" | "reference_group"
-    BOOTSTRAP_REFERENCE_GROUP = None        # the vehicle group; required by "reference_group"
+    BOOTSTRAP_CONTROL_SCOPE = 'pooled'      # "pooled" | "within_group" | "reference_group" | "within_perturbation"
+    BOOTSTRAP_REFERENCE_GROUP = None        # the vehicle group; required by "reference_group" and "within_perturbation"
     # === END OPERATOR PARAMETERS ===
     return (
         BOOTSTRAP_CONTROL_SCOPE,
