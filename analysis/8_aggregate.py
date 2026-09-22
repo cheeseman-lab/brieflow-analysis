@@ -185,8 +185,8 @@ def _(mo):
     mo.md(r"""
     ## <font color='red'>SET PARAMETERS: WELL ANNOTATIONS, SPLIT AND GROUP</font>
 
-    - `WELL_ANNOTATIONS_FP`: TSV of per-well experimental variables (`plate`, `well`, then any annotation columns, e.g. `treatment`). Joined onto cell metadata so they can be split or grouped on. `None` to skip.
-    - `SPLIT_COL`: Column to split datasets on. Each value gets its own dataset and its own embedding space. `"class"` is the classifier output; set to an annotation column to split by it instead.
+    - `WELL_ANNOTATIONS_FP`: TSV of per-well experimental variables (`plate`, `well`, then any annotation columns, e.g. `treatment`). Joined onto cell metadata so they can be split or grouped on. Only annotated wells enter the aggregate combos, so leaving a well out of the TSV excludes it. `None` to skip.
+    - `SPLIT_COL`: Column to split datasets on. Each value gets its own dataset and its own embedding space, plus `all`. `"class"` is the classifier output; set to an annotation column to split by it instead, and the split values are read from the annotation TSV.
     - `GROUP_COLS`: Extra columns to aggregate within, so a point becomes perturbation x these. Keeps one shared embedding space. Ex `["treatment"]`.
     - `BOOTSTRAP_CONTROL_SCOPE`: `"pooled"` draws the bootstrap null from all controls; `"within_group"` restricts it to controls sharing the point's group; `"reference_group"` restricts it to controls in `BOOTSTRAP_REFERENCE_GROUP` whatever the point's own group. Use `"within_group"` when groups have different baselines, or the null spans them and real hits are lost. Use `"reference_group"` when the group is a treatment acting on the perturbation itself, so the null has to be the untreated state.
     - `BOOTSTRAP_REFERENCE_GROUP`: The `GROUP_COLS` value the null is pinned to — the untreated or vehicle group. Several `GROUP_COLS` join their values with `=`. Ignored by the other scopes.
@@ -325,9 +325,12 @@ def _(
     CLASSIFIER_PATH,
     CLASS_MAPPING,
     CLASS_TITLE,
+    SPLIT_COL,
+    WELL_ANNOTATIONS_FP,
     CellClassifier,
     features,
     metadata,
+    pd,
 ):
     classifier = CellClassifier.load(CLASSIFIER_PATH)
 
@@ -356,8 +359,11 @@ def _(
         classified_metadata["class"] = "all"
         classified_metadata["confidence"] = 1.0
 
-    # Create config var for cell classes
-    if "class" in classified_metadata.columns:
+    # Create config var for cell classes (SPLIT_COL drives the split; "class" is the classifier)
+    if SPLIT_COL != "class":
+        # from the annotations, not the loaded cells: only the test wells are in memory here
+        CELL_CLASSES = sorted(pd.read_csv(WELL_ANNOTATIONS_FP, sep="\t")[SPLIT_COL].dropna().astype(str).unique())
+    elif "class" in classified_metadata.columns:
         CELL_CLASSES = list(classified_metadata["class"].unique())
     else:
         CELL_CLASSES = []
@@ -383,6 +389,7 @@ def _(
     MONTAGE_NUM_CELLS,
     MONTAGE_SHAPE,
     ROOT_FP,
+    SPLIT_COL,
     add_filenames,
     classified_metadata,
     classifier,
@@ -392,14 +399,16 @@ def _(
     plt,
     summarize_cell_data,
 ):
-    if classifier is not None:
+    if SPLIT_COL != "class":
+        cell_classes = list(CELL_CLASSES) + ['all']
+    elif classifier is not None:
         cell_classes = list(classified_metadata['class'].unique()) + ['all']
     else:
         cell_classes = list(classified_metadata['class'].unique())
     if TEST_MONTAGE_CHANNEL is not None:
         classified_metadata_copy = classified_metadata.copy(deep=True)
         classified_metadata_copy = add_filenames(classified_metadata_copy, ROOT_FP, img_fmt=config['all'].get('image_format', 'tiff'))
-        cell_class_dfs = {cell_class: classified_metadata_copy[classified_metadata_copy['class'] == cell_class] for cell_class in CELL_CLASSES}
+        cell_class_dfs = {cell_class: classified_metadata_copy[classified_metadata_copy[SPLIT_COL] == cell_class] for cell_class in CELL_CLASSES}
         title_templates = {True: 'Lowest Confidence {cell_class} Cells - {channel}', False: 'Highest Confidence {cell_class} Cells - {channel}'}
         montages, titles = ([], [])
         for cell_class, cell_df in cell_class_dfs.items():
@@ -495,6 +504,7 @@ def _(
     COMPARTMENT_COMBOS,
     Path,
     SPLIT_BY_COMPARTMENT,
+    WELL_ANNOTATIONS_FP,
     cell_classes,
     config,
     pd,
@@ -506,6 +516,13 @@ def _(
     # Load merge wildcard combos
     MERGE_COMBO_FP = Path(config["merge"]["merge_combo_fp"])
     merge_wildcard_combos = pd.read_csv(MERGE_COMBO_FP, sep="\t")
+
+    # only annotated wells can be split or grouped; the pipeline raises on an unannotated one
+    if WELL_ANNOTATIONS_FP is not None:
+        _ann = pd.read_csv(WELL_ANNOTATIONS_FP, sep="\t")[["plate", "well"]].drop_duplicates()
+        _n_before = len(merge_wildcard_combos)
+        merge_wildcard_combos = merge_wildcard_combos.merge(_ann, on=["plate", "well"])
+        print(f"Wells with annotations: {len(merge_wildcard_combos)} of {_n_before} merged wells")
 
     # Generate aggregate wildcard combos
     aggregate_wildcard_combos = pd.DataFrame(
@@ -539,6 +556,7 @@ def _(
 
 @app.cell
 def _(
+    SPLIT_COL,
     TEST_CELL_CLASS,
     TEST_CHANNEL_COMBO,
     channel_combo_subset,
@@ -549,7 +567,7 @@ def _(
 ):
     # subset cell class
     if TEST_CELL_CLASS != "all":
-        cell_class_mask = classified_metadata["class"] == TEST_CELL_CLASS
+        cell_class_mask = classified_metadata[SPLIT_COL] == TEST_CELL_CLASS
         class_metadata = classified_metadata[cell_class_mask]
         class_features = classified_features[cell_class_mask]
     else:
