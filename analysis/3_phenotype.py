@@ -361,7 +361,8 @@ def _(mo):
     - Consider running this notebook in a GPU-enabled environment or testing on a smaller region
 
     #### Common Parameters
-    - `GPU`: Set to True to use GPU acceleration (if available).
+    - `GPU`: Set to True to use GPU acceleration (if available) for the test segmentations in this notebook.
+    - `PIPELINE_GPU`: GPU setting written to the config for the pipeline's `segment_phenotype` and `identify_second_objs` jobs. `None` uses `GPU`; set it to False to tune on a GPU node and segment on CPU, or to True for the reverse.
     - `RECONCILE`: Method for reconciling nuclei and cell masks (typically "contained_in_cells", which allows more than one nucleus per cell and is useful for cells that are dividing).
     - `SEGMENT_CELLS`: Whether to segment cells, or only segment nuclei. If your analysis only requires nuclear features, set to False for faster processing.
 
@@ -389,6 +390,7 @@ def _(CHANNEL_NAMES, aligned_image):
     # === OPERATOR PARAMETERS ===
     CYTO_CHANNEL = None
     GPU = False
+    PIPELINE_GPU = None
     RECONCILE = "contained_in_cells"
     SEGMENT_CELLS = True
     SEGMENTATION_METHOD = "cellpose"   # "cellpose" | "stardist"
@@ -444,6 +446,7 @@ def _(CHANNEL_NAMES, aligned_image):
         NUCLEI_FLOW_THRESHOLD,
         NUCLEI_NMS_THRESHOLD,
         NUCLEI_PROB_THRESHOLD,
+        PIPELINE_GPU,
         RECONCILE,
         SEGMENTATION_METHOD,
         SEGMENT_CELLS,
@@ -783,9 +786,11 @@ def _(CHANNEL_NAMES, GPU, aligned_image):
         and SECOND_OBJ_DIAMETER is None
     ):
         from lib.phenotype.segment_secondary_object import estimate_second_obj_diameter
+        from lib.shared.segment_cellpose import CELLPOSE_4X
 
-        # cpsam (Cellpose 4) has no automatic diameter estimate
-        _estimation_method = "manual" if SECOND_OBJ_CELLPOSE_MODEL == "cpsam" else "cellpose"
+        # Cellpose 4.x, cpsam and custom model paths have no automatic diameter estimate
+        _no_size_model = SECOND_OBJ_CELLPOSE_MODEL == "cpsam" or "/" in SECOND_OBJ_CELLPOSE_MODEL or "\\" in SECOND_OBJ_CELLPOSE_MODEL
+        _estimation_method = "manual" if CELLPOSE_4X or _no_size_model else "cellpose"
         print(f"Estimating secondary object diameter in {SECOND_OBJ_CHANNEL}...")
         SECOND_OBJ_DIAMETER = estimate_second_obj_diameter(
             aligned_image,
@@ -1054,6 +1059,7 @@ def _(
     NUCLEI_PROB_THRESHOLD,
     OPENING_DISK_RADIUS,
     OVERLAP_THRESHOLD,
+    PIPELINE_GPU,
     PROPORTION_THRESHOLD,
     RECONCILE,
     REMOVE_CHANNEL,
@@ -1087,7 +1093,7 @@ def _(
     convert_tuples_to_lists,
     yaml,
 ):
-    config['phenotype'] = {'foci_channel_index': FOCI_CHANNEL_INDEX, 'channel_names': CHANNEL_NAMES, 'align': ALIGN, 'dapi_index': DAPI_INDEX, 'cyto_index': CYTO_INDEX, 'segmentation_method': SEGMENTATION_METHOD, 'reconcile': RECONCILE, 'gpu': GPU, 'segment_cells': SEGMENT_CELLS, 'cp_method': CP_METHOD}
+    config['phenotype'] = {'foci_channel_index': FOCI_CHANNEL_INDEX, 'channel_names': CHANNEL_NAMES, 'align': ALIGN, 'dapi_index': DAPI_INDEX, 'cyto_index': CYTO_INDEX, 'segmentation_method': SEGMENTATION_METHOD, 'reconcile': RECONCILE, 'gpu': GPU if PIPELINE_GPU is None else PIPELINE_GPU, 'segment_cells': SEGMENT_CELLS, 'cp_method': CP_METHOD}
     if SEGMENTATION_METHOD == 'cellpose':
         config['phenotype'].update({'nuclei_diameter': NUCLEI_DIAMETER, 'cell_diameter': CELL_DIAMETER, 'nuclei_flow_threshold': NUCLEI_FLOW_THRESHOLD, 'nuclei_cellprob_threshold': NUCLEI_CELLPROB_THRESHOLD, 'cell_flow_threshold': CELL_FLOW_THRESHOLD, 'cell_cellprob_threshold': CELL_CELLPROB_THRESHOLD, 'cellpose_model': CELLPOSE_MODEL})
         if HELPER_INDEX is not None:
