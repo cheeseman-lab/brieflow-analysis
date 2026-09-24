@@ -188,7 +188,7 @@ def _(mo):
     - `WELL_ANNOTATIONS_FP`: TSV of per-well experimental variables (`plate`, `well`, then any annotation columns, e.g. `treatment`). Joined onto cell metadata so they can be split or grouped on. `None` to skip.
     - `SPLIT_COL`: Column to split datasets on. Each value gets its own dataset and its own embedding space. `"class"` is the classifier output; set to an annotation column to split by it instead.
     - `GROUP_COLS`: Extra columns to aggregate within, so a point becomes perturbation x these. Keeps one shared embedding space. Ex `["treatment"]`.
-    - `BOOTSTRAP_CONTROL_SCOPE`: `"pooled"` draws the bootstrap null from all controls; `"within_group"` restricts it to controls sharing the point's group; `"reference_group"` restricts it to controls in `BOOTSTRAP_REFERENCE_GROUP` whatever the point's own group. Use `"within_group"` when groups have different baselines, or the null spans them and real hits are lost. Use `"reference_group"` when the group is a treatment acting on the perturbation itself, so the null has to be the untreated state.
+    - `BOOTSTRAP_CONTROL_SCOPE`: `"pooled"` draws the bootstrap null from all controls; `"within_group"` restricts it to controls sharing the point's group; `"reference_group"` restricts it to controls in `BOOTSTRAP_REFERENCE_GROUP` whatever the point's own group; `"within_perturbation"` draws it from the point's own perturbation in `BOOTSTRAP_REFERENCE_GROUP`, so every perturbation is its own control and `CONTROL_KEY` plays no part. Use `"within_group"` when groups have different baselines, or the null spans them and real hits are lost. Use `"reference_group"` when the group is a treatment acting on the perturbation itself, so the null has to be the untreated state. Use `"within_perturbation"` when perturbations are not knockouts, so each arm is scored against its own vehicle arm; the reference-group arms are that null and are not tested themselves, and perturbations with no reference arm are left out of the bootstrap.
     - `BOOTSTRAP_REFERENCE_GROUP`: The `GROUP_COLS` value the null is pinned to — the untreated or vehicle group. Several `GROUP_COLS` join their values with `=`. Ignored by the other scopes.
     """)
     return
@@ -200,8 +200,8 @@ def _():
     WELL_ANNOTATIONS_FP = None              # e.g., "config/well_annotations.tsv"
     SPLIT_COL = 'class'                     # "class" (classifier) or an annotation column
     GROUP_COLS = []                         # e.g., ["treatment"]
-    BOOTSTRAP_CONTROL_SCOPE = 'pooled'      # "pooled" | "within_group" | "reference_group"
-    BOOTSTRAP_REFERENCE_GROUP = None        # the vehicle group; required by "reference_group"
+    BOOTSTRAP_CONTROL_SCOPE = 'pooled'      # "pooled" | "within_group" | "reference_group" | "within_perturbation"
+    BOOTSTRAP_REFERENCE_GROUP = None        # the vehicle group; required by "reference_group" and "within_perturbation"
     # === END OPERATOR PARAMETERS ===
     return (
         BOOTSTRAP_CONTROL_SCOPE,
@@ -746,6 +746,7 @@ def _(mo):
     - `BATCH_COLS`: Which columns of metadata have batch-specific information. Usually `["plate", "well"]`.
     - `CONTROL_KEY`: Name of perturbation in `PERTURBATION_NAME_COL` that indicates a control cell.
     - `CONTROL_NAME_COL`: Column matched against `CONTROL_KEY` when it differs from `PERTURBATION_NAME_COL` (optional; `None` uses `PERTURBATION_NAME_COL`).
+    - `TVN_BATCH_CORRECTION`: Whether TVN centers, scales and CORAL-whitens each batch on that batch's own control cells (`True`, the default) or once on the pooled controls (`False`). Per-batch centering already happens upstream on every cell; the per-batch TVN half re-does it from control cells alone and estimates a full PC covariance from them, which needs on the order of ten control cells per PC in every batch. Set `False` when batches carry few controls, or when `CONTROL_KEY` names a treatment through `CONTROL_NAME_COL` so only some batches hold controls at all.
     - `PERTURBATION_ID_COL`: Name of the column identifying a unique **construct** (sgRNA / barcode), ex `cell_barcode_0` or `sgRNA_0`. This sets the resolution of construct-level aggregation and the bootstrap null: each construct becomes its own row, so every non-targeting guide is treated as a separate control element. **This should essentially always be set.** If left as `None` it falls back to `PERTURBATION_NAME_COL`, which collapses constructs to gene level — all controls become a single construct and the bootstrap null loses construct-to-construct variance, making p-values under-dispersed.
     """)
     return
@@ -758,8 +759,9 @@ def _():
     CONTROL_KEY = None                 # e.g., "nontargeting"
     PERTURBATION_ID_COL = "cell_barcode_0"   # or "sgRNA_0" — should essentially always be set
     CONTROL_NAME_COL = None            # e.g., "gene_symbol_0" when PERTURBATION_NAME_COL is a construct column
+    TVN_BATCH_CORRECTION = True        # False: one global TVN on the pooled controls
     # === END OPERATOR PARAMETERS ===
-    return BATCH_COLS, CONTROL_KEY, CONTROL_NAME_COL, PERTURBATION_ID_COL
+    return BATCH_COLS, CONTROL_KEY, CONTROL_NAME_COL, PERTURBATION_ID_COL, TVN_BATCH_CORRECTION
 
 
 @app.cell
@@ -813,7 +815,9 @@ def _():
 def _(
     AGG_METHOD,
     CONTROL_KEY,
+    CONTROL_NAME_COL,
     PERTURBATION_NAME_COL,
+    TVN_BATCH_CORRECTION,
     VARIANCE_OR_NCOMP,
     aggregate,
     embed_by_pca,
@@ -830,7 +834,12 @@ def _(
     )
 
     tvn_normalized = tvn_on_controls(
-        pca_embeddings, pad_metadata, PERTURBATION_NAME_COL, CONTROL_KEY, "batch_values"
+        pca_embeddings,
+        pad_metadata,
+        PERTURBATION_NAME_COL,
+        CONTROL_KEY,
+        "batch_values" if TVN_BATCH_CORRECTION else None,
+        control_col=CONTROL_NAME_COL,
     )
 
     aggregated_embeddings, aggregated_metadata = aggregate(
@@ -985,6 +994,7 @@ def _(
     SKIP_PERTURBATION_SCORE,
     SPLIT_BY_COMPARTMENT,
     SPLIT_COL,
+    TVN_BATCH_CORRECTION,
     VARIANCE_OR_NCOMP,
     WELL_ANNOTATIONS_FP,
     config,
@@ -993,7 +1003,7 @@ def _(
     yaml,
 ):
     # Add aggregate section (classifier settings are in config["classify"] from notebook 7)
-    config['aggregate'] = {'metadata_cols_fp': METADATA_COLS_FP, 'collapse_cols': COLLAPSE_COLS, 'aggregate_combo_fp': AGGREGATE_COMBO_FP, 'split_by_compartment': SPLIT_BY_COMPARTMENT, 'second_obj_agg_strategy': SECOND_OBJ_AGG_STRATEGY, 'filter_queries': FILTER_QUERIES, 'perturbation_name_col': PERTURBATION_NAME_COL, 'drop_cols_threshold': DROP_COLS_THRESHOLD, 'drop_rows_threshold': DROP_ROWS_THRESHOLD, 'impute': IMPUTE, 'contamination': CONTAMINATION, 'batch_cols': BATCH_COLS, 'control_key': CONTROL_KEY, 'control_name_col': CONTROL_NAME_COL, 'perturbation_id_col': PERTURBATION_ID_COL, 'variance_or_ncomp': VARIANCE_OR_NCOMP, 'num_align_batches': NUM_ALIGN_BATCHES, 'agg_method': AGG_METHOD, 'skip_perturbation_score': SKIP_PERTURBATION_SCORE, 'ps_probability_threshold': PS_PROBABILITY_THRESHOLD, 'ps_percentile_threshold': PS_PERCENTILE_THRESHOLD, 'montage_num_cells': MONTAGE_NUM_CELLS, 'montage_cell_size': MONTAGE_CELL_SIZE, 'montage_shape': list(MONTAGE_SHAPE), 'generate_montages': GENERATE_MONTAGES, 'well_annotations_fp': WELL_ANNOTATIONS_FP, 'split_col': SPLIT_COL, 'group_cols': GROUP_COLS, 'bootstrap_control_scope': BOOTSTRAP_CONTROL_SCOPE, 'bootstrap_reference_group': BOOTSTRAP_REFERENCE_GROUP}
+    config['aggregate'] = {'metadata_cols_fp': METADATA_COLS_FP, 'collapse_cols': COLLAPSE_COLS, 'aggregate_combo_fp': AGGREGATE_COMBO_FP, 'split_by_compartment': SPLIT_BY_COMPARTMENT, 'second_obj_agg_strategy': SECOND_OBJ_AGG_STRATEGY, 'filter_queries': FILTER_QUERIES, 'perturbation_name_col': PERTURBATION_NAME_COL, 'drop_cols_threshold': DROP_COLS_THRESHOLD, 'drop_rows_threshold': DROP_ROWS_THRESHOLD, 'impute': IMPUTE, 'contamination': CONTAMINATION, 'batch_cols': BATCH_COLS, 'control_key': CONTROL_KEY, 'control_name_col': CONTROL_NAME_COL, 'tvn_batch_correction': TVN_BATCH_CORRECTION, 'perturbation_id_col': PERTURBATION_ID_COL, 'variance_or_ncomp': VARIANCE_OR_NCOMP, 'num_align_batches': NUM_ALIGN_BATCHES, 'agg_method': AGG_METHOD, 'skip_perturbation_score': SKIP_PERTURBATION_SCORE, 'ps_probability_threshold': PS_PROBABILITY_THRESHOLD, 'ps_percentile_threshold': PS_PERCENTILE_THRESHOLD, 'montage_num_cells': MONTAGE_NUM_CELLS, 'montage_cell_size': MONTAGE_CELL_SIZE, 'montage_shape': list(MONTAGE_SHAPE), 'generate_montages': GENERATE_MONTAGES, 'well_annotations_fp': WELL_ANNOTATIONS_FP, 'split_col': SPLIT_COL, 'group_cols': GROUP_COLS, 'bootstrap_control_scope': BOOTSTRAP_CONTROL_SCOPE, 'bootstrap_reference_group': BOOTSTRAP_REFERENCE_GROUP}
     if BOOTSTRAP_CELL_CLASS and BOOTSTRAP_CHANNEL_COMBO:
         cell_classes_list = BOOTSTRAP_CELL_CLASS if isinstance(BOOTSTRAP_CELL_CLASS, list) else [BOOTSTRAP_CELL_CLASS]
         channel_combos_list = BOOTSTRAP_CHANNEL_COMBO if isinstance(BOOTSTRAP_CHANNEL_COMBO, list) else [BOOTSTRAP_CHANNEL_COMBO]
