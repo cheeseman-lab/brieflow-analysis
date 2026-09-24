@@ -361,8 +361,13 @@ def _(
 
     # Create config var for cell classes (SPLIT_COL drives the split; "class" is the classifier)
     if SPLIT_COL != "class":
+        if WELL_ANNOTATIONS_FP is None:
+            raise ValueError(f"SPLIT_COL={SPLIT_COL!r} needs WELL_ANNOTATIONS_FP naming the table that holds it")
+        _annotations = pd.read_csv(WELL_ANNOTATIONS_FP, sep="\t", dtype=str)
+        if SPLIT_COL not in _annotations.columns:
+            raise ValueError(f"SPLIT_COL={SPLIT_COL!r} is not a column of {WELL_ANNOTATIONS_FP}")
         # from the annotations, not the loaded cells: only the test wells are in memory here
-        CELL_CLASSES = sorted(pd.read_csv(WELL_ANNOTATIONS_FP, sep="\t")[SPLIT_COL].dropna().astype(str).unique())
+        CELL_CLASSES = sorted(_annotations[SPLIT_COL].dropna().unique())
     elif "class" in classified_metadata.columns:
         CELL_CLASSES = list(classified_metadata["class"].unique())
     else:
@@ -371,7 +376,7 @@ def _(
     # Show cell class counts and distribution
     if CELL_CLASSES:
         print("\nCell class counts:")
-        print(classified_metadata["class"].value_counts())
+        print(classified_metadata[SPLIT_COL].value_counts())
 
         print("\nCell class confidences:")
         classified_metadata["confidence"].hist()
@@ -408,7 +413,10 @@ def _(
     if TEST_MONTAGE_CHANNEL is not None:
         classified_metadata_copy = classified_metadata.copy(deep=True)
         classified_metadata_copy = add_filenames(classified_metadata_copy, ROOT_FP, img_fmt=config['all'].get('image_format', 'tiff'))
-        cell_class_dfs = {cell_class: classified_metadata_copy[classified_metadata_copy[SPLIT_COL] == cell_class] for cell_class in CELL_CLASSES}
+        _split_values = classified_metadata_copy[SPLIT_COL].astype(str)
+        # only the test wells are loaded, so skip groups with no cells in them
+        cell_class_dfs = {cell_class: classified_metadata_copy[_split_values == str(cell_class)] for cell_class in CELL_CLASSES}
+        cell_class_dfs = {cell_class: cell_df for cell_class, cell_df in cell_class_dfs.items() if len(cell_df) > 0}
         title_templates = {True: 'Lowest Confidence {cell_class} Cells - {channel}', False: 'Highest Confidence {cell_class} Cells - {channel}'}
         montages, titles = ([], [])
         for cell_class, cell_df in cell_class_dfs.items():
@@ -416,19 +424,22 @@ def _(
                 montage = create_cell_montage(cell_data=cell_df, channels=config['phenotype']['channel_names'], num_cells=MONTAGE_NUM_CELLS, cell_size=MONTAGE_CELL_SIZE, shape=MONTAGE_SHAPE, selection_params={'method': 'sorted', 'sort_by': 'confidence', 'ascending': ascending})[TEST_MONTAGE_CHANNEL]
                 montages.append(montage)
                 titles.append(title_templates[ascending].format(cell_class=cell_class, channel=TEST_MONTAGE_CHANNEL))
-        num_rows = len(CELL_CLASSES)
-        _fig, axes = plt.subplots(num_rows, 2, figsize=(10, 3 * num_rows))
-        for ax, title, montage in zip(axes.flat, titles, montages):
-            ax.imshow(montage, cmap='gray')
-            ax.set_title(title, fontsize=14)
-            ax.axis('off')
-        print('Montages of cell classes:')
-        plt.tight_layout()
-        plt.show()
+        num_rows = len(cell_class_dfs)
+        if num_rows > 0:
+            _fig, axes = plt.subplots(num_rows, 2, figsize=(10, 3 * num_rows), squeeze=False)
+            for ax, title, montage in zip(axes.flat, titles, montages):
+                ax.imshow(montage, cmap='gray')
+                ax.set_title(title, fontsize=14)
+                ax.axis('off')
+            print('Montages of cell classes:')
+            plt.tight_layout()
+            plt.show()
+        else:
+            print('No cells of any class in the test wells, skipping montage generation')
     else:
         print('TEST_MONTAGE_CHANNEL is None, skipping montage generation')
     print('Split cell data summary:')
-    _summary_df = summarize_cell_data(classified_metadata, CELL_CLASSES, COLLAPSE_COLS)
+    _summary_df = summarize_cell_data(classified_metadata, CELL_CLASSES, COLLAPSE_COLS, class_col=SPLIT_COL)
     mo.ui.table(_summary_df)
     return (cell_classes,)
 
@@ -519,10 +530,18 @@ def _(
 
     # only annotated wells can be split or grouped; the pipeline raises on an unannotated one
     if WELL_ANNOTATIONS_FP is not None:
-        _ann = pd.read_csv(WELL_ANNOTATIONS_FP, sep="\t")[["plate", "well"]].drop_duplicates()
-        _n_before = len(merge_wildcard_combos)
-        merge_wildcard_combos = merge_wildcard_combos.merge(_ann, on=["plate", "well"])
-        print(f"Wells with annotations: {len(merge_wildcard_combos)} of {_n_before} merged wells")
+        _ann = pd.read_csv(WELL_ANNOTATIONS_FP, sep="\t", dtype=str)
+        _annotated = set(zip(_ann["plate"], _ann["well"]))
+        # compare as text, as join_well_annotations does, so plate 1 matches "1"
+        _keys = zip(merge_wildcard_combos["plate"].astype(str), merge_wildcard_combos["well"].astype(str))
+        _kept = pd.Series([_key in _annotated for _key in _keys], index=merge_wildcard_combos.index)
+        _excluded = merge_wildcard_combos.loc[~_kept, ["plate", "well"]].to_records(index=False).tolist()
+        print(f"Wells with annotations: {int(_kept.sum())} of {len(_kept)} merged wells")
+        if _excluded:
+            print(f"Excluded from the aggregate combos (no row in {WELL_ANNOTATIONS_FP}): {_excluded}")
+        if not _kept.any():
+            raise ValueError(f"No merged (plate, well) has a row in {WELL_ANNOTATIONS_FP}; check its plate and well format")
+        merge_wildcard_combos = merge_wildcard_combos[_kept]
 
     # Generate aggregate wildcard combos
     aggregate_wildcard_combos = pd.DataFrame(
@@ -567,7 +586,7 @@ def _(
 ):
     # subset cell class
     if TEST_CELL_CLASS != "all":
-        cell_class_mask = classified_metadata[SPLIT_COL] == TEST_CELL_CLASS
+        cell_class_mask = classified_metadata[SPLIT_COL].astype(str) == str(TEST_CELL_CLASS)
         class_metadata = classified_metadata[cell_class_mask]
         class_features = classified_features[cell_class_mask]
     else:
