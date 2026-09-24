@@ -385,7 +385,7 @@ def _():
     SEED_OPTIMIZE = None          # try top-SEED_TOPK nearest tiles per seed, keep best (e.g. True)
     SEED_TOPK = None              # nearest tiles to evaluate when SEED_OPTIMIZE (e.g. 3)
     THRESHOLD_TRIANGLE = None     # triangle hash-match distance (e.g. 0.3)
-    RANSAC_RANDOM_STATE = None    # pin RANSAC for reproducibility (e.g. 0)
+    RANSAC_RANDOM_STATE = None    # RANSAC seed; None = seed 0 (the default), an int picks another seed
     # === END OPERATOR PARAMETERS ===
     return (
         LOCAL_REFINEMENT,

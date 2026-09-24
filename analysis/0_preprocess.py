@@ -762,6 +762,7 @@ def _(mo):
     ### Calculate illumination correction field
 
     - `SAMPLE_FRACTION`: Controls what percentage of images to use when calculating the illumination correction field (0.0-1.0). Using a smaller fraction (e.g., 0.2 = 20%) speeds up processing by randomly sampling only a subset of your images. Default is 1.0 (use all images). For reliable results, ensure your sample contains enough images to accurately represent illumination variation.
+- `IC_RANDOM_SEED`: Seed for the random image subsample used when `SAMPLE_FRACTION` < 1.0. Default is `None` (a different subsample on every run); set an integer (e.g., 0) for a reproducible illumination correction field.
     """)
     return
 
@@ -770,8 +771,9 @@ def _(mo):
 def _():
     # === OPERATOR PARAMETERS ===
     SAMPLE_FRACTION = 1.0
+    IC_RANDOM_SEED = None
     # === END OPERATOR PARAMETERS ===
-    return (SAMPLE_FRACTION,)
+    return IC_RANDOM_SEED, SAMPLE_FRACTION
 
 
 @app.cell(hide_code=True)
@@ -846,6 +848,7 @@ def _(mo):
 def _(
     CONFIG_FILE_HEADER,
     CONFIG_FILE_PATH,
+    IC_RANDOM_SEED,
     IMAGE_FORMAT,
     PHENOTYPE_CHANNEL_ORDER,
     PHENOTYPE_CHANNEL_ORDER_FLIP,
@@ -907,6 +910,7 @@ def _(
 
         # Processing parameters
         "sample_fraction": SAMPLE_FRACTION,
+        "ic_random_seed": IC_RANDOM_SEED,
 
         # OME-Zarr channels_metadata (written to plate-root zarr.json)
         "sbs_channels_metadata": SBS_CHANNELS_METADATA,
