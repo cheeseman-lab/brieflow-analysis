@@ -37,6 +37,8 @@ cellular:
     density_cells_cm2: null
   induction:
     duration: ""
+  well_annotations: null                          # per-well conditions table beside this file: plate, well, one column per variable (e.g. "well_annotations.tsv")
+  split_by: null                                  # annotation column whose values each get their own aggregation and clustering (e.g. "experiment")
 
 # =========================================================================
 # library
