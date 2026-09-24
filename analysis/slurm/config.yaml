@@ -1,0 +1,141 @@
+# BrieFlow slurm workflow profile, read by `flow.sh --backend slurm` (override the path with --slurm-profile).
+# Set slurm_partition and slurm_account for your cluster; left unset, sbatch uses the cluster default partition and snakemake guesses the account.
+# Example (Whitehead): slurm_partition: u20 and slurm_account: wibrusers.
+# Job logs go to slurm/slurm_output/rule via flow.sh --slurm-logdir; the executor rejects --output in slurm_extra.
+# flow.sh uses `jobs` below as the concurrent-job limit unless --jobs is given.
+
+default-resources:
+    # slurm_partition: <partition>
+    # slurm_account: <account>
+    mem_mb: 3000
+    tasks: 1
+    cpus_per_task: 1
+    runtime: "1d"
+jobs: 150
+
+set-resources:
+    # preprocess
+    extract_metadata_sbs:
+        mem_mb: 2000
+    combine_metadata_sbs:
+        mem_mb: 2500
+    extract_metadata_phenotype:
+        mem_mb: 2000
+    combine_metadata_phenotype:
+        mem_mb: 2500
+    convert_sbs:
+        mem_mb: 2000
+    convert_phenotype:
+        mem_mb: 2000
+    calculate_ic_sbs:
+        mem_mb: 50000
+    # IC peak memory is about n_tiles x channels x height x width x 8 bytes per well; size this to your geometry.
+    calculate_ic_phenotype:
+        mem_mb: 500000
+
+    # sbs
+    align_sbs:
+        mem_mb: 2500
+    log_filter:
+        mem_mb: 2500
+    compute_standard_deviation:
+        mem_mb: 2500
+    find_peaks:
+        mem_mb: 2000
+    max_filter:
+        mem_mb: 2000
+    apply_ic_field_sbs:
+        mem_mb: 2500
+    segment_sbs:
+        mem_mb: 3500
+        cpus_per_task: 4
+    extract_bases:
+        mem_mb: 2000
+    call_reads:
+        mem_mb: 1500
+    call_cells:
+        mem_mb: 1500
+    extract_sbs_info:
+        mem_mb: 2000
+    combine_reads:
+        mem_mb: 20000
+    combine_cells:
+        mem_mb: 20000
+    combine_sbs_info:
+        mem_mb: 20000
+    eval_segmentation_sbs:
+        mem_mb: 50000
+    eval_mapping:
+        mem_mb: 50000
+        cpus_per_task: 12
+
+    # phenotype
+    apply_ic_field_phenotype:
+        mem_mb: 2000
+    align_phenotype:
+        mem_mb: 2000
+    segment_phenotype:
+        mem_mb: 3000
+        cpus_per_task: 4
+    identify_cytoplasm:
+        mem_mb: 1000
+    extract_phenotype_info:
+        mem_mb: 1000
+    combine_phenotype_info:
+        mem_mb: 20000
+    extract_phenotype_cp:
+        mem_mb: 3000
+    merge_phenotype:
+        mem_mb: 300000
+    eval_segmentation_phenotype:
+        mem_mb: 50000
+    eval_features:
+        mem_mb: 4000
+
+    # merge
+    fast_alignment:
+        mem_mb: 20000
+        cpus_per_task: 4
+    fast_merge:
+        mem_mb: 20000
+        cpus_per_task: 4
+    format_merge:
+        mem_mb: 20000
+    eval_merge:
+        mem_mb: 20000
+    deduplicate_merge:
+        mem_mb: 20000
+        cpus_per_task: 4
+    final_merge:
+        mem_mb: 500000
+
+    # aggregate
+    split_datasets:
+        mem_mb: 200000
+    filter:
+        mem_mb: 100000
+    generate_feature_table:
+        mem_mb: 980000
+        cpus_per_task: 4
+    align:
+        mem_mb: 980000
+        cpus_per_task: 4
+    aggregate:
+        mem_mb: 980000
+        cpus_per_task: 4
+    eval_aggregate:
+        mem_mb: 980000
+        cpus_per_task: 4
+    # montages
+    generate_montage:
+        mem_mb: 10000
+    initiate_montage:
+        mem_mb: 1000
+
+    # cluster
+    clean_aggregate:
+        mem_mb: 2000
+    phate_leiden_clustering:
+        mem_mb: 10000
+    benchmark_clusters:
+        mem_mb: 10000

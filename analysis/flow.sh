@@ -18,6 +18,11 @@
 #                           with --sequential-plates / --plates)
 #   --unlock                Force unlock before running
 #   --cores N               Number of cores for local backend (default: all)
+#   --jobs N                Max concurrent jobs (default: slurm backend reads `jobs:`
+#                           from the slurm profile, local backend uses --cores)
+#   --slurm-profile DIR     Slurm workflow profile directory (default: slurm/)
+#   --arrays                Submit Slurm array jobs (default: off; see below)
+#   --no-arrays             Accepted for compatibility; arrays are already off
 #   --profile               Enable profiling mode: keep all slurm logs, generate
 #                           efficiency report, verbose job output (default: off)
 #   --forcerun rule1,rule2  Force-rerun the listed rules even if outputs are
@@ -25,6 +30,9 @@
 #                           Use after editing a rule's script so mtime caching
 #                           doesn't silently skip the change.
 #   --help, -h              Show this help message
+#
+# Slurm array jobs are off by default: with snakemake-executor-plugin-slurm 2.6.0
+# every array task after the first is reported FAILED and its outputs deleted.
 #
 # Examples:
 #   bash flow.sh preprocess --dry-run
@@ -88,11 +96,11 @@ PLATE_COUNT=""
 ONLY_PLATE=""
 FORCE_UNLOCK=false
 CORES="all"
-# --jobs (max concurrent jobs): an explicit --jobs wins; otherwise resolved from
-# CORES after arg parsing (nproc when CORES=all). Must be an integer (or `unlimited`).
+# --jobs (max concurrent jobs): an explicit --jobs wins; otherwise resolved after arg parsing
+# from the slurm profile's `jobs:` (slurm) or CORES (nproc when CORES=all). Must be an integer (or `unlimited`).
 JOBS=""
 PROFILE_MODE=false
-NO_ARRAYS=false
+USE_ARRAYS=false
 MODULES=()
 EXTRA_CONFIG=""
 # Snakemake --forcerun passthrough (HARDENING #7 layer 1): comma-separated
@@ -176,8 +184,10 @@ while [[ $# -gt 0 ]]; do
             SLURM_PROFILE="$2"; shift 2 ;;
         --slurm-array-limit)
             SLURM_ARRAY_LIMIT="$2"; shift 2 ;;
+        --arrays)
+            USE_ARRAYS=true; shift ;;
         --no-arrays)
-            NO_ARRAYS=true; shift ;;
+            USE_ARRAYS=false; shift ;;
         --latency-wait)
             LATENCY_WAIT="$2"; shift 2 ;;
         --max-status-checks)
@@ -204,6 +214,14 @@ fi
 # Resolve --jobs after parsing: an explicit --jobs wins; otherwise derive from
 # CORES (nproc when CORES=all). Keeps backend selection seamless — flow.sh emits
 # a valid --jobs for both local and slurm without needing to be hand-edited.
+# On slurm, an unset --jobs falls back to the profile's `jobs:` so the profile limit is honored.
+if [[ -z "${JOBS}" ]] && [[ "${BACKEND}" == "slurm" ]]; then
+    _profile_dir="${SLURM_PROFILE}"
+    [[ "${_profile_dir}" != /* ]] && _profile_dir="${SCRIPT_DIR}/${_profile_dir}"
+    if [[ -f "${_profile_dir%/}/config.yaml" ]]; then
+        JOBS="$(awk -F: '/^jobs:/ {gsub(/[ "\047\r]/, "", $2); print $2; exit}' "${_profile_dir%/}/config.yaml")"
+    fi
+fi
 if [[ -z "${JOBS}" ]]; then
     JOBS="$([ "${CORES}" = "all" ] && nproc || echo "${CORES}")"
 fi
@@ -292,7 +310,7 @@ build_snakemake_cmd() {
     if [[ "$BACKEND" == "slurm" ]]; then
         cmd+=" --executor slurm"
         cmd+=" --workflow-profile ${SLURM_PROFILE}"
-        if [[ "$NO_ARRAYS" != true ]]; then
+        if [[ "$USE_ARRAYS" == true ]]; then
             cmd+=" --slurm-array-jobs=all"
             cmd+=" --slurm-array-limit=${SLURM_ARRAY_LIMIT}"
         fi
