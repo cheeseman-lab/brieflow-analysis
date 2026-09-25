@@ -15,6 +15,9 @@ Brieflow is an extensible computational pipeline for high-throughput analysis of
 This repo is a Github template with the configuration notebooks/files and execution scripts for running an OPS screen analysis.
 [Brieflow](https://github.com/cheeseman-lab/brieflow) contains the source code for running an OPS screen analysis.
 
+On this `marimo` branch, each phase is configured in a [marimo](https://marimo.io) notebook (`analysis/0_preprocess.py` … `analysis/12_analyze.py`) and run with `bash analysis/flow.sh <module>`.
+See [Running a Screen](https://brieflow.readthedocs.io/en/latest/3.running_modules.html) and [Working with the Notebooks](https://brieflow.readthedocs.io/en/latest/notebook_editor_setup.html).
+
 ## Example Screen Repositories
 
 | Screen      | Repository                                             | Description                                      | Brieflow Version |
@@ -42,4 +45,4 @@ Feel free to:
 - File a [GitHub issue](https://github.com/cheeseman-lab/brieflow/issues) to share comments and issues. We aim to keep brieflow-related issues in the [main Brieflow repository](https://github.com/cheeseman-lab/brieflow/issues).
 - Clone the repository, create a new branch, and submit a [pull request](https://github.com/cheeseman-lab/brieflow-analysis/compare).
 
-Make sure to review the Brieflow [development guide](https://brieflow.readthedocs.io/en/latest/4.development.html) to understand how to best contribute!
+Make sure to review the Brieflow [development guide](https://brieflow.readthedocs.io/en/latest/5.development.html) to understand how to best contribute!
