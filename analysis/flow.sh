@@ -31,6 +31,9 @@
 #                           doesn't silently skip the change.
 #   --help, -h              Show this help message
 #
+# Options after `viz` that flow.sh does not recognize (e.g. --server.port 8502)
+# are passed to `streamlit run`.
+#
 # Slurm array jobs are off by default: with snakemake-executor-plugin-slurm 2.6.0
 # every array task after the first is reported FAILED and its outputs deleted.
 #
@@ -41,6 +44,7 @@
 #   bash flow.sh all --dry-run
 #   bash flow.sh mozzarellm --backend slurm
 #   bash flow.sh viz
+#   bash flow.sh viz --server.port 8502
 #
 # =============================================================================
 
@@ -102,6 +106,7 @@ JOBS=""
 PROFILE_MODE=false
 USE_ARRAYS=false
 MODULES=()
+VIZ_ARGS=()
 EXTRA_CONFIG=""
 # Snakemake --forcerun passthrough (HARDENING #7 layer 1): comma-separated
 # list of rules to force-rerun even if their outputs are up-to-date.
@@ -197,7 +202,14 @@ while [[ $# -gt 0 ]]; do
         --help|-h)
             show_help ;;
         -*)
-            echo "ERROR: Unknown option: $1"; exit 1 ;;
+            if [[ " ${MODULES[*]} " != *" viz "* ]]; then
+                echo "ERROR: Unknown option: $1"; exit 1
+            fi
+            # a Streamlit option for viz, with its value when given as a separate argument
+            VIZ_ARGS+=("$1"); shift
+            if [[ $# -gt 0 && "$1" != -* && ! " preprocess sbs phenotype merge aggregate cluster mozzarellm viz all " == *" $1 "* ]]; then
+                VIZ_ARGS+=("$1"); shift
+            fi ;;
         *)
             MODULES+=("$1"); shift ;;
     esac
@@ -607,7 +619,7 @@ for module in "${MODULES[@]}"; do
             run_snakemake_module "$module"
             ;;
         viz)
-            run_viz
+            run_viz "${VIZ_ARGS[@]}"
             ;;
         *)
             echo "ERROR: Unknown module: ${module}"

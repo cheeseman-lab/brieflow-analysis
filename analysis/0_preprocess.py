@@ -20,7 +20,7 @@ def _(mo):
     Cells marked with <font color='red'>SET PARAMETERS</font> contain crucial variables that need to be set according to your specific experimental setup and data organization.
     Please review and modify these variables as needed before proceeding with the analysis.
 
-    **Dual-mode**: when run interactively (`marimo edit`), edit the SET PARAMETERS cells directly. When run via the brieflow-ops wizard, the wizard reads `analysis/.brieflow/interview.json` and rewrites the literal values between the `=== OPERATOR PARAMETERS ===` markers in each parameter cell. Either way, the notebook itself is the readable record of what was set.
+    **Dual-mode**: when run interactively (`marimo edit`), edit the SET PARAMETERS cells directly. When run via brieflow-auto, the plugin reads `analysis/.brieflow/interview.json` and rewrites the literal values between the `=== OPERATOR PARAMETERS ===` markers in each parameter cell. Either way, the notebook itself is the readable record of what was set.
     """)
     return
 
