@@ -385,11 +385,9 @@ def _():
     SEED_OPTIMIZE = None          # try top-SEED_TOPK nearest tiles per seed, keep best (e.g. True)
     SEED_TOPK = None              # nearest tiles to evaluate when SEED_OPTIMIZE (e.g. 3)
     THRESHOLD_TRIANGLE = None     # triangle hash-match distance (e.g. 0.3)
-    RANSAC_RANDOM_STATE = None    # pin RANSAC for reproducibility (e.g. 0)
     # === END OPERATOR PARAMETERS ===
     return (
         LOCAL_REFINEMENT,
-        RANSAC_RANDOM_STATE,
         SEED_OPTIMIZE,
         SEED_TOPK,
         THRESHOLD_TRIANGLE,
@@ -453,7 +451,6 @@ def _(candidate_pairs):
 
 @app.cell
 def _(
-    RANSAC_RANDOM_STATE,
     ROOT_FP,
     TEST_PLATE,
     TEST_WELL,
@@ -472,7 +469,7 @@ def _(
     _sbs_info_fp = ROOT_FP / 'sbs' / 'parquets' / str(TEST_PLATE) / _row2 / _col2 / 'sbs_info.parquet'
     sbs_info_1 = pd.read_parquet(_sbs_info_fp)
     sbs_info_hash = hash_cell_locations(sbs_info_1).rename(columns={'tile': 'site'})
-    evaluate_kwargs = drop_none(threshold_triangle=THRESHOLD_TRIANGLE, ransac_kwargs=drop_none(random_state=RANSAC_RANDOM_STATE) or None)
+    evaluate_kwargs = drop_none(threshold_triangle=THRESHOLD_TRIANGLE)
     initial_alignment_df = initial_alignment(phenotype_info_hash, sbs_info_hash, initial_sites=candidate_pairs, evaluate_kwargs=evaluate_kwargs)
     initial_alignment_df
     return initial_alignment_df, phenotype_info_1, sbs_info_1
@@ -822,7 +819,6 @@ def _(
     PHENOTYPE_PIXEL_SIZE_1,
     PHENO_DEDUP_PRIOR,
     PH_METADATA_CHANNEL,
-    RANSAC_RANDOM_STATE,
     ROT90,
     SBS_DEDUP_PRIOR,
     SBS_DIMENSIONS,
@@ -853,7 +849,7 @@ def _(
     else:
         config['merge'].update({'initial_sites': INITIAL_SITES, 'det_range': DET_RANGE})
         print(f'Config will use initial_sites: {len(INITIAL_SITES)} pairs')
-    config['merge'].update(drop_none(seed_optimize=SEED_OPTIMIZE, seed_topk=SEED_TOPK, local_refinement=LOCAL_REFINEMENT, warp_smoothing=WARP_SMOOTHING, warp_degree=WARP_DEGREE, warp_iterations=WARP_ITERATIONS, threshold_triangle=THRESHOLD_TRIANGLE, ransac_random_state=RANSAC_RANDOM_STATE))
+    config['merge'].update(drop_none(seed_optimize=SEED_OPTIMIZE, seed_topk=SEED_TOPK, local_refinement=LOCAL_REFINEMENT, warp_smoothing=WARP_SMOOTHING, warp_degree=WARP_DEGREE, warp_iterations=WARP_ITERATIONS, threshold_triangle=THRESHOLD_TRIANGLE))
     safe_config = convert_tuples_to_lists(config)
     with open(CONFIG_FILE_PATH, 'w') as _config_file:
         _config_file.write(CONFIG_FILE_HEADER)
