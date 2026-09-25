@@ -220,9 +220,9 @@ def _(mo):
       - `WINDOW`: A centered subset of data is used for alignment if greater than one. Defaults to `2`
           - Higher values use more of the image for alignment registration.
           - Set to `1` to use the full image.
-      - `SKIP_CYCLES`: Optional. List of cycle indices to skip during alignment. Defaults to `None`
+      - `SKIP_CYCLES`: Optional. List of cycle numbers (values of the `cycle` column, as listed in `SBS_CYCLES`) to skip during alignment. Defaults to `None`
           - Use this to exclude problematic cycles that would interfere with alignment
-          - Example: `[1]` to skip the first cycle, `[1, 6]` to skip cycles 1 and 6
+          - Example: `[1]` to skip cycle 1, `[1, 6]` to skip cycles 1 and 6
           - Skipped cycles are completely removed from processing and will not appear in final results
       - `MANUAL_BACKGROUND_CYCLE`: Optional. Specific cycle to use as the source for segmentation background channels. Defaults to `None`
           - Use this when you have segmentation channels (e.g., DAPI, Vimentin) in a specific cycle that you want propagated to all cycles
@@ -855,8 +855,18 @@ def _(CYTO_INDEX, DAPI_INDEX, corrected_image):
         NUCLEUS_AREA = (45, 450)
     # === END OPERATOR PARAMETERS ===
 
-    # Estimate diameters (derivation; non-CPSAM cellpose only)
-    if SEGMENTATION_METHOD == "cellpose" and CELLPOSE_MODEL != "cpsam":
+    # Cellpose 4.x, cpsam and custom model paths have no size model: derive diameters from the masks
+    from lib.shared.segment_cellpose import CELLPOSE_4X as _CELLPOSE_4X
+
+    diameters_from_masks = SEGMENTATION_METHOD == "cellpose" and (
+        _CELLPOSE_4X
+        or CELLPOSE_MODEL == "cpsam"
+        or "/" in CELLPOSE_MODEL
+        or "\\" in CELLPOSE_MODEL
+    )
+
+    # Estimate diameters (derivation; cellpose with a size model only)
+    if SEGMENTATION_METHOD == "cellpose" and not diameters_from_masks:
         from lib.shared.segment_cellpose import estimate_diameters
 
         print("Estimating optimal cell and nuclei diameters...")
@@ -867,10 +877,9 @@ def _(CYTO_INDEX, DAPI_INDEX, corrected_image):
             cellpose_model=CELLPOSE_MODEL,
         )
     else:
-        # CPSAM cellpose / stardist / watershed: diameter inputs not pre-estimated.
-        # CPSAM derives final diameters downstream from regionprops; stardist/watershed don't use these.
+        # Not pre-estimated: cellpose derives them from the masks downstream, stardist/watershed don't use them
         print(
-            "Diameter inputs set to None (derived downstream for CPSAM, unused for stardist/watershed)."
+            "Diameter inputs set to None (derived downstream from masks for cellpose, unused for stardist/watershed)."
         )
         NUCLEI_DIAMETER_INPUT = None
         CELL_DIAMETER_INPUT = None
@@ -895,6 +904,7 @@ def _(CYTO_INDEX, DAPI_INDEX, corrected_image):
         STARDIST_MODEL,
         THRESHOLD_CELL,
         THRESHOLD_DAPI,
+        diameters_from_masks,
     )
 
 
@@ -926,6 +936,7 @@ def _(
     cellpose_rgb,
     corrected_image,
     create_micropanel,
+    diameters_from_masks,
     image_segmentation_annotations,
     np,
     plt,
@@ -1026,10 +1037,8 @@ def _(
         annotated_microimage, num_cols=1, figscaling=10, add_channel_label=False
     )
     plt.show()
-    # Final diameters that go to config.yml. For CPSAM, derive from segmented
-    # objects (regionprops); for non-CPSAM cellpose, pass through the pre-seg
-    # estimate; for stardist/watershed, None (unused by those methods).
-    if SEGMENTATION_METHOD == "cellpose" and CELLPOSE_MODEL == "cpsam":
+    # Final diameters for config.yml: from the masks without a size model, else the pre-seg estimate (None for stardist/watershed)
+    if diameters_from_masks:
         from skimage.measure import regionprops
 
         nuclei_props = regionprops(nuclei)
@@ -1039,11 +1048,9 @@ def _(
         cells_diameters = [prop.equivalent_diameter for prop in cells_props]
         CELL_DIAMETER = float(np.mean(cells_diameters))
         print(
-            f"CPSAM derived diameters from segmentation: NUCLEI_DIAMETER={NUCLEI_DIAMETER:.2f} px, CELL_DIAMETER={CELL_DIAMETER:.2f} px"
+            f"Derived diameters from segmentation: NUCLEI_DIAMETER={NUCLEI_DIAMETER:.2f} px, CELL_DIAMETER={CELL_DIAMETER:.2f} px"
         )
     else:
-        # Non-CPSAM cellpose / stardist / watershed: pass through the input
-        # (None for stardist/watershed; the estimate_diameters output for non-CPSAM cellpose).
         NUCLEI_DIAMETER = NUCLEI_DIAMETER_INPUT
         CELL_DIAMETER = CELL_DIAMETER_INPUT
     return CELL_DIAMETER, NUCLEI_DIAMETER, cells, nuclei
@@ -1884,6 +1891,7 @@ def _(
     PEAK_WIDTH,
     SEGMENTATION_METHOD,
     CELLPOSE_MODEL,
+    diameters_from_masks,
 ):
     # === TUNED EXPORT ===
     # Writes derivation-cell outputs the wizard's confirm_tuned_loop reads
@@ -1895,7 +1903,7 @@ def _(
     if SEGMENTATION_METHOD == "cellpose" and NUCLEI_DIAMETER is not None:
         _src = (
             "regionprops on segmented objects"
-            if CELLPOSE_MODEL == "cpsam"
+            if diameters_from_masks
             else f"estimate_diameters ({CELLPOSE_MODEL})"
         )
         _t["NUCLEI_DIAMETER"] = {"derived": float(NUCLEI_DIAMETER), "src": _src}

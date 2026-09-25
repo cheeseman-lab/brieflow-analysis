@@ -145,14 +145,18 @@ def _(mo):
     5. **Aggregation**: Perturbation coverage and cell counts per class
     6. **Clustering**: Pathway enrichment metrics (CORUM, KEGG, STRING)
 
+    The report is also written to `<root_fp>/<screen>_stats.txt` (the screen name from `screen.yaml`), which the visualizer's Pipeline Stats page reads.
+
     To include batch effect metrics (slower), use: `get_all_stats(config, include_batch_effects=True)`
     """)
     return
 
 
 @app.cell
-def _(config, get_all_stats):
-    statistics = get_all_stats(config)
+def _(MOZZARELLM_SCREEN_NAME, ROOT_FP, config, get_all_stats):
+    statistics = get_all_stats(
+        config, output_fp=ROOT_FP / f"{MOZZARELLM_SCREEN_NAME}_stats.txt"
+    )
     return (statistics,)
 
 
@@ -808,10 +812,10 @@ def _(mo):
 
     ### Prerequisites
 
-    Install the mozzarellm extra in your Brieflow environment:
+    Install the mozzarellm extra in your Brieflow environment, from the `brieflow/` submodule:
 
     ```bash
-    python -m pip install -e "../brieflow[mozzarellm]"
+    uv pip install -e ".[mozzarellm]"
     ```
 
     Set up the API key for your model's provider in a `.env` file in the analysis directory:
@@ -967,7 +971,7 @@ def _():
         write_screen_contexts = None
         mozzarellm_import_error = _err
         print(f"mozzarellm support not available: {_err}")
-        print('Install it with: python -m pip install -e "../brieflow[mozzarellm]"')
+        print('Install it from the brieflow/ submodule with: uv pip install -e ".[mozzarellm]"')
     return (
         PROVIDER_KEY_ENV,
         cluster_table_from_h5ad,
