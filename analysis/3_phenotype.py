@@ -414,8 +414,12 @@ def _(CHANNEL_NAMES, aligned_image):
     DAPI_INDEX = CHANNEL_NAMES.index("DAPI")
     CYTO_INDEX = CHANNEL_NAMES.index(CYTO_CHANNEL)
 
-    # Estimate diameters (derivation; non-CPSAM cellpose only)
-    if SEGMENTATION_METHOD == "cellpose" and CELLPOSE_MODEL != "cpsam":
+    # Cellpose 4.x, cpsam and custom model paths have no size model: derive diameters from the masks
+    from lib.shared.segment_cellpose import CELLPOSE_4X as _CELLPOSE_4X
+    diameters_from_masks = SEGMENTATION_METHOD == "cellpose" and (_CELLPOSE_4X or CELLPOSE_MODEL == "cpsam" or "/" in CELLPOSE_MODEL or "\\" in CELLPOSE_MODEL)
+
+    # Estimate diameters (derivation; cellpose with a size model only)
+    if SEGMENTATION_METHOD == "cellpose" and not diameters_from_masks:
         from lib.shared.segment_cellpose import estimate_diameters
         print("Estimating optimal cell and nuclei diameters...")
         NUCLEI_DIAMETER_INPUT, CELL_DIAMETER_INPUT = estimate_diameters(
@@ -425,9 +429,8 @@ def _(CHANNEL_NAMES, aligned_image):
             cellpose_model=CELLPOSE_MODEL,
         )
     else:
-        # CPSAM cellpose / stardist: diameter inputs not pre-estimated.
-        # CPSAM derives downstream from regionprops; stardist doesn't use these.
-        print("Diameter inputs set to None (derived downstream for CPSAM, unused for stardist).")
+        # Not pre-estimated: cellpose derives them from the masks downstream, stardist doesn't use them
+        print("Diameter inputs set to None (derived downstream from masks for cellpose, unused for stardist).")
         NUCLEI_DIAMETER_INPUT = None
         CELL_DIAMETER_INPUT = None
     return (
@@ -451,6 +454,7 @@ def _(CHANNEL_NAMES, aligned_image):
         SEGMENTATION_METHOD,
         SEGMENT_CELLS,
         STARDIST_MODEL,
+        diameters_from_masks,
     )
 
 
@@ -479,6 +483,7 @@ def _(
     STARDIST_MODEL,
     aligned_image,
     create_micropanel,
+    diameters_from_masks,
     identify_cytoplasm_cellpose,
     image_segmentation_annotations,
     np,
@@ -522,20 +527,18 @@ def _(
     else:
         print('Skipping cell/cytoplasm visualization (SEGMENT_CELLS=False)')
         cytoplasms = None
-    # Final diameters that go to config.yml. For CPSAM, derive from segmented
-    # objects (regionprops); for non-CPSAM cellpose, pass through the pre-seg
-    # estimate; for stardist, None (unused by that method).
-    if SEGMENTATION_METHOD == 'cellpose' and CELLPOSE_MODEL == 'cpsam':
+    # Final diameters for config.yml: from the masks without a size model, else the pre-seg estimate (None for stardist)
+    if diameters_from_masks:
         from skimage.measure import regionprops
         nuclei_props = regionprops(nuclei)
         nuclei_diameters = [prop.equivalent_diameter for prop in nuclei_props]
         NUCLEI_DIAMETER = float(np.mean(nuclei_diameters))
-        print(f'CPSAM derived NUCLEI_DIAMETER from segmentation: {NUCLEI_DIAMETER:.2f} px')
+        print(f'Derived NUCLEI_DIAMETER from segmentation: {NUCLEI_DIAMETER:.2f} px')
         if SEGMENT_CELLS:
             cells_props = regionprops(cells)
             cells_diameters = [prop.equivalent_diameter for prop in cells_props]
             CELL_DIAMETER = float(np.mean(cells_diameters))
-            print(f'CPSAM derived CELL_DIAMETER from segmentation: {CELL_DIAMETER:.2f} px')
+            print(f'Derived CELL_DIAMETER from segmentation: {CELL_DIAMETER:.2f} px')
         else:
             CELL_DIAMETER = None
     else:
@@ -1134,6 +1137,7 @@ def _(
     CELL_DIAMETER,
     SEGMENTATION_METHOD,
     CELLPOSE_MODEL,
+    diameters_from_masks,
 ):
     # === TUNED EXPORT ===
     # Writes derivation-cell outputs the wizard's confirm_tuned_loop reads
@@ -1142,7 +1146,7 @@ def _(
     from pathlib import Path as _Pe
     _t = {}
     if SEGMENTATION_METHOD == 'cellpose':
-        _src = "regionprops on segmented objects" if CELLPOSE_MODEL == 'cpsam' else f"estimate_diameters ({CELLPOSE_MODEL})"
+        _src = "regionprops on segmented objects" if diameters_from_masks else f"estimate_diameters ({CELLPOSE_MODEL})"
         _t["NUCLEI_DIAMETER"] = {"derived": float(NUCLEI_DIAMETER), "src": _src}
         if CELL_DIAMETER is not None:
             _t["CELL_DIAMETER"] = {"derived": float(CELL_DIAMETER), "src": _src}
