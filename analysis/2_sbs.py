@@ -422,8 +422,8 @@ def _(mo):
 
     The alignment step above prints `Alignment QC` with a per-cycle table of shifts (dy, dx in pixels) and a warning naming every cycle or channel shifted by 1 pixel or more. Cycles are numbered by acquisition order (1 = first cycle in `SBS_CYCLES`). The overlays below show the same check: the reference is magenta, the image being checked is green, and the two are added. Aligned images look white or grey; a misaligned image shows every object twice, magenta and green, offset by the shift.
 
-    - **Between cycles**: one panel per cycle, its DAPI (green) on the first cycle's DAPI (magenta). A single doubled panel means that one cycle is off; it can be dropped with `SKIP_CYCLES` if mapping holds up without it.
-    - **Within cycles**: one row per cycle and one column per base channel, the channel's spots (green) on the spots of the other cycles (magenta). Spots of other sequences stay magenta, so look for green spots beside a magenta partner. The panel title gives the measured shift, or `n/a` when the channel shares too few spots to measure one.
+    - **Between cycles**: one panel per cycle, its DAPI (green) on the first cycle's DAPI (magenta), titled with the cycle's measured shift and its colored fraction (the share of signal pixels that are magenta or green rather than white). A single doubled panel means that one cycle is off; it can be dropped with `SKIP_CYCLES` if mapping holds up without it.
+    - **Within cycles**: one row per cycle and one column per base channel, the channel's spots (green) on the spots of the other cycles (magenta). Spots of other sequences stay magenta, so look for green spots beside a magenta partner. The panel title gives the measured shift, or `n/a` when the channel shares too few spots to measure one, and the share of the channel's spot pixels with no magenta partner.
     """)
     return
 

@@ -70,7 +70,12 @@ def _():
     )
     from lib.shared.file_utils import get_filename, get_hcs_nested_path, split_well
     from lib.shared.illumination_correction import apply_ic_field
-    from lib.phenotype.align_channels import align_phenotype_channels, visualize_phenotype_alignment
+    from lib.phenotype.align_channels import (
+        align_phenotype_channels,
+        plot_phenotype_alignment_overlay,
+        plot_phenotype_channel_overlay,
+        visualize_phenotype_alignment,
+    )
     from lib.shared.align import apply_custom_offsets
     from lib.phenotype.identify_cytoplasm_cellpose import (
         identify_cytoplasm_cellpose,
@@ -95,6 +100,8 @@ def _():
         image_segmentation_annotations,
         load_custom_features,
         np,
+        plot_phenotype_alignment_overlay,
+        plot_phenotype_channel_overlay,
         plt,
         random_cmap,
         read_image,
@@ -314,6 +321,70 @@ def _(
                 CHANNEL_NAMES.pop(remove_index)
                 CHANNEL_CMAPS.pop(remove_index)
     return (aligned_image,)
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ### Check Alignment
+
+    With `ALIGN` set, the source channel (green) is overlaid on the target channel (magenta) before and after alignment, each stretched by its own percentiles and added together. Before alignment a shifted source shows every object twice; after alignment the overlay should be white or grey. The titles give the measured shift and the remaining shift (dy, dx in pixels) and the fraction of signal pixels that are colored rather than white; riders move with the source.
+
+    Without `ALIGN`, a sanity view shows DAPI (magenta) against the cell-boundary channel `CYTO_CHANNEL` (green) once that is set below: the stains differ, so check that nuclei sit inside their cells rather than for white.
+    """)
+    return
+
+
+@app.cell
+def _(
+    ALIGN,
+    CUSTOM_CHANNEL_OFFSETS,
+    CUSTOM_CHANNEL_OFFSETS_INDEXED,
+    RIDERS,
+    RIDER_INDEXES,
+    SOURCE,
+    SOURCE_INDEX,
+    TARGET,
+    TARGET_INDEX,
+    UPSAMPLE_FACTOR,
+    WINDOW,
+    apply_custom_offsets,
+    corrected_image,
+    plot_phenotype_alignment_overlay,
+    plt,
+):
+    if ALIGN:
+        _image = corrected_image
+        if CUSTOM_CHANNEL_OFFSETS:
+            _image = apply_custom_offsets(_image, offsets_dict=CUSTOM_CHANNEL_OFFSETS_INDEXED)
+        _names = {TARGET_INDEX: TARGET, SOURCE_INDEX: SOURCE, **dict(zip(RIDER_INDEXES, RIDERS or []))}
+        plot_phenotype_alignment_overlay(
+            _image,
+            TARGET_INDEX,
+            SOURCE_INDEX,
+            _names,
+            riders=RIDER_INDEXES,
+            window=WINDOW,
+            upsample_factor=UPSAMPLE_FACTOR,
+        )
+        plt.show()
+    return
+
+
+@app.cell
+def _(
+    ALIGN,
+    CHANNEL_NAMES,
+    CYTO_INDEX,
+    DAPI_INDEX,
+    aligned_image,
+    plot_phenotype_channel_overlay,
+    plt,
+):
+    if not ALIGN:
+        plot_phenotype_channel_overlay(aligned_image, DAPI_INDEX, CYTO_INDEX, CHANNEL_NAMES)
+        plt.show()
+    return
 
 
 @app.cell(hide_code=True)
