@@ -72,7 +72,12 @@ def _():
         convert_tuples_to_lists,
     )
     from lib.shared.file_utils import get_filename, get_hcs_nested_path, split_well
-    from lib.sbs.align_cycles import align_cycles, visualize_sbs_alignment
+    from lib.sbs.align_cycles import (
+        align_cycles,
+        plot_channel_alignment_overlay,
+        plot_cycle_alignment_overlay,
+        visualize_sbs_alignment,
+    )
     from lib.shared.log_filter import log_filter
     from lib.sbs.compute_standard_deviation import compute_standard_deviation
     from lib.sbs.max_filter import max_filter
@@ -131,7 +136,9 @@ def _():
         plot_barcode_prefix_matching,
         plot_cell_mapping_heatmap,
         plot_cell_metric_histogram,
+        plot_channel_alignment_overlay,
         plot_channels_with_peaks,
+        plot_cycle_alignment_overlay,
         plot_gene_symbol_histogram,
         plot_mapping_vs_threshold,
         plot_normalization_comparison,
@@ -406,6 +413,55 @@ def _(
         aligned,
         config,
     )
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ### Check Alignment
+
+    The alignment step above prints `Alignment QC` with a per-cycle table of shifts (dy, dx in pixels) and a warning naming every cycle or channel shifted by 1 pixel or more. Cycles are numbered by acquisition order (1 = first cycle in `SBS_CYCLES`). The overlays below show the same check: the reference is magenta, the image being checked is green, and the two are added. Aligned images look white or grey; a misaligned image shows every object twice, magenta and green, offset by the shift.
+
+    - **Between cycles**: one panel per cycle, its DAPI (green) on the first cycle's DAPI (magenta). A single doubled panel means that one cycle is off; it can be dropped with `SKIP_CYCLES` if mapping holds up without it.
+    - **Within cycles**: one row per cycle and one column per base channel, the channel's spots (green) on the spots of the other cycles (magenta). Spots of other sequences stay magenta, so look for green spots beside a magenta partner. The panel title gives the measured shift, or `n/a` when the channel shares too few spots to measure one.
+    """)
+    return
+
+
+@app.cell
+def _(
+    CHANNEL_NAMES,
+    SBS_CYCLES,
+    SKIP_CYCLES,
+    aligned,
+    plot_cycle_alignment_overlay,
+    plt,
+):
+    _kept_cycles = [i + 1 for i, c in enumerate(SBS_CYCLES) if c not in (SKIP_CYCLES or [])]
+    plot_cycle_alignment_overlay(aligned, CHANNEL_NAMES, cycle_labels=_kept_cycles)
+    plt.show()
+    return
+
+
+@app.cell
+def _(
+    CHANNEL_NAMES,
+    SBS_CYCLES,
+    SKIP_CYCLES,
+    UPSAMPLE_FACTOR,
+    aligned,
+    plot_channel_alignment_overlay,
+    plt,
+):
+    _kept_cycles = [i + 1 for i, c in enumerate(SBS_CYCLES) if c not in (SKIP_CYCLES or [])]
+    plot_channel_alignment_overlay(
+        aligned,
+        CHANNEL_NAMES,
+        cycle_labels=_kept_cycles,
+        upsample_factor=UPSAMPLE_FACTOR,
+    )
+    plt.show()
+    return
 
 
 @app.cell(hide_code=True)
