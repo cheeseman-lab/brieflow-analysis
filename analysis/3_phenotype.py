@@ -328,9 +328,9 @@ def _(mo):
     mo.md(r"""
     ### Check Alignment
 
-    With `ALIGN` set, the source channel (green) is overlaid on the target channel (magenta) before and after alignment, each stretched by its own percentiles and added together. Before alignment a shifted source shows every object twice; after alignment the overlay should be white or grey. The titles give the measured shift and the remaining shift (dy, dx in pixels) and the fraction of signal pixels that are colored rather than white; riders move with the source.
+    With `ALIGN` set: `SOURCE` (green) on `TARGET` (magenta), before and after alignment, with the measured shift in the titles. After alignment it should look white or grey; doubled magenta and green objects mean a shift.
 
-    Without `ALIGN`, a sanity view shows DAPI (magenta) against the cell-boundary channel `CYTO_CHANNEL` (green) once that is set below: the stains differ, so check that nuclei sit inside their cells rather than for white.
+    Without `ALIGN`: DAPI (magenta) on `CYTO_CHANNEL` (green), shown once `CYTO_CHANNEL` is set below. Check that nuclei sit inside their cells.
     """)
     return
 

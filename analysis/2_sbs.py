@@ -326,6 +326,7 @@ def _(
     SKIP_CYCLES_INDICES = (
         [SBS_CYCLES.index(c) for c in SKIP_CYCLES] if SKIP_CYCLES is not None else None
     )
+    kept_cycle_numbers = [i + 1 for i, c in enumerate(SBS_CYCLES) if c not in (SKIP_CYCLES or [])]
     # Define cycles for testing if not None
     MANUAL_BACKGROUND_CYCLE_INDEX = (
         SBS_CYCLES.index(MANUAL_BACKGROUND_CYCLE)
@@ -412,6 +413,7 @@ def _(
         SKIP_CYCLES_INDICES,
         aligned,
         config,
+        kept_cycle_numbers,
     )
 
 
@@ -420,10 +422,10 @@ def _(mo):
     mo.md(r"""
     ### Check Alignment
 
-    The alignment step above prints `Alignment QC` with a per-cycle table of shifts (dy, dx in pixels) and a warning naming every cycle or channel shifted by 1 pixel or more. Cycles are numbered by acquisition order (1 = first cycle in `SBS_CYCLES`). The overlays below show the same check: the reference is magenta, the image being checked is green, and the two are added. Aligned images look white or grey; a misaligned image shows every object twice, magenta and green, offset by the shift.
+    The reference is magenta and the image being checked is green. Aligned looks white or grey; misaligned shows every object twice, magenta and green. The alignment step above prints each cycle's and channel's shift (dy, dx in pixels) and warns about any that are 1 pixel or more off; the panel titles show the same shifts.
 
-    - **Between cycles**: one panel per cycle, its DAPI (green) on the first cycle's DAPI (magenta), titled with the cycle's measured shift and its colored fraction (the share of signal pixels that are magenta or green rather than white). A single doubled panel means that one cycle is off; it can be dropped with `SKIP_CYCLES` if mapping holds up without it.
-    - **Within cycles**: one row per cycle and one column per base channel, the channel's spots (green) on the spots of the other cycles (magenta). Spots of other sequences stay magenta, so look for green spots beside a magenta partner. The panel title gives the measured shift, or `n/a` when the channel shares too few spots to measure one, and the share of the channel's spot pixels with no magenta partner.
+    - **Between cycles**: each cycle's DAPI on the first cycle's DAPI. One doubled panel means one cycle is off; try leaving it out with `SKIP_CYCLES`.
+    - **Within cycles**: each base channel's spots on the spots of the other cycles. Other sequences' spots stay magenta; look for green spots beside a magenta partner.
     """)
     return
 
@@ -431,14 +433,12 @@ def _(mo):
 @app.cell
 def _(
     CHANNEL_NAMES,
-    SBS_CYCLES,
-    SKIP_CYCLES,
     aligned,
+    kept_cycle_numbers,
     plot_cycle_alignment_overlay,
     plt,
 ):
-    _kept_cycles = [i + 1 for i, c in enumerate(SBS_CYCLES) if c not in (SKIP_CYCLES or [])]
-    plot_cycle_alignment_overlay(aligned, CHANNEL_NAMES, cycle_labels=_kept_cycles)
+    plot_cycle_alignment_overlay(aligned, CHANNEL_NAMES, cycle_labels=kept_cycle_numbers)
     plt.show()
     return
 
@@ -446,18 +446,16 @@ def _(
 @app.cell
 def _(
     CHANNEL_NAMES,
-    SBS_CYCLES,
-    SKIP_CYCLES,
     UPSAMPLE_FACTOR,
     aligned,
+    kept_cycle_numbers,
     plot_channel_alignment_overlay,
     plt,
 ):
-    _kept_cycles = [i + 1 for i, c in enumerate(SBS_CYCLES) if c not in (SKIP_CYCLES or [])]
     plot_channel_alignment_overlay(
         aligned,
         CHANNEL_NAMES,
-        cycle_labels=_kept_cycles,
+        cycle_labels=kept_cycle_numbers,
         upsample_factor=UPSAMPLE_FACTOR,
     )
     plt.show()

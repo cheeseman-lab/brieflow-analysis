@@ -620,7 +620,7 @@ def _(mo):
     mo.md(r"""
     ### Check the merge alignment on the images
 
-    For each tile-site pair above, the phenotype DAPI image is mapped into SBS pixel space with the same affine model and overlaid on the SBS DAPI image: SBS in magenta, phenotype in green. Aligned nuclei look white or grey (the two scopes differ in resolution and staining, so some nuclei stay tinted); a wrong or loose alignment shows every nucleus twice, magenta and green. The zoom's title gives the residual shift (dy, dx in SBS pixels) of the mapped phenotype image. The aligned images are used, or the illumination-corrected ones when the aligned images were not kept.
+    For each tile-site pair above: SBS DAPI (magenta) and phenotype DAPI mapped onto it (green). Aligned nuclei look white or grey; a wrong alignment shows every nucleus twice. The zoom's title gives the remaining shift in SBS pixels.
     """)
     return
 
