@@ -403,6 +403,7 @@ def _():
 
 @app.cell
 def _(
+    POSITIONS,
     SEED_OPTIMIZE,
     SEED_TOPK,
     find_closest_tiles,
@@ -414,7 +415,10 @@ def _(
     INITIAL_SBS_TILES = None           # auto: list of SBS tile indices distributed across the well
     INITIAL_SITES = None               # manual: list of [phenotype_tile, sbs_tile] pairs
     # === END OPERATOR PARAMETERS ===
-    if INITIAL_SITES_APPROACH == 'auto':
+    if POSITIONS:
+        candidate_pairs = []
+        print('Positions approach: no initial sites needed')
+    elif INITIAL_SITES_APPROACH == 'auto':
     # Option 2: Manual - specify explicit [phenotype_tile, sbs_tile] pairs
     # Only used if INITIAL_SITES_APPROACH = "manual"
         candidate_pairs = []  # Set to list of pairs if using manual approach
@@ -464,8 +468,10 @@ def _(
     get_filename,
     hash_cell_locations,
     initial_alignment,
+    mo,
     pd,
 ):
+    mo.stop(not candidate_pairs, mo.md("No initial sites to test (positions approach)."))
     _row2, _col2 = split_well(TEST_WELL)
     _phenotype_info_fp = ROOT_FP / 'phenotype' / 'parquets' / str(TEST_PLATE) / _row2 / _col2 / 'phenotype_info.parquet'
     phenotype_info_1 = pd.read_parquet(_phenotype_info_fp)
@@ -676,7 +682,7 @@ def _(mo):
 
     `FLIPLR`: Flip images left-to-right (horizontal flip). Defaults `False`.
 
-    `ROT90`: Number of 90° rotations to apply to the image. For example, ROT90_K = 1 rotates the image 90° clockwise, ROT90_K = 2 rotates 180°, and so on.
+    `ROT90`: Number of 90° counterclockwise rotations to apply to the image (as `numpy.rot90`). For example, `ROT90 = 1` rotates the image 90° counterclockwise, `ROT90 = 2` rotates 180°, and so on.
 
     `NUM_TILES_PHENO` & `NUM_TILES_SBS`: For testing purposes, number of tiles to display. Higher numbers may increase processing time but allow a larger view of the well.
 
@@ -697,6 +703,85 @@ def _():
     STITCHED_IMAGE = False
     # === END OPERATOR PARAMETERS ===
     return FLIPLR, FLIPUD, MASK_TYPE, ROT90, STITCH, STITCHED_IMAGE
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## <font color='red'>SET PARAMETERS (OPTIONAL): POSITIONS APPROACH</font>
+
+    `POSITIONS`: Whether to merge using the positions approach. It places every cell from its tile's stage position and its centroid, fits each microscope's camera scale, rotation and lens distortion plus one phenotype-to-SBS offset from all cells of the well, corrects each tile's stage position, and matches cells one-to-one within `THRESHOLD`. It needs no initial sites and no stitched images, and it also works at high phenotype magnification with few cells per tile. Set at most one of `STITCH` and `POSITIONS`.
+
+    The positions approach reads the tile orientation from `FLIPUD`, `FLIPLR` and `ROT90` above. The preview below runs it on `TEST_WELL` and shows:
+    - the QC table, including the seam agreement of every orientation (a warning names the best one when the configured orientation looks wrong) and the match rate;
+    - tile seams of each modality (tile A magenta, tile B green) and phenotype DAPI mapped into SBS tiles (SBS magenta, phenotype green), with the measured residual shift; white means aligned;
+    - a downsampled nuclei mosaic of the well per modality, tiles alternating magenta and green.
+    """)
+    return
+
+
+@app.cell
+def _():
+    # === OPERATOR PARAMETERS (POSITIONS APPROACH — optional) ===
+    POSITIONS = False
+    # === END OPERATOR PARAMETERS ===
+    return (POSITIONS,)
+
+
+@app.cell
+def _(
+    ALIGNMENT_FLIP_X,
+    ALIGNMENT_FLIP_Y,
+    ALIGNMENT_ROTATE_90,
+    FLIPLR,
+    FLIPUD,
+    METADATA_ALIGN,
+    PHENOTYPE_DIMENSIONS,
+    POSITIONS,
+    ROOT_FP,
+    ROT90,
+    SBS_DIMENSIONS,
+    TEST_PLATE,
+    TEST_WELL,
+    THRESHOLD,
+    align_metadata,
+    config,
+    mo,
+    pd,
+    ph_test_metadata,
+    sbs_test_metadata,
+):
+    mo.stop(not POSITIONS)
+    from lib.merge.positions_merge import positions_merge as _positions_merge
+    from lib.merge.positions_overlay import positions_image_qc as _image_qc
+    from lib.merge.positions_overlay import tile_image_paths as _tile_paths
+    from lib.shared.file_utils import get_image_output_path as _image_path
+    from lib.shared.file_utils import split_well as _split_well
+
+    _row, _col = _split_well(TEST_WELL)
+    _ph_info = pd.read_parquet(ROOT_FP / 'phenotype' / 'parquets' / str(TEST_PLATE) / _row / _col / 'phenotype_info.parquet')
+    _sbs_info = pd.read_parquet(ROOT_FP / 'sbs' / 'parquets' / str(TEST_PLATE) / _row / _col / 'sbs_info.parquet')
+    _ph_meta, _sbs_meta = ph_test_metadata, sbs_test_metadata
+    if METADATA_ALIGN or ALIGNMENT_FLIP_X or ALIGNMENT_FLIP_Y or ALIGNMENT_ROTATE_90:
+        _ph_meta, _sbs_meta, _ = align_metadata(_ph_meta, _sbs_meta, flip_x=ALIGNMENT_FLIP_X, flip_y=ALIGNMENT_FLIP_Y, rotate_90=ALIGNMENT_ROTATE_90)
+    _merged, positions_qc, _placement = _positions_merge(
+        _ph_info, _sbs_info, _ph_meta, _sbs_meta, PHENOTYPE_DIMENSIONS, SBS_DIMENSIONS,
+        threshold=THRESHOLD, flipud=FLIPUD, fliplr=FLIPLR, rot90=ROT90,
+    )
+    print(positions_qc.T.to_string(header=False))
+    mo.stop(_placement is None, mo.md("Too few cells in the test well for a positions merge."))
+    _fmt = config['all'].get('image_format', 'tiff')
+    _tile = {'plate': '{plate}', 'well': '{well}', 'tile': '{tile}'}
+    _paths = {}
+    for _kind, _name, _subdir in (('labels', 'nuclei', 'labels'), ('images', 'aligned', None)):
+        _paths[_kind] = {
+            _mod: _tile_paths(ROOT_FP / _mod / _image_path(_tile, _name, _fmt, subdirectory=_subdir), _placement[_mod]['tiles'].index, TEST_PLATE, TEST_WELL)
+            for _mod in ('phenotype', 'sbs')
+        }
+    _dapi = {_mod: config.get(_mod, {}).get('dapi_index') or 0 for _mod in ('phenotype', 'sbs')}
+    _records, _figures = _image_qc(_placement, _paths['labels'], _paths['images'], _dapi, {'phenotype': _ph_info['tile'].value_counts(), 'sbs': _sbs_info['tile'].value_counts()})
+    mo.vstack([_records] + [mo.as_html(_fig) for _fig in _figures.values() if _fig is not None])
+    return (positions_qc,)
 
 
 @app.cell
@@ -862,6 +947,7 @@ def _(
     PHENOTYPE_PIXEL_SIZE_1,
     PHENO_DEDUP_PRIOR,
     PH_METADATA_CHANNEL,
+    POSITIONS,
     ROT90,
     SBS_DEDUP_PRIOR,
     SBS_DIMENSIONS,
@@ -883,9 +969,13 @@ def _(
     drop_none,
     yaml,
 ):
-    config['merge'] = {'approach': 'stitch' if STITCH else 'fast', 'merge_combo_fp': MERGE_COMBO_DF_FP, 'phenotype_dimensions': PHENOTYPE_DIMENSIONS, 'sbs_dimensions': SBS_DIMENSIONS, 'sbs_metadata_cycle': SBS_METADATA_CYCLE, 'score': SCORE, 'threshold': THRESHOLD, 'sbs_metadata_channel': SBS_METADATA_CHANNEL, 'ph_metadata_channel': PH_METADATA_CHANNEL, 'metadata_align': METADATA_ALIGN, 'alignment_flip_x': ALIGNMENT_FLIP_X, 'alignment_flip_y': ALIGNMENT_FLIP_Y, 'alignment_rotate_90': ALIGNMENT_ROTATE_90, 'sbs_dedup_prior': SBS_DEDUP_PRIOR, 'pheno_dedup_prior': PHENO_DEDUP_PRIOR}
+    if STITCH and POSITIONS:
+        raise ValueError('Set at most one of STITCH and POSITIONS')
+    config['merge'] = {'approach': 'positions' if POSITIONS else 'stitch' if STITCH else 'fast', 'merge_combo_fp': MERGE_COMBO_DF_FP, 'phenotype_dimensions': PHENOTYPE_DIMENSIONS, 'sbs_dimensions': SBS_DIMENSIONS, 'sbs_metadata_cycle': SBS_METADATA_CYCLE, 'score': SCORE, 'threshold': THRESHOLD, 'sbs_metadata_channel': SBS_METADATA_CHANNEL, 'ph_metadata_channel': PH_METADATA_CHANNEL, 'metadata_align': METADATA_ALIGN, 'alignment_flip_x': ALIGNMENT_FLIP_X, 'alignment_flip_y': ALIGNMENT_FLIP_Y, 'alignment_rotate_90': ALIGNMENT_ROTATE_90, 'sbs_dedup_prior': SBS_DEDUP_PRIOR, 'pheno_dedup_prior': PHENO_DEDUP_PRIOR}
     if STITCH:
         config['merge'].update({'stitched_image': STITCHED_IMAGE, 'flipud': FLIPUD, 'fliplr': FLIPLR, 'rot90': ROT90, 'sbs_pixel_size': SBS_PIXEL_SIZE_1, 'phenotype_pixel_size': PHENOTYPE_PIXEL_SIZE_1})
+    elif POSITIONS:
+        config['merge'].update({'flipud': FLIPUD, 'fliplr': FLIPLR, 'rot90': ROT90, 'sbs_pixel_size': SBS_PIXEL_SIZE_1, 'phenotype_pixel_size': PHENOTYPE_PIXEL_SIZE_1})
     elif INITIAL_SITES_APPROACH == 'auto':
         config['merge'].update({'initial_sbs_tiles': INITIAL_SBS_TILES, 'det_range': DET_RANGE})
         print(f'Config will use initial_sbs_tiles: {INITIAL_SBS_TILES}')
