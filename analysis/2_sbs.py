@@ -76,7 +76,6 @@ def _():
         align_cycles,
         plot_cycle_alignment_overlay,
         plot_flagged_channel_overlays,
-        visualize_sbs_alignment,
     )
     from lib.shared.log_filter import log_filter
     from lib.sbs.compute_standard_deviation import compute_standard_deviation
@@ -148,7 +147,6 @@ def _():
         read_image,
         sns,
         standardize_barcode_design,
-        visualize_sbs_alignment,
         yaml,
     )
 
@@ -493,78 +491,6 @@ def _(
         print("No base channel is off within its cycle, and none is selected.")
     else:
         plt.show()
-    return
-
-
-@app.cell(hide_code=True)
-def _(mo):
-    mo.md(r"""
-    ### Visualize Alignment (Optional)
-
-    #### Within-Cycle
-    Verify that all channels are properly structured for a given cycle.
-    - `VIZ_CYCLE`: Cycle index to display (0-indexed). Shows all channels as a micropanel.
-
-    #### Between-Cycle
-    Verify base channels are properly aligned across cycles. Shows 3 locations (corner, center, random) with DAPI reference (grayscale) and base channels from different cycles (RGB overlay). Color fringing indicates misalignment.
-    - `DAPI_REFERENCE_CYCLE`: Cycle index for DAPI anatomical reference (shown as grayscale)
-    - `VIZ_CHANNELS`: List of 3 `(cycle_idx, channel_name)` tuples for RGB overlay (e.g., `[(0, "G"), (5, "T"), (10, "A")]`)
-    """)
-    return
-
-
-@app.cell
-def _():
-    # === OPERATOR PARAMETERS ===
-    VIZ_CYCLE = 0
-    DAPI_REFERENCE_CYCLE = 0
-    VIZ_CHANNELS = None  # e.g., [(0, "G"), (5, "T"), (10, "A")]
-    # === END OPERATOR PARAMETERS ===
-    return DAPI_REFERENCE_CYCLE, VIZ_CHANNELS, VIZ_CYCLE
-
-
-@app.cell
-def _(
-    CHANNEL_CMAPS,
-    CHANNEL_NAMES,
-    Microimage,
-    VIZ_CYCLE,
-    aligned,
-    create_micropanel,
-    plt,
-):
-    if VIZ_CYCLE is not None:
-        print(f"Aligned image for cycle {VIZ_CYCLE + 1}:")
-        aligned_microimages = [
-            Microimage(
-                aligned[VIZ_CYCLE, i, :, :],
-                channel_names=CHANNEL_NAMES[i],
-                cmaps=CHANNEL_CMAPS[i],
-            )
-            for i in range(aligned.shape[1])
-        ]
-        aligned_panel = create_micropanel(aligned_microimages, add_channel_label=True)
-        plt.show()
-    return
-
-
-@app.cell
-def _(
-    CHANNEL_NAMES,
-    DAPI_REFERENCE_CYCLE,
-    VIZ_CHANNELS,
-    aligned,
-    plt,
-    visualize_sbs_alignment,
-):
-    if VIZ_CHANNELS is not None:
-        print("Visualizing alignment...")
-        alignment_fig = visualize_sbs_alignment(
-            aligned, CHANNEL_NAMES, DAPI_REFERENCE_CYCLE, VIZ_CHANNELS, crop_size=300
-        )
-        plt.show()
-    else:
-        print("Skipping visualization (VIZ_CHANNELS not set)")
     return
 
 
