@@ -620,9 +620,19 @@ def _(mo):
     mo.md(r"""
     ### Check the merge alignment on the images
 
-    For each tile-site pair above, the whole SBS site is shown with the phenotype tile outlined (SBS DAPI outside the tile is magenta: SBS only), next to a zoom on the tile. Inside the tile: SBS DAPI (magenta) and phenotype DAPI mapped onto it (green), brightness-matched for display. Aligned nuclei look white or grey; a wrong alignment leaves magenta and green fringes; a nucleus found in one image only stays fully magenta or green. The title gives the remaining shift in SBS pixels.
+    For each tile-site pair above, the whole SBS site is shown with the phenotype tile outlined (SBS DAPI outside the tile is magenta: SBS only), next to a zoom on the tile. Inside the tile: SBS DAPI (magenta) and phenotype DAPI mapped onto it (green), brightness-matched for display. Aligned nuclei look white or grey; a wrong alignment leaves magenta and green fringes; a nucleus found in one image only stays fully magenta or green. The title gives the remaining shift in SBS pixels. Pick more pairs with the selector.
     """)
     return
+
+
+@app.cell
+def _(final_pairs, mo):
+    _labels = {f"PH tile {t} → SBS site {s}": i for i, (t, s) in enumerate(final_pairs)}
+    merge_overlay_pairs = mo.ui.multiselect(
+        options=_labels, value=list(_labels)[:1], label="Tile-site pairs to draw"
+    )
+    merge_overlay_pairs
+    return (merge_overlay_pairs,)
 
 
 @app.cell
@@ -634,9 +644,10 @@ def _(
     final_pairs,
     initial_alignment_df,
     load_merge_dapi_pair,
+    merge_overlay_pairs,
     plot_merge_alignment_overlay,
 ):
-    for _ph_tile, _sbs_site in final_pairs:
+    for _ph_tile, _sbs_site in [final_pairs[i] for i in merge_overlay_pairs.value]:
         _sbs_dapi, _ph_dapi = load_merge_dapi_pair(
             ROOT_FP,
             TEST_PLATE,

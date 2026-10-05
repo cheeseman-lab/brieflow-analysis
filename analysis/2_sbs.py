@@ -425,8 +425,28 @@ def _(mo):
     One row per cycle. **DAPI**: cycle k (green) on cycle 1 (magenta), brightness-matched for display; aligned nuclei look white or grey, a shift leaves magenta and green fringes. **Spots**: cycle k's sequencing spots (green) on the spots of all other cycles (magenta); a matched spot is white, and a spot not detected in cycle k stays magenta. Titles give the measured shift (dy, dx in pixels), the share of cycle k's spots within 1 pixel of a spot in another cycle, and the spot count. A cycle that is shifted, poorly matched or short of spots is marked `OFF`; a single off cycle can be left out with `SKIP_CYCLES`.
 
     The alignment step above also prints each base channel's shift within its cycle. A channel it flags is shown below on the spots of the other cycles.
+
+    The table printed below covers every cycle; the selectors choose which cycles and base channels are drawn (off cycles and flagged channels are always drawn).
     """)
     return
+
+
+@app.cell
+def _(CHANNEL_NAMES, kept_cycle_numbers, mo):
+    _n = len(kept_cycle_numbers)
+    _default = sorted({min(1, _n - 1), _n // 2, _n - 1})
+    sbs_overlay_cycles = mo.ui.multiselect(
+        options=[str(c) for c in kept_cycle_numbers],
+        value=[str(kept_cycle_numbers[i]) for i in _default],
+        label="Cycles to draw",
+    )
+    sbs_overlay_channels = mo.ui.multiselect(
+        options=[ch for ch in CHANNEL_NAMES if ch in ("G", "T", "A", "C")],
+        value=[],
+        label="Base channels to draw per selected cycle",
+    )
+    mo.hstack([sbs_overlay_cycles, sbs_overlay_channels])
+    return sbs_overlay_channels, sbs_overlay_cycles
 
 
 @app.cell
@@ -437,10 +457,12 @@ def _(
     kept_cycle_numbers,
     plot_cycle_alignment_overlay,
     plt,
+    sbs_overlay_cycles,
 ):
     plot_cycle_alignment_overlay(
         aligned,
         CHANNEL_NAMES,
+        cycles=[int(c) for c in sbs_overlay_cycles.value],
         cycle_labels=kept_cycle_numbers,
         upsample_factor=UPSAMPLE_FACTOR,
     )
@@ -456,15 +478,19 @@ def _(
     kept_cycle_numbers,
     plot_flagged_channel_overlays,
     plt,
+    sbs_overlay_channels,
+    sbs_overlay_cycles,
 ):
     _flagged = plot_flagged_channel_overlays(
         aligned,
         CHANNEL_NAMES,
+        cycles=[int(c) for c in sbs_overlay_cycles.value],
+        channels=sbs_overlay_channels.value or None,
         cycle_labels=kept_cycle_numbers,
         upsample_factor=UPSAMPLE_FACTOR,
     )
     if _flagged is None:
-        print("No base channel is off within its cycle.")
+        print("No base channel is off within its cycle, and none is selected.")
     else:
         plt.show()
     return
