@@ -74,8 +74,8 @@ def _():
     from lib.shared.file_utils import get_filename, get_hcs_nested_path, split_well
     from lib.sbs.align_cycles import (
         align_cycles,
-        plot_channel_alignment_overlay,
         plot_cycle_alignment_overlay,
+        plot_flagged_channel_overlays,
         visualize_sbs_alignment,
     )
     from lib.shared.log_filter import log_filter
@@ -136,9 +136,9 @@ def _():
         plot_barcode_prefix_matching,
         plot_cell_mapping_heatmap,
         plot_cell_metric_histogram,
-        plot_channel_alignment_overlay,
         plot_channels_with_peaks,
         plot_cycle_alignment_overlay,
+        plot_flagged_channel_overlays,
         plot_gene_symbol_histogram,
         plot_mapping_vs_threshold,
         plot_normalization_comparison,
@@ -422,10 +422,9 @@ def _(mo):
     mo.md(r"""
     ### Check Alignment
 
-    The reference is magenta and the image being checked is green. Aligned looks white or grey; misaligned shows every object twice, magenta and green. The alignment step above prints each cycle's and channel's shift (dy, dx in pixels) and warns about any that are 1 pixel or more off; the panel titles show the same shifts.
+    Each cycle (green) is overlaid on cycle 1 (magenta): DAPI, when it is imaged every cycle, and the base channels merged into one spot image. Aligned looks white or grey; a shifted cycle shows every nucleus and spot twice. Each title gives the measured shift (dy, dx in pixels), and cycles off by 1 pixel or more are marked `OFF`; a single off cycle can be left out with `SKIP_CYCLES`.
 
-    - **Between cycles**: each cycle's DAPI on the first cycle's DAPI. One doubled panel means one cycle is off; try leaving it out with `SKIP_CYCLES`.
-    - **Within cycles**: each base channel's spots on the spots of the other cycles. Other sequences' spots stay magenta; look for green spots beside a magenta partner.
+    The alignment step above also prints each base channel's shift within its cycle. A channel it flags is shown below on the spots of the other cycles.
     """)
     return
 
@@ -433,12 +432,18 @@ def _(mo):
 @app.cell
 def _(
     CHANNEL_NAMES,
+    UPSAMPLE_FACTOR,
     aligned,
     kept_cycle_numbers,
     plot_cycle_alignment_overlay,
     plt,
 ):
-    plot_cycle_alignment_overlay(aligned, CHANNEL_NAMES, cycle_labels=kept_cycle_numbers)
+    plot_cycle_alignment_overlay(
+        aligned,
+        CHANNEL_NAMES,
+        cycle_labels=kept_cycle_numbers,
+        upsample_factor=UPSAMPLE_FACTOR,
+    )
     plt.show()
     return
 
@@ -449,16 +454,19 @@ def _(
     UPSAMPLE_FACTOR,
     aligned,
     kept_cycle_numbers,
-    plot_channel_alignment_overlay,
+    plot_flagged_channel_overlays,
     plt,
 ):
-    plot_channel_alignment_overlay(
+    _flagged = plot_flagged_channel_overlays(
         aligned,
         CHANNEL_NAMES,
         cycle_labels=kept_cycle_numbers,
         upsample_factor=UPSAMPLE_FACTOR,
     )
-    plt.show()
+    if _flagged is None:
+        print("No base channel is off within its cycle.")
+    else:
+        plt.show()
     return
 
 
