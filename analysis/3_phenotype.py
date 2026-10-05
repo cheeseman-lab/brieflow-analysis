@@ -328,7 +328,7 @@ def _(mo):
     mo.md(r"""
     ### Check Alignment
 
-    With `ALIGN` set: `SOURCE` (green) on `TARGET` (magenta), before and after alignment, with the measured shift in the titles. After alignment it should look white or grey; doubled magenta and green objects mean a shift.
+    With `ALIGN` set: `SOURCE` (green) on `TARGET` (magenta), before and after alignment, with the measured shift in the titles. After alignment objects should look white or grey; magenta and green fringes mean a shift.
 
     Without `ALIGN`: DAPI (magenta) on `CYTO_CHANNEL` (green), shown once `CYTO_CHANNEL` is set below. Check that nuclei sit inside their cells.
     """)
