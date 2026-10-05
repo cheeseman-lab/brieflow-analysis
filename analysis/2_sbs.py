@@ -422,7 +422,7 @@ def _(mo):
     mo.md(r"""
     ### Check Alignment
 
-    Each cycle (green) is overlaid on cycle 1 (magenta), brightness-matched for display: DAPI, when it is imaged every cycle, and the base channels merged into one image. Aligned nuclei and rolonies look white or grey; a shifted cycle leaves magenta and green fringes. An object in one cycle only stays fully magenta or green. Each title gives the measured shift (dy, dx in pixels), and cycles off by 1 pixel or more are marked `OFF`; a single off cycle can be left out with `SKIP_CYCLES`.
+    One row per cycle. **DAPI**: cycle k (green) on cycle 1 (magenta), brightness-matched for display; aligned nuclei look white or grey, a shift leaves magenta and green fringes. **Spots**: cycle k's sequencing spots (green) on the spots of all other cycles (magenta); a matched spot is white, and a spot not detected in cycle k stays magenta. Titles give the measured shift (dy, dx in pixels), the share of cycle k's spots within 1 pixel of a spot in another cycle, and the spot count. A cycle that is shifted, poorly matched or short of spots is marked `OFF`; a single off cycle can be left out with `SKIP_CYCLES`.
 
     The alignment step above also prints each base channel's shift within its cycle. A channel it flags is shown below on the spots of the other cycles.
     """)
