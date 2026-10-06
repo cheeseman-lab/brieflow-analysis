@@ -355,6 +355,51 @@ def _(mo):
     mo.md(r"""
     ## <font color='red'>SET PARAMETERS</font>
 
+    ### Merge approach
+
+    - `MERGE_APPROACH`: `"fast"` (default) aligns tile pairs by hashing triangles of nuclei and needs initial sites; `"positions"` matches cells from tile stage positions and centroids fitted over the whole well and needs no initial sites. Choose `"positions"` at high phenotype magnification or when tiles hold too few cells for `"fast"`. Only the section of the chosen approach runs below.
+    - `THRESHOLD`: Maximum distance, in SBS pixels, between a phenotype cell and an SBS cell for them to match (both approaches), e.g. `2`.
+    """)
+    return
+
+
+@app.cell
+def _():
+    # === OPERATOR PARAMETERS ===
+    MERGE_APPROACH = "fast"            # "fast" | "positions"
+    THRESHOLD = None                   # e.g., 2
+    # === END OPERATOR PARAMETERS ===
+    if MERGE_APPROACH not in ("fast", "positions"):
+        raise ValueError(f'MERGE_APPROACH must be "fast" or "positions", got {MERGE_APPROACH!r}')
+    return MERGE_APPROACH, THRESHOLD
+
+
+@app.cell
+def _():
+    def drop_none(**kwargs):
+        """Keep only the keyword args that were actually set (drop None)."""
+        return {k: v for k, v in kwargs.items() if v is not None}
+
+    return (drop_none,)
+
+
+@app.cell(hide_code=True)
+def _(MERGE_APPROACH, mo):
+    mo.stop(MERGE_APPROACH != "fast")
+    mo.md(r"""
+    ## Fast approach
+
+    Tile-site pairs are aligned by hashing triangles of nuclei, starting from a few initial pairs, and checked below before the config is written.
+    """)
+    return
+
+
+@app.cell(hide_code=True)
+def _(MERGE_APPROACH, mo):
+    mo.stop(MERGE_APPROACH != "fast")
+    mo.md(r"""
+    ## <font color='red'>SET PARAMETERS</font>
+
     ### Initial Sites Configuration
 
     - `INITIAL_SITES_APPROACH`: Method for configuring initial tile-site pairs for alignment.
@@ -372,17 +417,9 @@ def _(mo):
     return
 
 
-@app.cell
-def _():
-    def drop_none(**kwargs):
-        """Keep only the keyword args that were actually set (drop None)."""
-        return {k: v for k, v in kwargs.items() if v is not None}
-
-    return (drop_none,)
-
-
 @app.cell(hide_code=True)
-def _(mo):
+def _(MERGE_APPROACH, mo):
+    mo.stop(MERGE_APPROACH != "fast")
     mo.md(r"""
     ## <font color='red'>SET PARAMETERS (OPTIONAL): ADVANCED FAST-MERGE LEVERS</font>
 
@@ -414,23 +451,30 @@ def _():
 
 
 @app.cell
-def _(
-    POSITIONS,
-    SEED_OPTIMIZE,
-    SEED_TOPK,
-    find_closest_tiles,
-    ph_aligned,
-    sbs_aligned,
-):
+def _():
     # === OPERATOR PARAMETERS ===
     INITIAL_SITES_APPROACH = None      # "auto" | "manual"
     INITIAL_SBS_TILES = None           # auto: list of SBS tile indices distributed across the well
     INITIAL_SITES = None               # manual: list of [phenotype_tile, sbs_tile] pairs
     # === END OPERATOR PARAMETERS ===
-    if POSITIONS:
-        candidate_pairs = []
-        print('Positions approach: no initial sites needed')
-    elif INITIAL_SITES_APPROACH == 'auto':
+    return INITIAL_SBS_TILES, INITIAL_SITES, INITIAL_SITES_APPROACH
+
+
+@app.cell
+def _(
+    INITIAL_SBS_TILES,
+    INITIAL_SITES,
+    INITIAL_SITES_APPROACH,
+    MERGE_APPROACH,
+    SEED_OPTIMIZE,
+    SEED_TOPK,
+    find_closest_tiles,
+    mo,
+    ph_aligned,
+    sbs_aligned,
+):
+    mo.stop(MERGE_APPROACH != "fast")
+    if INITIAL_SITES_APPROACH == 'auto':
     # Option 2: Manual - specify explicit [phenotype_tile, sbs_tile] pairs
     # Only used if INITIAL_SITES_APPROACH = "manual"
         candidate_pairs = []  # Set to list of pairs if using manual approach
@@ -452,12 +496,7 @@ def _(
             raise ValueError('INITIAL_SITES must be set when using manual approach')
         candidate_pairs = INITIAL_SITES
         print(f'Using {len(candidate_pairs)} manually specified initial sites')
-    return (
-        INITIAL_SBS_TILES,
-        INITIAL_SITES,
-        INITIAL_SITES_APPROACH,
-        candidate_pairs,
-    )
+    return (candidate_pairs,)
 
 
 @app.cell
@@ -483,7 +522,7 @@ def _(
     mo,
     pd,
 ):
-    mo.stop(not candidate_pairs, mo.md("No initial tile-site pairs to test. None are needed with `POSITIONS = True`; otherwise set `INITIAL_SITES` or `INITIAL_SBS_TILES`."))
+    mo.stop(not candidate_pairs, mo.md("No initial tile-site pairs to test: set `INITIAL_SITES` or `INITIAL_SBS_TILES`."))
     _row2, _col2 = split_well(TEST_WELL)
     _phenotype_info_fp = ROOT_FP / 'phenotype' / 'parquets' / str(TEST_PLATE) / _row2 / _col2 / 'phenotype_info.parquet'
     phenotype_info_1 = pd.read_parquet(_phenotype_info_fp)
@@ -498,7 +537,8 @@ def _(
 
 
 @app.cell(hide_code=True)
-def _(mo):
+def _(MERGE_APPROACH, mo):
+    mo.stop(MERGE_APPROACH != "fast")
     mo.md(r"""
     ## <font color='red'>SET PARAMETERS</font>
 
@@ -592,23 +632,14 @@ def _(DET_RANGE, SCORE, SEED_OPTIMIZE, filter_low_score_seeds, initial_alignment
 
 
 @app.cell(hide_code=True)
-def _(mo):
+def _(MERGE_APPROACH, mo):
+    mo.stop(MERGE_APPROACH != "fast")
     mo.md(r"""
-    ## <font color='red'>SET PARAMETERS</font>
-
     ### Visualize cell matches based on initial alignment
 
-    - `THRESHOLD`: Determines the maximum euclidean distance between a phenotype point and its matched SBS point for them to be considered a valid match
+    Cells of each validated tile-site pair matched within `THRESHOLD` (set with the merge approach above).
     """)
     return
-
-
-@app.cell
-def _():
-    # === OPERATOR PARAMETERS ===
-    THRESHOLD = None                   # e.g., 2
-    # === END OPERATOR PARAMETERS ===
-    return (THRESHOLD,)
 
 
 @app.cell
@@ -629,12 +660,13 @@ def _(
     for _ph_tile, sbs_site in final_pairs:
         success = fast_merge_example(_ph_tile, sbs_site, initial_alignment_df, phenotype_info_1, sbs_info_1, THRESHOLD, local_refinement=LOCAL_REFINEMENT, warp_kwargs=warp_kwargs)
         if not success:
-            print(f'  Try a different tile-site combination or use the positions approach (POSITIONS = True).')
+            print(f'  Try a different tile-site combination or MERGE_APPROACH = "positions".')
     return
 
 
 @app.cell(hide_code=True)
-def _(mo):
+def _(MERGE_APPROACH, mo):
+    mo.stop(MERGE_APPROACH != "fast")
     mo.md(r"""
     ### Check the merge alignment on the images
 
@@ -684,13 +716,14 @@ def _(
 
 
 @app.cell(hide_code=True)
-def _(mo):
+def _(MERGE_APPROACH, mo):
+    mo.stop(MERGE_APPROACH != "positions")
     mo.md(r"""
-    ## <font color='red'>SET PARAMETERS (OPTIONAL): POSITIONS APPROACH</font>
+    ## Positions approach
 
-    `POSITIONS`: Whether to merge using the positions approach. It places every cell from its tile's stage position and its centroid, fits each microscope's camera scale, rotation and lens distortion plus one phenotype-to-SBS offset from all cells of the well, corrects each tile's stage position, and matches cells one-to-one within `THRESHOLD`. It needs no initial sites, and it also works at high phenotype magnification with few cells per tile.
+    The positions approach places every cell from its tile's stage position and its centroid, fits each microscope's camera scale, rotation and lens distortion plus one phenotype-to-SBS offset from all cells of the well, corrects each tile's stage position, and matches cells one-to-one within `THRESHOLD`. No initial sites are needed.
 
-    ### Tile orientation
+    ### <font color='red'>SET PARAMETERS</font>: tile orientation
     Each microscope relates tile images to stage coordinates differently. The fit scores all eight orientations on the tile overlaps and names the best one when the configured one looks wrong; set these to match.
 
     `FLIPUD`: Tile rows run against stage y (vertical flip). Defaults `False`.
@@ -706,13 +739,12 @@ def _(mo):
 
 @app.cell
 def _():
-    # === OPERATOR PARAMETERS (POSITIONS APPROACH — optional) ===
-    POSITIONS = False
+    # === OPERATOR PARAMETERS (POSITIONS APPROACH) ===
     FLIPUD = False
     FLIPLR = False
     ROT90 = 0
     # === END OPERATOR PARAMETERS ===
-    return FLIPLR, FLIPUD, POSITIONS, ROT90
+    return FLIPLR, FLIPUD, ROT90
 
 
 @app.cell
@@ -725,7 +757,7 @@ def _(
     METADATA_ALIGN,
     PHENOTYPE_DIMENSIONS,
     PHENOTYPE_PIXEL_SIZE_1,
-    POSITIONS,
+    MERGE_APPROACH,
     ROOT_FP,
     ROT90,
     SBS_DIMENSIONS,
@@ -742,7 +774,7 @@ def _(
     sbs_info,
     sbs_test_metadata,
 ):
-    mo.stop(not POSITIONS)
+    mo.stop(MERGE_APPROACH != "positions")
     _merged, positions_qc, positions_placement, _, _ = positions_merge_well(
         phenotype_info, sbs_info, ph_test_metadata, sbs_test_metadata, TEST_PLATE, TEST_WELL,
         PHENOTYPE_DIMENSIONS, SBS_DIMENSIONS, threshold=THRESHOLD, flipud=FLIPUD, fliplr=FLIPLR, rot90=ROT90,
@@ -755,7 +787,8 @@ def _(
 
 
 @app.cell(hide_code=True)
-def _(mo):
+def _(MERGE_APPROACH, mo):
+    mo.stop(MERGE_APPROACH != "positions")
     mo.md(r"""
     ### Check the positions placement on the images
 
@@ -834,8 +867,8 @@ def _(mo):
 
 
 @app.cell
-def _(POSITIONS, ph_test_metadata, sbs_test_metadata):
-    if POSITIONS:
+def _(MERGE_APPROACH, ph_test_metadata, sbs_test_metadata):
+    if MERGE_APPROACH == "positions":
         # For SBS
         if 'pixel_size_x' in sbs_test_metadata.columns:
             SBS_PIXEL_SIZE = sbs_test_metadata['pixel_size_x'].iloc[0]
@@ -924,7 +957,7 @@ def _(
     PHENOTYPE_PIXEL_SIZE_1,
     PHENO_DEDUP_PRIOR,
     PH_METADATA_CHANNEL,
-    POSITIONS,
+    MERGE_APPROACH,
     ROT90,
     SBS_DEDUP_PRIOR,
     SBS_DIMENSIONS,
@@ -944,8 +977,8 @@ def _(
     drop_none,
     yaml,
 ):
-    config['merge'] = {'approach': 'positions' if POSITIONS else 'fast', 'merge_combo_fp': MERGE_COMBO_DF_FP, 'phenotype_dimensions': PHENOTYPE_DIMENSIONS, 'sbs_dimensions': SBS_DIMENSIONS, 'sbs_metadata_cycle': SBS_METADATA_CYCLE, 'score': SCORE, 'threshold': THRESHOLD, 'sbs_metadata_channel': SBS_METADATA_CHANNEL, 'ph_metadata_channel': PH_METADATA_CHANNEL, 'metadata_align': METADATA_ALIGN, 'alignment_flip_x': ALIGNMENT_FLIP_X, 'alignment_flip_y': ALIGNMENT_FLIP_Y, 'alignment_rotate_90': ALIGNMENT_ROTATE_90, 'sbs_dedup_prior': SBS_DEDUP_PRIOR, 'pheno_dedup_prior': PHENO_DEDUP_PRIOR}
-    if POSITIONS:
+    config['merge'] = {'approach': MERGE_APPROACH, 'merge_combo_fp': MERGE_COMBO_DF_FP, 'phenotype_dimensions': PHENOTYPE_DIMENSIONS, 'sbs_dimensions': SBS_DIMENSIONS, 'sbs_metadata_cycle': SBS_METADATA_CYCLE, 'score': SCORE, 'threshold': THRESHOLD, 'sbs_metadata_channel': SBS_METADATA_CHANNEL, 'ph_metadata_channel': PH_METADATA_CHANNEL, 'metadata_align': METADATA_ALIGN, 'alignment_flip_x': ALIGNMENT_FLIP_X, 'alignment_flip_y': ALIGNMENT_FLIP_Y, 'alignment_rotate_90': ALIGNMENT_ROTATE_90, 'sbs_dedup_prior': SBS_DEDUP_PRIOR, 'pheno_dedup_prior': PHENO_DEDUP_PRIOR}
+    if MERGE_APPROACH == "positions":
         config['merge'].update({'flipud': FLIPUD, 'fliplr': FLIPLR, 'rot90': ROT90, 'sbs_pixel_size': SBS_PIXEL_SIZE_1, 'phenotype_pixel_size': PHENOTYPE_PIXEL_SIZE_1})
     elif INITIAL_SITES_APPROACH == 'auto':
         config['merge'].update({'initial_sbs_tiles': INITIAL_SBS_TILES, 'det_range': DET_RANGE})
