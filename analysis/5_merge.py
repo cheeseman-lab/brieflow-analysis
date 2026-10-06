@@ -63,6 +63,7 @@ def _():
         load_merge_dapi_pair,
         plot_merge_alignment_overlay,
     )
+    from lib.merge.positions_overlay import image_path_templates, positions_merge_well
     from lib.merge.hash import hash_cell_locations, initial_alignment
     from lib.merge.eval_alignment import plot_alignment_quality
 
@@ -76,12 +77,14 @@ def _():
         find_closest_tiles,
         get_filename,
         hash_cell_locations,
+        image_path_templates,
         initial_alignment,
         load_merge_dapi_pair,
         pd,
         plot_alignment_quality,
         plot_combined_tile_grid,
         plot_merge_alignment_overlay,
+        positions_merge_well,
         preview_mask_transformations,
         warnings,
         yaml,
@@ -276,7 +279,7 @@ def _(
     # Derive SBS alignment hash
     # create plot with combined tile view
     _combined_tile_grid.show()  # Only deduplicate if no channel filter was applied (cycle filter was already applied)
-    return ph_test_metadata, sbs_test_metadata
+    return ph_test_metadata, phenotype_info, sbs_info, sbs_test_metadata
 
 
 @app.cell(hide_code=True)
@@ -471,7 +474,7 @@ def _(
     mo,
     pd,
 ):
-    mo.stop(not candidate_pairs, mo.md("No initial sites to test (positions approach)."))
+    mo.stop(not candidate_pairs, mo.md("No initial tile-site pairs to test. None are needed with `POSITIONS = True`; otherwise set `INITIAL_SITES` or `INITIAL_SBS_TILES`."))
     _row2, _col2 = split_well(TEST_WELL)
     _phenotype_info_fp = ROOT_FP / 'phenotype' / 'parquets' / str(TEST_PLATE) / _row2 / _col2 / 'phenotype_info.parquet'
     phenotype_info_1 = pd.read_parquet(_phenotype_info_fp)
@@ -737,49 +740,34 @@ def _(
     FLIPUD,
     METADATA_ALIGN,
     PHENOTYPE_DIMENSIONS,
+    PHENOTYPE_PIXEL_SIZE_1,
     POSITIONS,
     ROOT_FP,
     ROT90,
     SBS_DIMENSIONS,
+    SBS_PIXEL_SIZE_1,
     TEST_PLATE,
     TEST_WELL,
     THRESHOLD,
-    align_metadata,
     config,
+    image_path_templates,
     mo,
-    pd,
     ph_test_metadata,
+    phenotype_info,
+    positions_merge_well,
+    sbs_info,
     sbs_test_metadata,
 ):
     mo.stop(not POSITIONS)
-    from lib.merge.positions_merge import positions_merge as _positions_merge
-    from lib.merge.positions_overlay import positions_image_qc as _image_qc
-    from lib.merge.positions_overlay import tile_image_paths as _tile_paths
-    from lib.shared.file_utils import get_image_output_path as _image_path
-    from lib.shared.file_utils import split_well as _split_well
-
-    _row, _col = _split_well(TEST_WELL)
-    _ph_info = pd.read_parquet(ROOT_FP / 'phenotype' / 'parquets' / str(TEST_PLATE) / _row / _col / 'phenotype_info.parquet')
-    _sbs_info = pd.read_parquet(ROOT_FP / 'sbs' / 'parquets' / str(TEST_PLATE) / _row / _col / 'sbs_info.parquet')
-    _ph_meta, _sbs_meta = ph_test_metadata, sbs_test_metadata
-    if METADATA_ALIGN or ALIGNMENT_FLIP_X or ALIGNMENT_FLIP_Y or ALIGNMENT_ROTATE_90:
-        _ph_meta, _sbs_meta, _ = align_metadata(_ph_meta, _sbs_meta, flip_x=ALIGNMENT_FLIP_X, flip_y=ALIGNMENT_FLIP_Y, rotate_90=ALIGNMENT_ROTATE_90)
-    _merged, positions_qc, _placement = _positions_merge(
-        _ph_info, _sbs_info, _ph_meta, _sbs_meta, PHENOTYPE_DIMENSIONS, SBS_DIMENSIONS,
-        threshold=THRESHOLD, flipud=FLIPUD, fliplr=FLIPLR, rot90=ROT90,
+    _merged, positions_qc, _records, _figures = positions_merge_well(
+        phenotype_info, sbs_info, ph_test_metadata, sbs_test_metadata, TEST_PLATE, TEST_WELL,
+        PHENOTYPE_DIMENSIONS, SBS_DIMENSIONS, threshold=THRESHOLD, flipud=FLIPUD, fliplr=FLIPLR, rot90=ROT90,
+        phenotype_pixel_size=PHENOTYPE_PIXEL_SIZE_1, sbs_pixel_size=SBS_PIXEL_SIZE_1,
+        alignment={'metadata_align': METADATA_ALIGN, 'flip_x': ALIGNMENT_FLIP_X, 'flip_y': ALIGNMENT_FLIP_Y, 'rotate_90': ALIGNMENT_ROTATE_90},
+        templates=image_path_templates(ROOT_FP, config['all'].get('image_format', 'tiff')),
+        dapi_index={_mod: config.get(_mod, {}).get('dapi_index') for _mod in ('phenotype', 'sbs')},
     )
     print(positions_qc.T.to_string(header=False))
-    mo.stop(_placement is None, mo.md("Too few cells in the test well for a positions merge."))
-    _fmt = config['all'].get('image_format', 'tiff')
-    _tile = {'plate': '{plate}', 'well': '{well}', 'tile': '{tile}'}
-    _paths = {}
-    for _kind, _name, _subdir in (('labels', 'nuclei', 'labels'), ('images', 'aligned', None)):
-        _paths[_kind] = {
-            _mod: _tile_paths(ROOT_FP / _mod / _image_path(_tile, _name, _fmt, subdirectory=_subdir), _placement[_mod]['tiles'].index, TEST_PLATE, TEST_WELL)
-            for _mod in ('phenotype', 'sbs')
-        }
-    _dapi = {_mod: config.get(_mod, {}).get('dapi_index') or 0 for _mod in ('phenotype', 'sbs')}
-    _records, _figures = _image_qc(_placement, _paths['labels'], _paths['images'], _dapi, {'phenotype': _ph_info['tile'].value_counts(), 'sbs': _sbs_info['tile'].value_counts()})
     mo.vstack([_records] + [mo.as_html(_fig) for _fig in _figures.values() if _fig is not None])
     return (positions_qc,)
 
