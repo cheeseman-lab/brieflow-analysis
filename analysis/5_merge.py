@@ -670,7 +670,7 @@ def _(MERGE_APPROACH, mo):
     mo.md(r"""
     ### Check the merge alignment on the images
 
-    For each tile-site pair above, the whole SBS site is shown with the phenotype tile outlined (SBS DAPI outside the tile is magenta: SBS only), next to a zoom on the tile. Inside the tile: SBS DAPI (magenta) and phenotype DAPI mapped onto it (green), brightness-matched for display. Aligned nuclei look white or grey; a wrong alignment leaves magenta and green fringes; a nucleus found in one image only stays fully magenta or green. The title gives the remaining shift in SBS pixels. Pick more pairs with the selector.
+    For each selected tile-site pair (by default the first one above), the whole SBS site is shown with the phenotype tile outlined (SBS DAPI outside the tile is magenta: SBS only), next to a zoom on the tile. Inside the tile: SBS DAPI (magenta) and phenotype DAPI mapped onto it (green), brightness-matched for display. Aligned nuclei look white or grey; a wrong alignment leaves magenta and green fringes; a nucleus found in one image only stays fully magenta or green. The title gives the remaining shift in SBS pixels. Pick more pairs with the selector below.
     """)
     return
 
