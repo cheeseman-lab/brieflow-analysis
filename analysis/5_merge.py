@@ -792,7 +792,7 @@ def _(MERGE_APPROACH, mo):
     mo.md(r"""
     ### Check the positions placement on the images
 
-    **Tile overlaps:** where two neighbouring tiles of one modality overlap, tile A is magenta and tile B green, each placed with the fitted model. **Phenotype in SBS:** phenotype DAPI mapped into an SBS tile (green) over SBS DAPI (magenta). Aligned nuclei look white or grey; a placement error shows every nucleus twice, magenta and green. Titles give the remaining shift. The pairs are spread over the well and include the sparsest tiles; pick more with the selectors (`all` draws every candidate).
+    **Tile overlaps:** where two neighbouring tiles of one modality overlap, tile A is magenta and tile B green, each placed with the fitted model. **Phenotype in SBS:** phenotype DAPI mapped into an SBS tile (green) over SBS DAPI (magenta). Aligned nuclei look white or grey; a placement error shows every nucleus twice, magenta and green. Titles give the remaining shift. The pairs are spread over the well, and the tile overlaps include the sparsest tiles. Each selector draws 2 pairs per kind by default; pick more, or `all` for every candidate.
     """)
     return
 
@@ -855,13 +855,14 @@ def _(
 
 
 @app.cell(hide_code=True)
-def _(mo):
+def _(MERGE_APPROACH, mo):
+    mo.stop(MERGE_APPROACH != "positions")
     mo.md(r"""
     ### Set pixel size (optional)
-    The positions approach converts stage coordinates (in micrometers) to pixel coordinates. If pixel size is not available in your image metadata, set it manually below.
+    The positions approach converts stage coordinates (in micrometers) to pixel coordinates. The cell below prints the pixel sizes found in the image metadata; if one is missing, set it in the cell after.
 
-    `SBS_PIXEL_SIZE`: Pixel size (in μm/pixel) of SBS images.
-    `PHENOTYPE_PIXEL_SIZE`: Pixel size (in μm/pixel) of phenotyping images.
+    `SBS_PIXEL_SIZE_1`: Pixel size (in μm/pixel) of SBS images.
+    `PHENOTYPE_PIXEL_SIZE_1`: Pixel size (in μm/pixel) of phenotyping images.
     """)
     return
 
