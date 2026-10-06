@@ -1161,7 +1161,7 @@ def _(mo):
     mo.md(r"""
     ### Screen contexts and combo table
 
-    Each selected clustering gets its own screen context, describing the channels that clustering was built from rather than the screen's whole panel, and the combo table points each row at its context file. The rule reads these files, so they are written here before the stage runs.
+    Each selected clustering gets its own screen context, describing the channels that clustering was built from rather than the screen's whole panel, and the combo table points each row at its context file. The rule reads these files, so they are written here before the stage runs. With no clusterings selected, nothing is written and `combo_fp` is left empty, so the stage does not run.
 
     A context is derived once and then belongs to you: an existing file is left exactly as it is, and the output below says which contexts were derived fresh and which are your own. Edit the JSON for a one-off; put anything that should follow a channel into that channel's `description` in `screen.yaml`. `MOZZARELLM_REWRITE_CONTEXTS = True` discards your edits and re-derives everything.
     """)
@@ -1217,7 +1217,8 @@ def _(
 
     if not mozzarellm_context_paths:
         mozzarellm_combos = pd.DataFrame()
-        print(f"No clusterings selected - {MOZZARELLM_COMBO_FP} not written")
+        print(f"No clusterings selected - {MOZZARELLM_COMBO_FP} not written, annotation stage off")
+        MOZZARELLM_COMBO_FP = None
     else:
         mozzarellm_combos = write_mozzarellm_combo_table(
             mozzarellm_selection, mozzarellm_context_paths, MOZZARELLM_COMBO_FP
