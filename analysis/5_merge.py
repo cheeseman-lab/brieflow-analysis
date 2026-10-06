@@ -55,13 +55,20 @@ def _():
     from lib.merge.merge_utils import (
         plot_combined_tile_grid,
         plot_merge_example,
-        preview_mask_transformations,
         align_metadata,
         find_closest_tiles,
         filter_low_score_seeds,
         fast_merge_example,
         load_merge_dapi_pair,
         plot_merge_alignment_overlay,
+    )
+    from lib.merge.positions_overlay import (
+        image_path_templates,
+        overlay_candidates,
+        overlay_image_paths,
+        plot_phenotype_in_sbs,
+        plot_tile_overlaps,
+        positions_merge_well,
     )
     from lib.merge.hash import hash_cell_locations, initial_alignment
     from lib.merge.eval_alignment import plot_alignment_quality
@@ -76,13 +83,18 @@ def _():
         find_closest_tiles,
         get_filename,
         hash_cell_locations,
+        image_path_templates,
         initial_alignment,
         load_merge_dapi_pair,
+        overlay_candidates,
+        overlay_image_paths,
         pd,
         plot_alignment_quality,
         plot_combined_tile_grid,
         plot_merge_alignment_overlay,
-        preview_mask_transformations,
+        plot_phenotype_in_sbs,
+        plot_tile_overlaps,
+        positions_merge_well,
         warnings,
         yaml,
     )
@@ -276,7 +288,7 @@ def _(
     # Derive SBS alignment hash
     # create plot with combined tile view
     _combined_tile_grid.show()  # Only deduplicate if no channel filter was applied (cycle filter was already applied)
-    return ph_test_metadata, sbs_test_metadata
+    return ph_test_metadata, phenotype_info, sbs_info, sbs_test_metadata
 
 
 @app.cell(hide_code=True)
@@ -343,6 +355,51 @@ def _(mo):
     mo.md(r"""
     ## <font color='red'>SET PARAMETERS</font>
 
+    ### Merge approach
+
+    - `MERGE_APPROACH`: `"fast"` (default) aligns tile pairs by hashing triangles of nuclei and needs initial sites; `"positions"` matches cells from tile stage positions and centroids fitted over the whole well and needs no initial sites. Choose `"positions"` at high phenotype magnification or when tiles hold too few cells for `"fast"`. Only the section of the chosen approach runs below.
+    - `THRESHOLD`: Maximum distance, in SBS pixels, between a phenotype cell and an SBS cell for them to match (both approaches), e.g. `2`.
+    """)
+    return
+
+
+@app.cell
+def _():
+    # === OPERATOR PARAMETERS ===
+    MERGE_APPROACH = "fast"            # "fast" | "positions"
+    THRESHOLD = None                   # e.g., 2
+    # === END OPERATOR PARAMETERS ===
+    if MERGE_APPROACH not in ("fast", "positions"):
+        raise ValueError(f'MERGE_APPROACH must be "fast" or "positions", got {MERGE_APPROACH!r}')
+    return MERGE_APPROACH, THRESHOLD
+
+
+@app.cell
+def _():
+    def drop_none(**kwargs):
+        """Keep only the keyword args that were actually set (drop None)."""
+        return {k: v for k, v in kwargs.items() if v is not None}
+
+    return (drop_none,)
+
+
+@app.cell(hide_code=True)
+def _(MERGE_APPROACH, mo):
+    mo.stop(MERGE_APPROACH != "fast")
+    mo.md(r"""
+    ## Fast approach
+
+    Tile-site pairs are aligned by hashing triangles of nuclei, starting from a few initial pairs, and checked below before the config is written.
+    """)
+    return
+
+
+@app.cell(hide_code=True)
+def _(MERGE_APPROACH, mo):
+    mo.stop(MERGE_APPROACH != "fast")
+    mo.md(r"""
+    ## <font color='red'>SET PARAMETERS</font>
+
     ### Initial Sites Configuration
 
     - `INITIAL_SITES_APPROACH`: Method for configuring initial tile-site pairs for alignment.
@@ -360,17 +417,9 @@ def _(mo):
     return
 
 
-@app.cell
-def _():
-    def drop_none(**kwargs):
-        """Keep only the keyword args that were actually set (drop None)."""
-        return {k: v for k, v in kwargs.items() if v is not None}
-
-    return (drop_none,)
-
-
 @app.cell(hide_code=True)
-def _(mo):
+def _(MERGE_APPROACH, mo):
+    mo.stop(MERGE_APPROACH != "fast")
     mo.md(r"""
     ## <font color='red'>SET PARAMETERS (OPTIONAL): ADVANCED FAST-MERGE LEVERS</font>
 
@@ -402,18 +451,29 @@ def _():
 
 
 @app.cell
-def _(
-    SEED_OPTIMIZE,
-    SEED_TOPK,
-    find_closest_tiles,
-    ph_aligned,
-    sbs_aligned,
-):
+def _():
     # === OPERATOR PARAMETERS ===
     INITIAL_SITES_APPROACH = None      # "auto" | "manual"
     INITIAL_SBS_TILES = None           # auto: list of SBS tile indices distributed across the well
     INITIAL_SITES = None               # manual: list of [phenotype_tile, sbs_tile] pairs
     # === END OPERATOR PARAMETERS ===
+    return INITIAL_SBS_TILES, INITIAL_SITES, INITIAL_SITES_APPROACH
+
+
+@app.cell
+def _(
+    INITIAL_SBS_TILES,
+    INITIAL_SITES,
+    INITIAL_SITES_APPROACH,
+    MERGE_APPROACH,
+    SEED_OPTIMIZE,
+    SEED_TOPK,
+    find_closest_tiles,
+    mo,
+    ph_aligned,
+    sbs_aligned,
+):
+    mo.stop(MERGE_APPROACH != "fast")
     if INITIAL_SITES_APPROACH == 'auto':
     # Option 2: Manual - specify explicit [phenotype_tile, sbs_tile] pairs
     # Only used if INITIAL_SITES_APPROACH = "manual"
@@ -436,12 +496,7 @@ def _(
             raise ValueError('INITIAL_SITES must be set when using manual approach')
         candidate_pairs = INITIAL_SITES
         print(f'Using {len(candidate_pairs)} manually specified initial sites')
-    return (
-        INITIAL_SBS_TILES,
-        INITIAL_SITES,
-        INITIAL_SITES_APPROACH,
-        candidate_pairs,
-    )
+    return (candidate_pairs,)
 
 
 @app.cell
@@ -464,8 +519,10 @@ def _(
     get_filename,
     hash_cell_locations,
     initial_alignment,
+    mo,
     pd,
 ):
+    mo.stop(not candidate_pairs, mo.md("No initial tile-site pairs to test: set `INITIAL_SITES` or `INITIAL_SBS_TILES`."))
     _row2, _col2 = split_well(TEST_WELL)
     _phenotype_info_fp = ROOT_FP / 'phenotype' / 'parquets' / str(TEST_PLATE) / _row2 / _col2 / 'phenotype_info.parquet'
     phenotype_info_1 = pd.read_parquet(_phenotype_info_fp)
@@ -480,7 +537,8 @@ def _(
 
 
 @app.cell(hide_code=True)
-def _(mo):
+def _(MERGE_APPROACH, mo):
+    mo.stop(MERGE_APPROACH != "fast")
     mo.md(r"""
     ## <font color='red'>SET PARAMETERS</font>
 
@@ -574,23 +632,14 @@ def _(DET_RANGE, SCORE, SEED_OPTIMIZE, filter_low_score_seeds, initial_alignment
 
 
 @app.cell(hide_code=True)
-def _(mo):
+def _(MERGE_APPROACH, mo):
+    mo.stop(MERGE_APPROACH != "fast")
     mo.md(r"""
-    ## <font color='red'>SET PARAMETERS</font>
-
     ### Visualize cell matches based on initial alignment
 
-    - `THRESHOLD`: Determines the maximum euclidean distance between a phenotype point and its matched SBS point for them to be considered a valid match
+    Cells of each validated tile-site pair matched within `THRESHOLD` (set with the merge approach above).
     """)
     return
-
-
-@app.cell
-def _():
-    # === OPERATOR PARAMETERS ===
-    THRESHOLD = None                   # e.g., 2
-    # === END OPERATOR PARAMETERS ===
-    return (THRESHOLD,)
 
 
 @app.cell
@@ -611,12 +660,13 @@ def _(
     for _ph_tile, sbs_site in final_pairs:
         success = fast_merge_example(_ph_tile, sbs_site, initial_alignment_df, phenotype_info_1, sbs_info_1, THRESHOLD, local_refinement=LOCAL_REFINEMENT, warp_kwargs=warp_kwargs)
         if not success:
-            print(f'  Try a different tile-site combination or proceed to stitch approach.')
+            print(f'  Try a different tile-site combination or MERGE_APPROACH = "positions".')
     return
 
 
 @app.cell(hide_code=True)
-def _(mo):
+def _(MERGE_APPROACH, mo):
+    mo.stop(MERGE_APPROACH != "fast")
     mo.md(r"""
     ### Check the merge alignment on the images
 
@@ -666,125 +716,160 @@ def _(
 
 
 @app.cell(hide_code=True)
-def _(mo):
+def _(MERGE_APPROACH, mo):
+    mo.stop(MERGE_APPROACH != "positions")
     mo.md(r"""
-    ## <font color='red'>SET PARAMETERS (OPTIONAL): STITCH APPROACH</font>
+    ## Positions approach
 
-    ### Parameters for image stitching
+    The positions approach places every cell from its tile's stage position and its centroid, fits each microscope's camera scale, rotation and lens distortion plus one phenotype-to-SBS offset from all cells of the well, corrects each tile's stage position, and matches cells one-to-one within `THRESHOLD`. No initial sites are needed.
 
-    If no successful initial sites can be configured or results show poor performance, try the stitch-based merge approach.
+    ### <font color='red'>SET PARAMETERS</font>: tile orientation
+    Each microscope relates tile images to stage coordinates differently. The fit scores all eight orientations on the tile overlaps and names the best one when the configured one looks wrong; set these to match.
 
-    `STITCH`: Whether to merge using stitch approach. This approach stitches the images into wells before performing alignment, merge, and deduplication.
+    `FLIPUD`: Tile rows run against stage y (vertical flip). Defaults `False`.
 
-    `MASK_TYPE`: Type of object to align.
-    - `"nuclei"` uses segmented nuclei masks.
-    - `"cells"` uses segmented cell masks.
+    `FLIPLR`: Tile columns run against stage x (horizontal flip). Defaults `False`.
 
-    ### Parameters for image orientation
-    Each microscope handles individual tile coordinates differently for stitching. Adjust the following parameters until you obtain images that look right.
+    `ROT90`: Number of 90° counterclockwise rotations (as `numpy.rot90`), applied after the flips. Defaults `0`.
 
-    `FLIPUD`: Flip images upside-down (vertical flip). Defaults `False`.
-
-    `FLIPLR`: Flip images left-to-right (horizontal flip). Defaults `False`.
-
-    `ROT90`: Number of 90° rotations to apply to the image. For example, ROT90_K = 1 rotates the image 90° clockwise, ROT90_K = 2 rotates 180°, and so on.
-
-    `NUM_TILES_PHENO` & `NUM_TILES_SBS`: For testing purposes, number of tiles to display. Higher numbers may increase processing time but allow a larger view of the well.
-
-    **Eval Options:**
-    - `STITCHED_IMAGE`: Determines whether a stitched image will be produced for qc. **Note:** Setting this to True will significantly increase processing time but it is recommended on the first run.
+    The preview below runs the positions merge on `TEST_WELL` and prints its fit: match rate, fit residual, tile-overlap agreement of every orientation and any warning. The check by eye follows it.
     """)
     return
 
 
 @app.cell
 def _():
-    # === OPERATOR PARAMETERS (STITCH APPROACH — optional) ===
-    STITCH = False
-    MASK_TYPE = "nuclei"
+    # === OPERATOR PARAMETERS (POSITIONS APPROACH) ===
     FLIPUD = False
     FLIPLR = False
     ROT90 = 0
-    STITCHED_IMAGE = False
     # === END OPERATOR PARAMETERS ===
-    return FLIPLR, FLIPUD, MASK_TYPE, ROT90, STITCH, STITCHED_IMAGE
+    return FLIPLR, FLIPUD, ROT90
 
 
 @app.cell
 def _(
+    ALIGNMENT_FLIP_X,
+    ALIGNMENT_FLIP_Y,
+    ALIGNMENT_ROTATE_90,
     FLIPLR,
     FLIPUD,
-    MASK_TYPE,
+    METADATA_ALIGN,
+    PHENOTYPE_DIMENSIONS,
+    PHENOTYPE_PIXEL_SIZE_1,
+    MERGE_APPROACH,
     ROOT_FP,
     ROT90,
-    STITCH,
+    SBS_DIMENSIONS,
+    SBS_PIXEL_SIZE_1,
+    TEST_PLATE,
+    TEST_WELL,
+    THRESHOLD,
+    config,
+    image_path_templates,
+    mo,
     ph_test_metadata,
-    preview_mask_transformations,
-):
-    # === OPERATOR PARAMETERS ===
-    NUM_TILES_PHENO = None  # int (e.g., 10) to preview that many phenotype tiles; only used when STITCH=True
-    # === END OPERATOR PARAMETERS ===
-
-    if STITCH:
-        print("Testing phenotype data:")
-        ph_params = preview_mask_transformations(
-            ph_test_metadata,
-            ROOT_FP,
-            "phenotype",
-            mask_type=MASK_TYPE,
-            num_tiles=NUM_TILES_PHENO,
-            flipud=FLIPUD,
-            fliplr=FLIPLR,
-            rot90=ROT90
-        )
-    return
-
-
-@app.cell
-def _(
-    FLIPLR,
-    FLIPUD,
-    MASK_TYPE,
-    ROOT_FP,
-    ROT90,
-    STITCH,
-    preview_mask_transformations,
+    phenotype_info,
+    positions_merge_well,
+    sbs_info,
     sbs_test_metadata,
 ):
-    # === OPERATOR PARAMETERS ===
-    NUM_TILES_SBS = None  # int (e.g., 10) to preview that many SBS tiles; only used when STITCH=True
-    # === END OPERATOR PARAMETERS ===
-
-    if STITCH:
-        print("\nTesting SBS data with same transformation:")
-        sbs_params = preview_mask_transformations(
-            sbs_test_metadata,
-            ROOT_FP, 
-            "sbs",
-            mask_type=MASK_TYPE,
-            num_tiles=NUM_TILES_SBS,
-            flipud=FLIPUD,
-            fliplr=FLIPLR,
-            rot90=ROT90
-        )
-    return
+    mo.stop(MERGE_APPROACH != "positions")
+    _merged, positions_qc, positions_placement, _, _ = positions_merge_well(
+        phenotype_info, sbs_info, ph_test_metadata, sbs_test_metadata, TEST_PLATE, TEST_WELL,
+        PHENOTYPE_DIMENSIONS, SBS_DIMENSIONS, threshold=THRESHOLD, flipud=FLIPUD, fliplr=FLIPLR, rot90=ROT90,
+        phenotype_pixel_size=PHENOTYPE_PIXEL_SIZE_1, sbs_pixel_size=SBS_PIXEL_SIZE_1,
+        alignment={'metadata_align': METADATA_ALIGN, 'flip_x': ALIGNMENT_FLIP_X, 'flip_y': ALIGNMENT_FLIP_Y, 'rotate_90': ALIGNMENT_ROTATE_90},
+    )
+    print(positions_qc.T.to_string(header=False))
+    mo.stop(positions_placement is None, mo.md("Too few cells in the test well for a positions merge."))
+    return positions_placement, positions_qc
 
 
 @app.cell(hide_code=True)
-def _(mo):
+def _(MERGE_APPROACH, mo):
+    mo.stop(MERGE_APPROACH != "positions")
     mo.md(r"""
-    ### Set pixel size (optional)
-    Coordinate-based stitching converts stage coordinates (in micrometers) to pixel coordinates. If pixel size is not available in your image metadata you will have to set it manually below.
+    ### Check the positions placement on the images
 
-    `SBS_PIXEL_SIZE`: Pixel size (in μm/pixel) of SBS images.
-    `PHENOTYPE_PIXEL_SIZE`: Pixel size (in μm/pixel) of phenotyping images.
+    **Tile overlaps:** where two neighbouring tiles of one modality overlap, tile A is magenta and tile B green, each placed with the fitted model. **Phenotype in SBS:** phenotype DAPI mapped into an SBS tile (green) over SBS DAPI (magenta). Aligned nuclei look white or grey; a placement error shows every nucleus twice, magenta and green. Titles give the remaining shift. The pairs are spread over the well, and the tile overlaps include the sparsest tiles. Each selector draws 2 pairs per kind by default; pick more, or `all` for every candidate.
     """)
     return
 
 
 @app.cell
-def _(STITCH, ph_test_metadata, sbs_test_metadata):
-    if STITCH:
+def _(mo, overlay_candidates, phenotype_info, positions_placement, sbs_info):
+    positions_candidates = overlay_candidates(
+        positions_placement,
+        {'phenotype': phenotype_info['tile'].value_counts(), 'sbs': sbs_info['tile'].value_counts()},
+    )
+    _overlap_labels = {f'{_m} tiles {_a} | {_b}': _i for _i, (_m, _a, _b) in enumerate(positions_candidates['tile_overlaps'])}
+    _in_sbs_labels = {f'PH tile {_p} in SBS tile {_s}': _i for _i, (_p, _s) in enumerate(positions_candidates['phenotype_in_sbs'])}
+    _default_overlaps = [
+        _label for _m in ('phenotype', 'sbs')
+        for _label in [_l for _l in _overlap_labels if _l.startswith(_m)][:2]
+    ]
+    positions_overlap_pairs = mo.ui.multiselect(
+        options={'all': -1, **_overlap_labels}, value=_default_overlaps, label='Tile overlaps to draw'
+    )
+    positions_in_sbs_pairs = mo.ui.multiselect(
+        options={'all': -1, **_in_sbs_labels}, value=list(_in_sbs_labels)[:2], label='Phenotype-in-SBS tiles to draw'
+    )
+    mo.hstack([positions_overlap_pairs, positions_in_sbs_pairs])
+    return positions_candidates, positions_in_sbs_pairs, positions_overlap_pairs
+
+
+@app.cell
+def _(
+    ROOT_FP,
+    TEST_PLATE,
+    TEST_WELL,
+    config,
+    image_path_templates,
+    mo,
+    overlay_image_paths,
+    plot_phenotype_in_sbs,
+    plot_tile_overlaps,
+    positions_candidates,
+    positions_in_sbs_pairs,
+    positions_overlap_pairs,
+    positions_placement,
+):
+    def _chosen(selector, candidates):
+        return list(candidates) if -1 in selector.value else [candidates[_i] for _i in selector.value]
+
+    _overlaps = _chosen(positions_overlap_pairs, positions_candidates['tile_overlaps'])
+    _in_sbs = _chosen(positions_in_sbs_pairs, positions_candidates['phenotype_in_sbs'])
+    _tiles = {
+        'phenotype': {t for _m, _a, _b in _overlaps if _m == 'phenotype' for t in (_a, _b)} | {_p for _p, _s in _in_sbs},
+        'sbs': {t for _m, _a, _b in _overlaps if _m == 'sbs' for t in (_a, _b)} | {_s for _p, _s in _in_sbs},
+    }
+    _labels, _images = overlay_image_paths(
+        image_path_templates(ROOT_FP, config['all'].get('image_format', 'tiff')), _tiles, TEST_PLATE, TEST_WELL
+    )
+    _dapi = {_m: config.get(_m, {}).get('dapi_index') or 0 for _m in ('phenotype', 'sbs')}
+    _overlap_records, _overlap_fig = plot_tile_overlaps(positions_placement, _overlaps, _labels, _images, _dapi)
+    _in_sbs_records, _in_sbs_fig = plot_phenotype_in_sbs(positions_placement, _in_sbs, _labels, _images, _dapi)
+    mo.vstack([mo.as_html(_f) for _f in (_overlap_fig, _in_sbs_fig) if _f is not None] + [_overlap_records, _in_sbs_records])
+    return
+
+
+@app.cell(hide_code=True)
+def _(MERGE_APPROACH, mo):
+    mo.stop(MERGE_APPROACH != "positions")
+    mo.md(r"""
+    ### Set pixel size (optional)
+    The positions approach converts stage coordinates (in micrometers) to pixel coordinates. The cell below prints the pixel sizes found in the image metadata; if one is missing, set it in the cell after.
+
+    `SBS_PIXEL_SIZE_1`: Pixel size (in μm/pixel) of SBS images.
+    `PHENOTYPE_PIXEL_SIZE_1`: Pixel size (in μm/pixel) of phenotyping images.
+    """)
+    return
+
+
+@app.cell
+def _(MERGE_APPROACH, ph_test_metadata, sbs_test_metadata):
+    if MERGE_APPROACH == "positions":
         # For SBS
         if 'pixel_size_x' in sbs_test_metadata.columns:
             SBS_PIXEL_SIZE = sbs_test_metadata['pixel_size_x'].iloc[0]
@@ -873,6 +958,7 @@ def _(
     PHENOTYPE_PIXEL_SIZE_1,
     PHENO_DEDUP_PRIOR,
     PH_METADATA_CHANNEL,
+    MERGE_APPROACH,
     ROT90,
     SBS_DEDUP_PRIOR,
     SBS_DIMENSIONS,
@@ -882,8 +968,6 @@ def _(
     SCORE,
     SEED_OPTIMIZE,
     SEED_TOPK,
-    STITCH,
-    STITCHED_IMAGE,
     THRESHOLD,
     THRESHOLD_TRIANGLE,
     WARP_DEGREE,
@@ -894,9 +978,9 @@ def _(
     drop_none,
     yaml,
 ):
-    config['merge'] = {'approach': 'stitch' if STITCH else 'fast', 'merge_combo_fp': MERGE_COMBO_DF_FP, 'phenotype_dimensions': PHENOTYPE_DIMENSIONS, 'sbs_dimensions': SBS_DIMENSIONS, 'sbs_metadata_cycle': SBS_METADATA_CYCLE, 'score': SCORE, 'threshold': THRESHOLD, 'sbs_metadata_channel': SBS_METADATA_CHANNEL, 'ph_metadata_channel': PH_METADATA_CHANNEL, 'metadata_align': METADATA_ALIGN, 'alignment_flip_x': ALIGNMENT_FLIP_X, 'alignment_flip_y': ALIGNMENT_FLIP_Y, 'alignment_rotate_90': ALIGNMENT_ROTATE_90, 'sbs_dedup_prior': SBS_DEDUP_PRIOR, 'pheno_dedup_prior': PHENO_DEDUP_PRIOR}
-    if STITCH:
-        config['merge'].update({'stitched_image': STITCHED_IMAGE, 'flipud': FLIPUD, 'fliplr': FLIPLR, 'rot90': ROT90, 'sbs_pixel_size': SBS_PIXEL_SIZE_1, 'phenotype_pixel_size': PHENOTYPE_PIXEL_SIZE_1})
+    config['merge'] = {'approach': MERGE_APPROACH, 'merge_combo_fp': MERGE_COMBO_DF_FP, 'phenotype_dimensions': PHENOTYPE_DIMENSIONS, 'sbs_dimensions': SBS_DIMENSIONS, 'sbs_metadata_cycle': SBS_METADATA_CYCLE, 'score': SCORE, 'threshold': THRESHOLD, 'sbs_metadata_channel': SBS_METADATA_CHANNEL, 'ph_metadata_channel': PH_METADATA_CHANNEL, 'metadata_align': METADATA_ALIGN, 'alignment_flip_x': ALIGNMENT_FLIP_X, 'alignment_flip_y': ALIGNMENT_FLIP_Y, 'alignment_rotate_90': ALIGNMENT_ROTATE_90, 'sbs_dedup_prior': SBS_DEDUP_PRIOR, 'pheno_dedup_prior': PHENO_DEDUP_PRIOR}
+    if MERGE_APPROACH == "positions":
+        config['merge'].update({'flipud': FLIPUD, 'fliplr': FLIPLR, 'rot90': ROT90, 'sbs_pixel_size': SBS_PIXEL_SIZE_1, 'phenotype_pixel_size': PHENOTYPE_PIXEL_SIZE_1})
     elif INITIAL_SITES_APPROACH == 'auto':
         config['merge'].update({'initial_sbs_tiles': INITIAL_SBS_TILES, 'det_range': DET_RANGE})
         print(f'Config will use initial_sbs_tiles: {INITIAL_SBS_TILES}')
