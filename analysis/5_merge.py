@@ -55,7 +55,6 @@ def _():
     from lib.merge.merge_utils import (
         plot_combined_tile_grid,
         plot_merge_example,
-        preview_mask_transformations,
         align_metadata,
         find_closest_tiles,
         filter_low_score_seeds,
@@ -85,7 +84,6 @@ def _():
         plot_combined_tile_grid,
         plot_merge_alignment_overlay,
         positions_merge_well,
-        preview_mask_transformations,
         warnings,
         yaml,
     )
@@ -620,7 +618,7 @@ def _(
     for _ph_tile, sbs_site in final_pairs:
         success = fast_merge_example(_ph_tile, sbs_site, initial_alignment_df, phenotype_info_1, sbs_info_1, THRESHOLD, local_refinement=LOCAL_REFINEMENT, warp_kwargs=warp_kwargs)
         if not success:
-            print(f'  Try a different tile-site combination or proceed to stitch approach.')
+            print(f'  Try a different tile-site combination or use the positions approach (POSITIONS = True).')
     return
 
 
@@ -677,56 +675,20 @@ def _(
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## <font color='red'>SET PARAMETERS (OPTIONAL): STITCH APPROACH</font>
-
-    ### Parameters for image stitching
-
-    If no successful initial sites can be configured or results show poor performance, try the stitch-based merge approach.
-
-    `STITCH`: Whether to merge using stitch approach. This approach stitches the images into wells before performing alignment, merge, and deduplication.
-
-    `MASK_TYPE`: Type of object to align.
-    - `"nuclei"` uses segmented nuclei masks.
-    - `"cells"` uses segmented cell masks.
-
-    ### Parameters for image orientation
-    Each microscope handles individual tile coordinates differently for stitching. Adjust the following parameters until you obtain images that look right.
-
-    `FLIPUD`: Flip images upside-down (vertical flip). Defaults `False`.
-
-    `FLIPLR`: Flip images left-to-right (horizontal flip). Defaults `False`.
-
-    `ROT90`: Number of 90° counterclockwise rotations to apply to the image (as `numpy.rot90`). For example, `ROT90 = 1` rotates the image 90° counterclockwise, `ROT90 = 2` rotates 180°, and so on.
-
-    `NUM_TILES_PHENO` & `NUM_TILES_SBS`: For testing purposes, number of tiles to display. Higher numbers may increase processing time but allow a larger view of the well.
-
-    **Eval Options:**
-    - `STITCHED_IMAGE`: Determines whether a stitched image will be produced for qc. **Note:** Setting this to True will significantly increase processing time but it is recommended on the first run.
-    """)
-    return
-
-
-@app.cell
-def _():
-    # === OPERATOR PARAMETERS (STITCH APPROACH — optional) ===
-    STITCH = False
-    MASK_TYPE = "nuclei"
-    FLIPUD = False
-    FLIPLR = False
-    ROT90 = 0
-    STITCHED_IMAGE = False
-    # === END OPERATOR PARAMETERS ===
-    return FLIPLR, FLIPUD, MASK_TYPE, ROT90, STITCH, STITCHED_IMAGE
-
-
-@app.cell(hide_code=True)
-def _(mo):
-    mo.md(r"""
     ## <font color='red'>SET PARAMETERS (OPTIONAL): POSITIONS APPROACH</font>
 
-    `POSITIONS`: Whether to merge using the positions approach. It places every cell from its tile's stage position and its centroid, fits each microscope's camera scale, rotation and lens distortion plus one phenotype-to-SBS offset from all cells of the well, corrects each tile's stage position, and matches cells one-to-one within `THRESHOLD`. It needs no initial sites and no stitched images, and it also works at high phenotype magnification with few cells per tile. Set at most one of `STITCH` and `POSITIONS`.
+    `POSITIONS`: Whether to merge using the positions approach. It places every cell from its tile's stage position and its centroid, fits each microscope's camera scale, rotation and lens distortion plus one phenotype-to-SBS offset from all cells of the well, corrects each tile's stage position, and matches cells one-to-one within `THRESHOLD`. It needs no initial sites, and it also works at high phenotype magnification with few cells per tile.
 
-    The positions approach reads the tile orientation from `FLIPUD`, `FLIPLR` and `ROT90` above. The preview below runs it on `TEST_WELL` and shows:
+    ### Tile orientation
+    Each microscope relates tile images to stage coordinates differently. The positions QC scores all eight orientations and names the best one when the configured one looks wrong; set these to match.
+
+    `FLIPUD`: Tile rows run against stage y (vertical flip). Defaults `False`.
+
+    `FLIPLR`: Tile columns run against stage x (horizontal flip). Defaults `False`.
+
+    `ROT90`: Number of 90° counterclockwise rotations (as `numpy.rot90`), applied after the flips. Defaults `0`.
+
+    The preview below runs the positions merge on `TEST_WELL` and shows:
     - the QC table, including the seam agreement of every orientation (a warning names the best one when the configured orientation looks wrong) and the match rate;
     - tile seams of each modality (tile A magenta, tile B green) and phenotype DAPI mapped into SBS tiles (SBS magenta, phenotype green), with the measured residual shift; white means aligned;
     - a downsampled nuclei mosaic of the well per modality, tiles alternating magenta and green.
@@ -738,8 +700,11 @@ def _(mo):
 def _():
     # === OPERATOR PARAMETERS (POSITIONS APPROACH — optional) ===
     POSITIONS = False
+    FLIPUD = False
+    FLIPLR = False
+    ROT90 = 0
     # === END OPERATOR PARAMETERS ===
-    return (POSITIONS,)
+    return FLIPLR, FLIPUD, POSITIONS, ROT90
 
 
 @app.cell
@@ -783,71 +748,11 @@ def _(
     return (positions_qc,)
 
 
-@app.cell
-def _(
-    FLIPLR,
-    FLIPUD,
-    MASK_TYPE,
-    ROOT_FP,
-    ROT90,
-    STITCH,
-    ph_test_metadata,
-    preview_mask_transformations,
-):
-    # === OPERATOR PARAMETERS ===
-    NUM_TILES_PHENO = None  # int (e.g., 10) to preview that many phenotype tiles; only used when STITCH=True
-    # === END OPERATOR PARAMETERS ===
-
-    if STITCH:
-        print("Testing phenotype data:")
-        ph_params = preview_mask_transformations(
-            ph_test_metadata,
-            ROOT_FP,
-            "phenotype",
-            mask_type=MASK_TYPE,
-            num_tiles=NUM_TILES_PHENO,
-            flipud=FLIPUD,
-            fliplr=FLIPLR,
-            rot90=ROT90
-        )
-    return
-
-
-@app.cell
-def _(
-    FLIPLR,
-    FLIPUD,
-    MASK_TYPE,
-    ROOT_FP,
-    ROT90,
-    STITCH,
-    preview_mask_transformations,
-    sbs_test_metadata,
-):
-    # === OPERATOR PARAMETERS ===
-    NUM_TILES_SBS = None  # int (e.g., 10) to preview that many SBS tiles; only used when STITCH=True
-    # === END OPERATOR PARAMETERS ===
-
-    if STITCH:
-        print("\nTesting SBS data with same transformation:")
-        sbs_params = preview_mask_transformations(
-            sbs_test_metadata,
-            ROOT_FP, 
-            "sbs",
-            mask_type=MASK_TYPE,
-            num_tiles=NUM_TILES_SBS,
-            flipud=FLIPUD,
-            fliplr=FLIPLR,
-            rot90=ROT90
-        )
-    return
-
-
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
     ### Set pixel size (optional)
-    Coordinate-based stitching converts stage coordinates (in micrometers) to pixel coordinates. If pixel size is not available in your image metadata you will have to set it manually below.
+    The positions approach converts stage coordinates (in micrometers) to pixel coordinates. If pixel size is not available in your image metadata, set it manually below.
 
     `SBS_PIXEL_SIZE`: Pixel size (in μm/pixel) of SBS images.
     `PHENOTYPE_PIXEL_SIZE`: Pixel size (in μm/pixel) of phenotyping images.
@@ -856,8 +761,8 @@ def _(mo):
 
 
 @app.cell
-def _(STITCH, ph_test_metadata, sbs_test_metadata):
-    if STITCH:
+def _(POSITIONS, ph_test_metadata, sbs_test_metadata):
+    if POSITIONS:
         # For SBS
         if 'pixel_size_x' in sbs_test_metadata.columns:
             SBS_PIXEL_SIZE = sbs_test_metadata['pixel_size_x'].iloc[0]
@@ -956,8 +861,6 @@ def _(
     SCORE,
     SEED_OPTIMIZE,
     SEED_TOPK,
-    STITCH,
-    STITCHED_IMAGE,
     THRESHOLD,
     THRESHOLD_TRIANGLE,
     WARP_DEGREE,
@@ -968,12 +871,8 @@ def _(
     drop_none,
     yaml,
 ):
-    if STITCH and POSITIONS:
-        raise ValueError('Set at most one of STITCH and POSITIONS')
-    config['merge'] = {'approach': 'positions' if POSITIONS else 'stitch' if STITCH else 'fast', 'merge_combo_fp': MERGE_COMBO_DF_FP, 'phenotype_dimensions': PHENOTYPE_DIMENSIONS, 'sbs_dimensions': SBS_DIMENSIONS, 'sbs_metadata_cycle': SBS_METADATA_CYCLE, 'score': SCORE, 'threshold': THRESHOLD, 'sbs_metadata_channel': SBS_METADATA_CHANNEL, 'ph_metadata_channel': PH_METADATA_CHANNEL, 'metadata_align': METADATA_ALIGN, 'alignment_flip_x': ALIGNMENT_FLIP_X, 'alignment_flip_y': ALIGNMENT_FLIP_Y, 'alignment_rotate_90': ALIGNMENT_ROTATE_90, 'sbs_dedup_prior': SBS_DEDUP_PRIOR, 'pheno_dedup_prior': PHENO_DEDUP_PRIOR}
-    if STITCH:
-        config['merge'].update({'stitched_image': STITCHED_IMAGE, 'flipud': FLIPUD, 'fliplr': FLIPLR, 'rot90': ROT90, 'sbs_pixel_size': SBS_PIXEL_SIZE_1, 'phenotype_pixel_size': PHENOTYPE_PIXEL_SIZE_1})
-    elif POSITIONS:
+    config['merge'] = {'approach': 'positions' if POSITIONS else 'fast', 'merge_combo_fp': MERGE_COMBO_DF_FP, 'phenotype_dimensions': PHENOTYPE_DIMENSIONS, 'sbs_dimensions': SBS_DIMENSIONS, 'sbs_metadata_cycle': SBS_METADATA_CYCLE, 'score': SCORE, 'threshold': THRESHOLD, 'sbs_metadata_channel': SBS_METADATA_CHANNEL, 'ph_metadata_channel': PH_METADATA_CHANNEL, 'metadata_align': METADATA_ALIGN, 'alignment_flip_x': ALIGNMENT_FLIP_X, 'alignment_flip_y': ALIGNMENT_FLIP_Y, 'alignment_rotate_90': ALIGNMENT_ROTATE_90, 'sbs_dedup_prior': SBS_DEDUP_PRIOR, 'pheno_dedup_prior': PHENO_DEDUP_PRIOR}
+    if POSITIONS:
         config['merge'].update({'flipud': FLIPUD, 'fliplr': FLIPLR, 'rot90': ROT90, 'sbs_pixel_size': SBS_PIXEL_SIZE_1, 'phenotype_pixel_size': PHENOTYPE_PIXEL_SIZE_1})
     elif INITIAL_SITES_APPROACH == 'auto':
         config['merge'].update({'initial_sbs_tiles': INITIAL_SBS_TILES, 'det_range': DET_RANGE})
