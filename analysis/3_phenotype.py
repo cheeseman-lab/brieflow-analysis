@@ -74,7 +74,6 @@ def _():
         align_phenotype_channels,
         plot_phenotype_alignment_overlay,
         plot_phenotype_channel_overlay,
-        visualize_phenotype_alignment,
     )
     from lib.shared.align import apply_custom_offsets
     from lib.phenotype.identify_cytoplasm_cellpose import (
@@ -106,7 +105,6 @@ def _():
         random_cmap,
         read_image,
         register_custom_features,
-        visualize_phenotype_alignment,
         yaml,
     )
 
@@ -328,7 +326,7 @@ def _(mo):
     mo.md(r"""
     ### Check Alignment
 
-    With `ALIGN` set: `SOURCE` (green) on `TARGET` (magenta), before and after alignment, with the measured shift in the titles. After alignment it should look white or grey; doubled magenta and green objects mean a shift.
+    With `ALIGN` set: `SOURCE` (green) on `TARGET` (magenta), before and after alignment, with the measured shift in the titles. After alignment objects should look white or grey; magenta and green fringes mean a shift.
 
     Without `ALIGN`: DAPI (magenta) on `CYTO_CHANNEL` (green), shown once `CYTO_CHANNEL` is set below. Check that nuclei sit inside their cells.
     """)
@@ -384,37 +382,6 @@ def _(
     if not ALIGN:
         plot_phenotype_channel_overlay(aligned_image, DAPI_INDEX, CYTO_INDEX, CHANNEL_NAMES)
         plt.show()
-    return
-
-
-@app.cell(hide_code=True)
-def _(mo):
-    mo.md(r"""
-    ### Visualize Alignment Quality (Optional)
-
-    Visualize channel alignment across 16 locations in the image. The first channel (DAPI) is shown in grayscale with the remaining 3 channels as an RGB overlay. You may want to consider removing channels for a first pass if you want to visualize alignment between different rounds.
-
-    - `VIZ_CHANNELS`: List of exactly 4 channel names to visualize (1st=grayscale base, 2nd-4th=RGB overlay)
-    """)
-    return
-
-
-@app.cell
-def _(CHANNEL_NAMES, aligned_image, plt, visualize_phenotype_alignment):
-    # Set channels to visualize (first=grayscale, remaining 3=RGB overlay)
-    VIZ_CHANNELS = None
-
-    if VIZ_CHANNELS is not None:
-        print("Visualizing alignment across 16 locations...")
-        fig = visualize_phenotype_alignment(
-            aligned_image,
-            channel_names=CHANNEL_NAMES,
-            viz_channels=VIZ_CHANNELS,
-            crop_size=300
-        )
-        plt.show()
-    else:
-        print("Skipping visualization (VIZ_CHANNELS not set)")
     return
 
 
