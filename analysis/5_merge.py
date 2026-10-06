@@ -62,7 +62,14 @@ def _():
         load_merge_dapi_pair,
         plot_merge_alignment_overlay,
     )
-    from lib.merge.positions_overlay import image_path_templates, positions_merge_well
+    from lib.merge.positions_overlay import (
+        image_path_templates,
+        overlay_candidates,
+        overlay_image_paths,
+        plot_phenotype_in_sbs,
+        plot_tile_overlaps,
+        positions_merge_well,
+    )
     from lib.merge.hash import hash_cell_locations, initial_alignment
     from lib.merge.eval_alignment import plot_alignment_quality
 
@@ -79,10 +86,14 @@ def _():
         image_path_templates,
         initial_alignment,
         load_merge_dapi_pair,
+        overlay_candidates,
+        overlay_image_paths,
         pd,
         plot_alignment_quality,
         plot_combined_tile_grid,
         plot_merge_alignment_overlay,
+        plot_phenotype_in_sbs,
+        plot_tile_overlaps,
         positions_merge_well,
         warnings,
         yaml,
@@ -680,7 +691,7 @@ def _(mo):
     `POSITIONS`: Whether to merge using the positions approach. It places every cell from its tile's stage position and its centroid, fits each microscope's camera scale, rotation and lens distortion plus one phenotype-to-SBS offset from all cells of the well, corrects each tile's stage position, and matches cells one-to-one within `THRESHOLD`. It needs no initial sites, and it also works at high phenotype magnification with few cells per tile.
 
     ### Tile orientation
-    Each microscope relates tile images to stage coordinates differently. The positions QC scores all eight orientations and names the best one when the configured one looks wrong; set these to match.
+    Each microscope relates tile images to stage coordinates differently. The fit scores all eight orientations on the tile overlaps and names the best one when the configured one looks wrong; set these to match.
 
     `FLIPUD`: Tile rows run against stage y (vertical flip). Defaults `False`.
 
@@ -688,10 +699,7 @@ def _(mo):
 
     `ROT90`: Number of 90° counterclockwise rotations (as `numpy.rot90`), applied after the flips. Defaults `0`.
 
-    The preview below runs the positions merge on `TEST_WELL` and shows:
-    - the QC table, including the seam agreement of every orientation (a warning names the best one when the configured orientation looks wrong) and the match rate;
-    - tile seams of each modality (tile A magenta, tile B green) and phenotype DAPI mapped into SBS tiles (SBS magenta, phenotype green), with the measured residual shift; white means aligned;
-    - a downsampled nuclei mosaic of the well per modality, tiles alternating magenta and green.
+    The preview below runs the positions merge on `TEST_WELL` and prints its fit: match rate, fit residual, tile-overlap agreement of every orientation and any warning. The check by eye follows it.
     """)
     return
 
@@ -735,17 +743,82 @@ def _(
     sbs_test_metadata,
 ):
     mo.stop(not POSITIONS)
-    _merged, positions_qc, _records, _figures = positions_merge_well(
+    _merged, positions_qc, positions_placement, _, _ = positions_merge_well(
         phenotype_info, sbs_info, ph_test_metadata, sbs_test_metadata, TEST_PLATE, TEST_WELL,
         PHENOTYPE_DIMENSIONS, SBS_DIMENSIONS, threshold=THRESHOLD, flipud=FLIPUD, fliplr=FLIPLR, rot90=ROT90,
         phenotype_pixel_size=PHENOTYPE_PIXEL_SIZE_1, sbs_pixel_size=SBS_PIXEL_SIZE_1,
         alignment={'metadata_align': METADATA_ALIGN, 'flip_x': ALIGNMENT_FLIP_X, 'flip_y': ALIGNMENT_FLIP_Y, 'rotate_90': ALIGNMENT_ROTATE_90},
-        templates=image_path_templates(ROOT_FP, config['all'].get('image_format', 'tiff')),
-        dapi_index={_mod: config.get(_mod, {}).get('dapi_index') for _mod in ('phenotype', 'sbs')},
     )
     print(positions_qc.T.to_string(header=False))
-    mo.vstack([_records] + [mo.as_html(_fig) for _fig in _figures.values() if _fig is not None])
-    return (positions_qc,)
+    mo.stop(positions_placement is None, mo.md("Too few cells in the test well for a positions merge."))
+    return positions_placement, positions_qc
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ### Check the positions placement on the images
+
+    **Tile overlaps:** where two neighbouring tiles of one modality overlap, tile A is magenta and tile B green, each placed with the fitted model. **Phenotype in SBS:** phenotype DAPI mapped into an SBS tile (green) over SBS DAPI (magenta). Aligned nuclei look white or grey; a placement error shows every nucleus twice, magenta and green. Titles give the remaining shift. The pairs are spread over the well and include the sparsest tiles; pick more with the selectors (`all` draws every candidate).
+    """)
+    return
+
+
+@app.cell
+def _(mo, overlay_candidates, phenotype_info, positions_placement, sbs_info):
+    positions_candidates = overlay_candidates(
+        positions_placement,
+        {'phenotype': phenotype_info['tile'].value_counts(), 'sbs': sbs_info['tile'].value_counts()},
+    )
+    _overlap_labels = {f'{_m} tiles {_a} | {_b}': _i for _i, (_m, _a, _b) in enumerate(positions_candidates['tile_overlaps'])}
+    _in_sbs_labels = {f'PH tile {_p} in SBS tile {_s}': _i for _i, (_p, _s) in enumerate(positions_candidates['phenotype_in_sbs'])}
+    _default_overlaps = [
+        _label for _m in ('phenotype', 'sbs')
+        for _label in [_l for _l in _overlap_labels if _l.startswith(_m)][:2]
+    ]
+    positions_overlap_pairs = mo.ui.multiselect(
+        options={'all': -1, **_overlap_labels}, value=_default_overlaps, label='Tile overlaps to draw'
+    )
+    positions_in_sbs_pairs = mo.ui.multiselect(
+        options={'all': -1, **_in_sbs_labels}, value=list(_in_sbs_labels)[:2], label='Phenotype-in-SBS tiles to draw'
+    )
+    mo.hstack([positions_overlap_pairs, positions_in_sbs_pairs])
+    return positions_candidates, positions_in_sbs_pairs, positions_overlap_pairs
+
+
+@app.cell
+def _(
+    ROOT_FP,
+    TEST_PLATE,
+    TEST_WELL,
+    config,
+    image_path_templates,
+    mo,
+    overlay_image_paths,
+    plot_phenotype_in_sbs,
+    plot_tile_overlaps,
+    positions_candidates,
+    positions_in_sbs_pairs,
+    positions_overlap_pairs,
+    positions_placement,
+):
+    def _chosen(selector, candidates):
+        return list(candidates) if -1 in selector.value else [candidates[_i] for _i in selector.value]
+
+    _overlaps = _chosen(positions_overlap_pairs, positions_candidates['tile_overlaps'])
+    _in_sbs = _chosen(positions_in_sbs_pairs, positions_candidates['phenotype_in_sbs'])
+    _tiles = {
+        'phenotype': {t for _m, _a, _b in _overlaps if _m == 'phenotype' for t in (_a, _b)} | {_p for _p, _s in _in_sbs},
+        'sbs': {t for _m, _a, _b in _overlaps if _m == 'sbs' for t in (_a, _b)} | {_s for _p, _s in _in_sbs},
+    }
+    _labels, _images = overlay_image_paths(
+        image_path_templates(ROOT_FP, config['all'].get('image_format', 'tiff')), _tiles, TEST_PLATE, TEST_WELL
+    )
+    _dapi = {_m: config.get(_m, {}).get('dapi_index') or 0 for _m in ('phenotype', 'sbs')}
+    _overlap_records, _overlap_fig = plot_tile_overlaps(positions_placement, _overlaps, _labels, _images, _dapi)
+    _in_sbs_records, _in_sbs_fig = plot_phenotype_in_sbs(positions_placement, _in_sbs, _labels, _images, _dapi)
+    mo.vstack([mo.as_html(_f) for _f in (_overlap_fig, _in_sbs_fig) if _f is not None] + [_overlap_records, _in_sbs_records])
+    return
 
 
 @app.cell(hide_code=True)
