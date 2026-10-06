@@ -70,7 +70,11 @@ def _():
     )
     from lib.shared.file_utils import get_filename, get_hcs_nested_path, split_well
     from lib.shared.illumination_correction import apply_ic_field
-    from lib.phenotype.align_channels import align_phenotype_channels, visualize_phenotype_alignment
+    from lib.phenotype.align_channels import (
+        align_phenotype_channels,
+        plot_phenotype_alignment_overlay,
+        plot_phenotype_channel_overlay,
+    )
     from lib.shared.align import apply_custom_offsets
     from lib.phenotype.identify_cytoplasm_cellpose import (
         identify_cytoplasm_cellpose,
@@ -95,11 +99,12 @@ def _():
         image_segmentation_annotations,
         load_custom_features,
         np,
+        plot_phenotype_alignment_overlay,
+        plot_phenotype_channel_overlay,
         plt,
         random_cmap,
         read_image,
         register_custom_features,
-        visualize_phenotype_alignment,
         yaml,
     )
 
@@ -319,31 +324,64 @@ def _(
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ### Visualize Alignment Quality (Optional)
+    ### Check Alignment
 
-    Visualize channel alignment across 16 locations in the image. The first channel (DAPI) is shown in grayscale with the remaining 3 channels as an RGB overlay. You may want to consider removing channels for a first pass if you want to visualize alignment between different rounds.
+    With `ALIGN` set: `SOURCE` (green) on `TARGET` (magenta), before and after alignment, with the measured shift in the titles. After alignment objects should look white or grey; magenta and green fringes mean a shift.
 
-    - `VIZ_CHANNELS`: List of exactly 4 channel names to visualize (1st=grayscale base, 2nd-4th=RGB overlay)
+    Without `ALIGN`: DAPI (magenta) on `CYTO_CHANNEL` (green), shown once `CYTO_CHANNEL` is set below. Check that nuclei sit inside their cells.
     """)
     return
 
 
 @app.cell
-def _(CHANNEL_NAMES, aligned_image, plt, visualize_phenotype_alignment):
-    # Set channels to visualize (first=grayscale, remaining 3=RGB overlay)
-    VIZ_CHANNELS = None
-
-    if VIZ_CHANNELS is not None:
-        print("Visualizing alignment across 16 locations...")
-        fig = visualize_phenotype_alignment(
-            aligned_image,
-            channel_names=CHANNEL_NAMES,
-            viz_channels=VIZ_CHANNELS,
-            crop_size=300
+def _(
+    ALIGN,
+    CUSTOM_CHANNEL_OFFSETS,
+    CUSTOM_CHANNEL_OFFSETS_INDEXED,
+    RIDERS,
+    RIDER_INDEXES,
+    SOURCE,
+    SOURCE_INDEX,
+    TARGET,
+    TARGET_INDEX,
+    UPSAMPLE_FACTOR,
+    WINDOW,
+    apply_custom_offsets,
+    corrected_image,
+    plot_phenotype_alignment_overlay,
+    plt,
+):
+    if ALIGN:
+        _image = corrected_image
+        if CUSTOM_CHANNEL_OFFSETS:
+            _image = apply_custom_offsets(_image, offsets_dict=CUSTOM_CHANNEL_OFFSETS_INDEXED)
+        _names = {TARGET_INDEX: TARGET, SOURCE_INDEX: SOURCE, **dict(zip(RIDER_INDEXES, RIDERS or []))}
+        plot_phenotype_alignment_overlay(
+            _image,
+            TARGET_INDEX,
+            SOURCE_INDEX,
+            _names,
+            riders=RIDER_INDEXES,
+            window=WINDOW,
+            upsample_factor=UPSAMPLE_FACTOR,
         )
         plt.show()
-    else:
-        print("Skipping visualization (VIZ_CHANNELS not set)")
+    return
+
+
+@app.cell
+def _(
+    ALIGN,
+    CHANNEL_NAMES,
+    CYTO_INDEX,
+    DAPI_INDEX,
+    aligned_image,
+    plot_phenotype_channel_overlay,
+    plt,
+):
+    if not ALIGN:
+        plot_phenotype_channel_overlay(aligned_image, DAPI_INDEX, CYTO_INDEX, CHANNEL_NAMES)
+        plt.show()
     return
 
 
