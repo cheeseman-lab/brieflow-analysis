@@ -107,6 +107,7 @@ def _(mo):
     - `SBS_SAMPLES_DF_FP`/`PHENOTYPE_SAMPLES_DF_FP`: Path to dataframe where SBS/phenotype samples location and metadata will be stored.
     - `SBS_COMBO_DF_FP`/`PHENOTYPE_COMBO_DF_FP`: Path to dataframe where SBS/phenotype sample metadata combinations will be stored.
     - `SBS_IMAGES_DIR_FP`/`PHENOTYPE_IMAGES_DIR_FP`: Path to directories with SBS/phenotype sample image files (ND2, Imaris, or TIFF). Set to `None` to ignore SBS/phenotype testing in this notebook.
+    - `WELL_ANNOTATIONS_FP`: Optional table of the wells to analyze (TSV or CSV with `plate` and `well` columns, one row per well; the same table the aggregate notebook uses for per-well conditions). When set, the sample dataframes keep only these wells, so no later module processes the others. Its plate and well values must match the ones parsed from the file names. `None` keeps every imaged well.
 
     ### Pattern configurations for metadata extraction
 
@@ -185,6 +186,9 @@ def _():
     SBS_IMAGES_DIR_FP = None
     PHENOTYPE_IMAGES_DIR_FP = None
 
+    # Wells to analyze: table with plate and well columns; None = every imaged well
+    WELL_ANNOTATIONS_FP = None
+
     # SBS pattern configurations — REQUIRED
     SBS_PATH_PATTERN = None              # e.g. r"plate_(\d+)/c(\d+)/.*Well([A-Z]\d+)..."
     SBS_PATH_METADATA = None             # e.g. ["plate", "cycle", "well", "channel"]
@@ -224,6 +228,7 @@ def _():
         SBS_PATH_METADATA,
         SBS_PATH_PATTERN,
         SBS_SAMPLES_DF_FP,
+        WELL_ANNOTATIONS_FP,
     )
 
 
@@ -318,15 +323,32 @@ def _(
     SBS_PATH_METADATA,
     SBS_PATH_PATTERN,
     SBS_SAMPLES_DF_FP,
+    WELL_ANNOTATIONS_FP,
     create_samples_df,
     mo,
     get_tile_count_from_well,
     pd,
 ):
+    # Keep only the wells listed in WELL_ANNOTATIONS_FP, when it is set
+    def _keep_annotated_wells(samples, label):
+        if not WELL_ANNOTATIONS_FP:
+            return samples
+        _table = pd.read_csv(WELL_ANNOTATIONS_FP, sep=None, engine="python", dtype=str)
+        _listed = set(_table["plate"].str.strip() + "/" + _table["well"].str.strip())
+        _keys = samples["plate"].astype(str) + "/" + samples["well"].astype(str)
+        _keep = _keys.isin(_listed)
+        if not _keep.any():
+            raise ValueError(
+                f"No {label} well is listed in {WELL_ANNOTATIONS_FP}; compare its plate and well values with the file names"
+            )
+        print(f"{label}: keeping {_keys[_keep].nunique()} of {_keys.nunique()} imaged wells listed in {WELL_ANNOTATIONS_FP}")
+        return samples[_keep].reset_index(drop=True)
+
     # Create SBS samples DataFrame
     sbs_samples = create_samples_df(
         SBS_IMAGES_DIR_FP, SBS_PATH_PATTERN, SBS_PATH_METADATA, SBS_METADATA_ORDER_TYPE
     )
+    sbs_samples = _keep_annotated_wells(sbs_samples, "SBS")
     sbs_samples.to_csv(SBS_SAMPLES_DF_FP, sep="\t", index=False)
     print("SBS samples:")
     mo.ui.table(sbs_samples)
@@ -368,6 +390,7 @@ def _(
         PHENOTYPE_PATH_METADATA,
         PHENOTYPE_METADATA_ORDER_TYPE,
     )
+    phenotype_samples = _keep_annotated_wells(phenotype_samples, "Phenotype")
     phenotype_samples.to_csv(PHENOTYPE_SAMPLES_DF_FP, sep="\t", index=False)
     print("Phenotype samples:")
     mo.ui.table(phenotype_samples)
