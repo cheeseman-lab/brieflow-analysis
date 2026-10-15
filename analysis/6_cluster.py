@@ -36,10 +36,8 @@ def _(mo):
 
 
 @app.cell
-def _():
-    # === OPERATOR PARAMETERS ===
+def params_paths():
     CONFIG_FILE_PATH = "config/config.yml"
-    # === END OPERATOR PARAMETERS ===
     return (CONFIG_FILE_PATH,)
 
 
@@ -129,18 +127,20 @@ def _(mo):
 
 
 @app.cell
-def _(config):
-    # === OPERATOR PARAMETERS ===
+def params_preprocessing():
     MIN_CELL_CUTOFFS = None            # e.g., {"all": 5, "Interphase": 5, "Mitotic": 5}
     TEST_COMPARTMENT_COMBO = None
-    # === END OPERATOR PARAMETERS ===
+    return MIN_CELL_CUTOFFS, TEST_COMPARTMENT_COMBO
 
+
+@app.cell
+def _(TEST_COMPARTMENT_COMBO, config):
     PERTURBATION_NAME_COL = config["aggregate"]["perturbation_name_col"]
     # filename metadata for the compartment-specific aggregated tables
     COMPARTMENT_METADATA = (
         {"compartment_combo": TEST_COMPARTMENT_COMBO} if TEST_COMPARTMENT_COMBO else {}
     )
-    return COMPARTMENT_METADATA, MIN_CELL_CUTOFFS, PERTURBATION_NAME_COL
+    return COMPARTMENT_METADATA, PERTURBATION_NAME_COL
 
 
 @app.cell
@@ -191,18 +191,20 @@ def _(mo):
 
 
 @app.cell
+def params_benchmarks():
+    SPECIES_ID = "9606"  # NCBI taxid: 9606 human, 10090 mouse, 10116 rat
+    return (SPECIES_ID,)
+
+
+@app.cell
 def _():
     UNIPROT_DATA_FP = "config/benchmark_clusters/uniprot_data.tsv"
     STRING_PAIR_BENCHMARK_FP = "config/benchmark_clusters/string_pair_benchmark.tsv"
     CORUM_GROUP_BENCHMARK_FP = "config/benchmark_clusters/corum_group_benchmark.tsv"
     KEGG_GROUP_BENCHMARK_FP = "config/benchmark_clusters/kegg_group_benchmark.tsv"
-    # === OPERATOR PARAMETERS ===
-    SPECIES_ID = "9606"  # NCBI taxid: 9606 human, 10090 mouse, 10116 rat
-    # === END OPERATOR PARAMETERS ===
     return (
         CORUM_GROUP_BENCHMARK_FP,
         KEGG_GROUP_BENCHMARK_FP,
-        SPECIES_ID,
         STRING_PAIR_BENCHMARK_FP,
         UNIPROT_DATA_FP,
     )
@@ -282,8 +284,7 @@ def _(mo):
 
 
 @app.cell
-def _(config):
-    # === OPERATOR PARAMETERS ===
+def params_test_dataset():
     TEST_CELL_CLASS = None
     TEST_CHANNEL_COMBO = None
     PHATE_DISTANCE_METRIC = None       # "cosine" | "euclidean"
@@ -292,16 +293,8 @@ def _(config):
     CONTROL_REFERENCE_GROUP = None         # the vehicle group; required by "reference_group" and "within_perturbation"
     CLUSTER_CONTROL_KEY = None             # None inherits the aggregate CONTROL_KEY
     TEST_LEIDEN_RESOLUTIONS = None     # e.g., [2, 3, 4, 5]
-    # === END OPERATOR PARAMETERS ===
-
-    CONTROL_KEY = (
-        CLUSTER_CONTROL_KEY
-        if CLUSTER_CONTROL_KEY is not None
-        else config["aggregate"]["control_key"]
-    )
     return (
         CLUSTER_CONTROL_KEY,
-        CONTROL_KEY,
         CONTROL_REFERENCE_GROUP,
         CONTROL_SCOPE,
         PERTURBATION_AUC_THRESHOLD,
@@ -310,6 +303,16 @@ def _(config):
         TEST_CHANNEL_COMBO,
         TEST_LEIDEN_RESOLUTIONS,
     )
+
+
+@app.cell
+def _(CLUSTER_CONTROL_KEY, config):
+    CONTROL_KEY = (
+        CLUSTER_CONTROL_KEY
+        if CLUSTER_CONTROL_KEY is not None
+        else config["aggregate"]["control_key"]
+    )
+    return (CONTROL_KEY,)
 
 
 @app.cell
@@ -374,11 +377,9 @@ def _(mo):
 
 
 @app.cell
-def _():
-    # === OPERATOR PARAMETERS ===
+def params_leiden():
     CLUSTER_COMBO_FP = "config/cluster_combo.tsv"
     FINAL_LEIDEN_RESOLUTIONS = None    # e.g., [2, 3, 4, 5, 6, 7, 8, 9, 10]
-    # === END OPERATOR PARAMETERS ===
     return CLUSTER_COMBO_FP, FINAL_LEIDEN_RESOLUTIONS
 
 
@@ -421,10 +422,8 @@ def _(mo):
 
 
 @app.cell
-def _():
-    # === OPERATOR PARAMETERS ===
+def params_test_resolution():
     TEST_LEIDEN_RESOLUTION = None
-    # === END OPERATOR PARAMETERS ===
     return (TEST_LEIDEN_RESOLUTION,)
 
 

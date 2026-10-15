@@ -36,10 +36,8 @@ def _(mo):
 
 
 @app.cell
-def _():
-    # === OPERATOR PARAMETERS ===
+def params_paths():
     CONFIG_FILE_PATH = "config/config.yml"
-    # === END OPERATOR PARAMETERS ===
     return (CONFIG_FILE_PATH,)
 
 
@@ -126,24 +124,19 @@ def _(mo):
 
 
 @app.cell
-def _():
-    # === OPERATOR PARAMETERS ===
+def params_test_tile():
     TEST_PLATE = None
     TEST_WELL = None
     TEST_TILE = None
     CHANNEL_NAMES = None              # e.g., ["DAPI", "COXIV", "CENPA", "WGA"]
     CHANNEL_CMAPS = None              # e.g., ["pure_blue", "pure_green", "pure_red", "pure_magenta"]
-    # === END OPERATOR PARAMETERS ===
+    return CHANNEL_CMAPS, CHANNEL_NAMES, TEST_PLATE, TEST_TILE, TEST_WELL
 
+
+@app.cell
+def _(TEST_TILE, TEST_WELL):
     WILDCARDS = dict(well=TEST_WELL, tile=TEST_TILE)
-    return (
-        CHANNEL_CMAPS,
-        CHANNEL_NAMES,
-        TEST_PLATE,
-        TEST_TILE,
-        TEST_WELL,
-        WILDCARDS,
-    )
+    return (WILDCARDS,)
 
 
 @app.cell
@@ -220,8 +213,7 @@ def _(mo):
 
 
 @app.cell
-def _(CHANNEL_NAMES):
-    # === OPERATOR PARAMETERS ===
+def params_alignment():
     ALIGN = None
     TARGET = None
     SOURCE = None
@@ -230,8 +222,20 @@ def _(CHANNEL_NAMES):
     UPSAMPLE_FACTOR = 2               # library default; raise for finer alignment
     WINDOW = 2                        # library default
     CUSTOM_CHANNEL_OFFSETS = None     # e.g., {"DAPI": (5, 10), "AF750": (3, -2)}
-    # === END OPERATOR PARAMETERS ===
+    return (
+        ALIGN,
+        CUSTOM_CHANNEL_OFFSETS,
+        REMOVE_CHANNEL,
+        RIDERS,
+        SOURCE,
+        TARGET,
+        UPSAMPLE_FACTOR,
+        WINDOW,
+    )
 
+
+@app.cell
+def _(ALIGN, CHANNEL_NAMES, CUSTOM_CHANNEL_OFFSETS, RIDERS, SOURCE, TARGET):
     # Derive alignment indexes
     if ALIGN:
         TARGET_INDEX = CHANNEL_NAMES.index(TARGET)
@@ -244,20 +248,7 @@ def _(CHANNEL_NAMES):
             CHANNEL_NAMES.index(name): offset 
             for name, offset in CUSTOM_CHANNEL_OFFSETS.items()
         }
-    return (
-        ALIGN,
-        CUSTOM_CHANNEL_OFFSETS,
-        CUSTOM_CHANNEL_OFFSETS_INDEXED,
-        REMOVE_CHANNEL,
-        RIDERS,
-        RIDER_INDEXES,
-        SOURCE,
-        SOURCE_INDEX,
-        TARGET,
-        TARGET_INDEX,
-        UPSAMPLE_FACTOR,
-        WINDOW,
-    )
+    return CUSTOM_CHANNEL_OFFSETS_INDEXED, RIDER_INDEXES, SOURCE_INDEX, TARGET_INDEX
 
 
 @app.cell
@@ -424,8 +415,7 @@ def _(mo):
 
 
 @app.cell
-def _(CHANNEL_NAMES, aligned_image):
-    # === OPERATOR PARAMETERS ===
+def params_segmentation():
     CYTO_CHANNEL = None
     GPU = False
     PIPELINE_GPU = None
@@ -447,8 +437,29 @@ def _(CHANNEL_NAMES, aligned_image):
         NUCLEI_NMS_THRESHOLD = 0.3
         CELL_PROB_THRESHOLD = 0.479071
         CELL_NMS_THRESHOLD = 0.3
-    # === END OPERATOR PARAMETERS ===
+    return (
+        CELLPOSE_MODEL,
+        CELL_CELLPROB_THRESHOLD,
+        CELL_FLOW_THRESHOLD,
+        CELL_NMS_THRESHOLD,
+        CELL_PROB_THRESHOLD,
+        CYTO_CHANNEL,
+        GPU,
+        HELPER_INDEX,
+        NUCLEI_CELLPROB_THRESHOLD,
+        NUCLEI_FLOW_THRESHOLD,
+        NUCLEI_NMS_THRESHOLD,
+        NUCLEI_PROB_THRESHOLD,
+        PIPELINE_GPU,
+        RECONCILE,
+        SEGMENTATION_METHOD,
+        SEGMENT_CELLS,
+        STARDIST_MODEL,
+    )
 
+
+@app.cell
+def _(CELLPOSE_MODEL, CHANNEL_NAMES, CYTO_CHANNEL, SEGMENTATION_METHOD, aligned_image):
     DAPI_INDEX = CHANNEL_NAMES.index("DAPI")
     CYTO_INDEX = CHANNEL_NAMES.index(CYTO_CHANNEL)
 
@@ -472,26 +483,10 @@ def _(CHANNEL_NAMES, aligned_image):
         NUCLEI_DIAMETER_INPUT = None
         CELL_DIAMETER_INPUT = None
     return (
-        CELLPOSE_MODEL,
-        CELL_CELLPROB_THRESHOLD,
         CELL_DIAMETER_INPUT,
-        CELL_FLOW_THRESHOLD,
-        CELL_NMS_THRESHOLD,
-        CELL_PROB_THRESHOLD,
         CYTO_INDEX,
         DAPI_INDEX,
-        GPU,
-        HELPER_INDEX,
-        NUCLEI_CELLPROB_THRESHOLD,
         NUCLEI_DIAMETER,
-        NUCLEI_FLOW_THRESHOLD,
-        NUCLEI_NMS_THRESHOLD,
-        NUCLEI_PROB_THRESHOLD,
-        PIPELINE_GPU,
-        RECONCILE,
-        SEGMENTATION_METHOD,
-        SEGMENT_CELLS,
-        STARDIST_MODEL,
         diameters_from_masks,
     )
 
@@ -611,17 +606,14 @@ def _(mo):
 
 
 @app.cell
-def _():
-    # === OPERATOR PARAMETERS ===
+def params_feature_extraction():
     CP_METHOD = "cp_emulator"          # "cp_emulator" | "cp_measure"
     FOCI_CHANNEL = None
-    # === END OPERATOR PARAMETERS ===
     return CP_METHOD, FOCI_CHANNEL
 
 
 @app.cell
-def _():
-    # === OPERATOR PARAMETERS ===
+def params_custom_features():
     # Define each feature with def, then list it in CUSTOM_FEATURES, either bare to
     # measure it on the nucleus or as a (function, compartment) pair, e.g.
     #
@@ -636,7 +628,6 @@ def _():
     # CUSTOM_FEATURES = [puncta_count, (spread_index, "cell")]
 
     CUSTOM_FEATURES = []
-    # === END OPERATOR PARAMETERS ===
     return (CUSTOM_FEATURES,)
 
 
@@ -777,8 +768,7 @@ def _(mo):
 
 
 @app.cell
-def _(CHANNEL_NAMES, GPU, aligned_image):
-    # === OPERATOR PARAMETERS (SECONDARY OBJECTS — optional) ===
+def params_secondary_objects():
     SECOND_OBJ_DETECTION = False
     SECOND_OBJ_CHANNEL = None
     SECOND_OBJ_METHOD = "threshold"    # "threshold" | "cellpose" | "stardist"
@@ -815,8 +805,49 @@ def _(CHANNEL_NAMES, GPU, aligned_image):
     USE_SHAPE_REFINEMENT = False
     PROPORTION_THRESHOLD = 0.4
     RETURN_INTERMEDIATE_OUTPUTS = False  # show the threshold mask in the preview below
-    # === END OPERATOR PARAMETERS ===
+    return (
+        DECLUMP_METHOD,
+        DECLUMP_MODE,
+        FILL_HOLES,
+        MAXIMA_REDUCTION_FACTOR,
+        MAX_OBJECTS_PER_CELL,
+        MAX_TOTAL_OBJECTS,
+        OPENING_DISK_RADIUS,
+        OVERLAP_THRESHOLD,
+        PROPORTION_THRESHOLD,
+        RETURN_INTERMEDIATE_OUTPUTS,
+        SECOND_OBJ_CELLPOSE_MODEL,
+        SECOND_OBJ_CELLPROB_THRESHOLD,
+        SECOND_OBJ_CHANNEL,
+        SECOND_OBJ_DETECTION,
+        SECOND_OBJ_DIAMETER_INPUT,
+        SECOND_OBJ_FLOW_THRESHOLD,
+        SECOND_OBJ_MAX_SIZE,
+        SECOND_OBJ_METHOD,
+        SECOND_OBJ_MIN_SIZE,
+        SECOND_OBJ_NMS_THRESHOLD,
+        SECOND_OBJ_PROB_THRESHOLD,
+        SECOND_OBJ_STARDIST_MODEL,
+        SIZE_FILTER_METHOD,
+        SUPPRESS_LOCAL_MAXIMA,
+        THRESHOLD_METHOD,
+        THRESHOLD_SMOOTHING_SCALE,
+        USE_MORPHOLOGICAL_OPENING,
+        USE_SHAPE_REFINEMENT,
+    )
 
+
+@app.cell
+def _(
+    CHANNEL_NAMES,
+    GPU,
+    SECOND_OBJ_CELLPOSE_MODEL,
+    SECOND_OBJ_CHANNEL,
+    SECOND_OBJ_DETECTION,
+    SECOND_OBJ_DIAMETER_INPUT,
+    SECOND_OBJ_METHOD,
+    aligned_image,
+):
     SECOND_OBJ_CHANNEL_INDEX = (
         CHANNEL_NAMES.index(SECOND_OBJ_CHANNEL) if SECOND_OBJ_DETECTION else None
     )
@@ -841,37 +872,7 @@ def _(CHANNEL_NAMES, GPU, aligned_image):
             gpu=GPU,
         )
         print(f"Estimated diameter: {SECOND_OBJ_DIAMETER}")
-    return (
-        DECLUMP_METHOD,
-        DECLUMP_MODE,
-        FILL_HOLES,
-        MAXIMA_REDUCTION_FACTOR,
-        MAX_OBJECTS_PER_CELL,
-        MAX_TOTAL_OBJECTS,
-        OPENING_DISK_RADIUS,
-        OVERLAP_THRESHOLD,
-        PROPORTION_THRESHOLD,
-        RETURN_INTERMEDIATE_OUTPUTS,
-        SECOND_OBJ_CELLPOSE_MODEL,
-        SECOND_OBJ_CELLPROB_THRESHOLD,
-        SECOND_OBJ_CHANNEL,
-        SECOND_OBJ_CHANNEL_INDEX,
-        SECOND_OBJ_DETECTION,
-        SECOND_OBJ_DIAMETER,
-        SECOND_OBJ_FLOW_THRESHOLD,
-        SECOND_OBJ_MAX_SIZE,
-        SECOND_OBJ_METHOD,
-        SECOND_OBJ_MIN_SIZE,
-        SECOND_OBJ_NMS_THRESHOLD,
-        SECOND_OBJ_PROB_THRESHOLD,
-        SECOND_OBJ_STARDIST_MODEL,
-        SIZE_FILTER_METHOD,
-        SUPPRESS_LOCAL_MAXIMA,
-        THRESHOLD_METHOD,
-        THRESHOLD_SMOOTHING_SCALE,
-        USE_MORPHOLOGICAL_OPENING,
-        USE_SHAPE_REFINEMENT,
-    )
+    return SECOND_OBJ_CHANNEL_INDEX, SECOND_OBJ_DIAMETER
 
 
 @app.cell

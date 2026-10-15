@@ -37,10 +37,8 @@ def _(mo):
 
 
 @app.cell
-def _():
-    # === OPERATOR PARAMETERS ===
+def params_paths():
     CONFIG_FILE_PATH = "config/config.yml"
-    # === END OPERATOR PARAMETERS ===
     return (CONFIG_FILE_PATH,)
 
 
@@ -207,8 +205,7 @@ def _(mo):
 
 
 @app.cell
-def _():
-    # === OPERATOR PARAMETERS ===
+def params_labeling():
     ADD_TRAINING_DATA = False
     EXISTING_TRAINING_DATA = None
     RELABEL_CLASSIFICATIONS = True
@@ -220,7 +217,6 @@ def _():
     WELLS_TO_CLASSIFY = ["A1"]
     DATA_SAMPLE_FRACTION = None
     DATA_MAX_ROWS = None
-    # === END OPERATOR PARAMETERS ===
     return (
         ADD_TRAINING_DATA,
         CLASSIFICATION,
@@ -314,8 +310,7 @@ def _(mo):
 
 
 @app.cell
-def _():
-    # === OPERATOR PARAMETERS ===
+def params_gating():
     GATE_FEATURE = None
     GATE_MIN = None
     GATE_MAX = None
@@ -323,7 +318,6 @@ def _():
     GATE_MAX_PERCENTILE = None
     BATCH_SIZE = 10
     OUT_OF_GATE_COUNT = 1
-    # === END OPERATOR PARAMETERS ===
     return (
         BATCH_SIZE,
         GATE_FEATURE,
@@ -428,15 +422,13 @@ def _(mo):
 
 
 @app.cell
-def _():
-    # === OPERATOR PARAMETERS ===
+def params_display():
     DISPLAY_CHANNEL = ["DAPI"]
     CHANNEL_COLORS = ["b"]
     TRAINING_DATASET_SELECTION = "random"
     TOP_N = 0
     SCALE_BAR = 30
     RANDOM_SEED = 42
-    # === END OPERATOR PARAMETERS ===
     return (
         CHANNEL_COLORS,
         DISPLAY_CHANNEL,
@@ -818,8 +810,7 @@ def _(mo):
 
 
 @app.cell
-def _():
-    # === OPERATOR PARAMETERS ===
+def params_training_data():
     TRAINING_DATASET_FP = None
     METADATA_COLS_FP = "config/cell_data_metadata_cols.tsv"
     TRAINING_CHANNELS = None
@@ -878,7 +869,6 @@ def _():
         "cytoplasm_bounds_2",
         "cytoplasm_bounds_3",
     ]
-    # === END OPERATOR PARAMETERS ===
     return (
         METADATA_COLS,
         METADATA_COLS_FP,
@@ -962,11 +952,13 @@ def _(mo):
 
 
 @app.cell
-def _(CLASSIFICATION, class_mapping, filter_classes):
-    # === OPERATOR PARAMETERS ===
+def params_class_filter():
     REMOVE_MASK_LABELS = None
-    # === END OPERATOR PARAMETERS ===
+    return (REMOVE_MASK_LABELS,)
 
+
+@app.cell
+def _(CLASSIFICATION, REMOVE_MASK_LABELS, class_mapping, filter_classes):
     class_labels, filtered_class_mapping, class_id = filter_classes(
         CLASSIFICATION, class_mapping, REMOVE_MASK_LABELS
     )
@@ -1008,15 +1000,13 @@ def _(mo):
 
 
 @app.cell
-def _():
-    # === OPERATOR PARAMETERS ===
+def params_models():
     MODEL_CONFIGS = [
         ("lr_standard", "lr", "standard", None),
         ("rf_standard", "rf", "standard", None),
         ("xgb_none", "xgb", "none", None),
         ("lgb_standard", "lgb", "standard", None),
     ]
-    # === END OPERATOR PARAMETERS ===
     return (MODEL_CONFIGS,)
 
 
@@ -1095,12 +1085,10 @@ def _(mo):
 
 
 @app.cell
-def _():
-    # === OPERATOR PARAMETERS ===
+def params_model_run():
     MODEL_RUN_DIR = None
     TEST_PLATES = ["1"]
     TEST_WELLS = ["A1", "A2", "A3"]
-    # === END OPERATOR PARAMETERS ===
     return MODEL_RUN_DIR, TEST_PLATES, TEST_WELLS
 
 
@@ -1184,11 +1172,9 @@ def _(mo):
 
 
 @app.cell
-def _():
-    # === OPERATOR PARAMETERS ===
+def params_classifier():
     CLASSIFIER_MODEL = None
     COLLAPSE_COLS = ["plate", "well"]
-    # === END OPERATOR PARAMETERS ===
     return CLASSIFIER_MODEL, COLLAPSE_COLS
 
 
@@ -1261,12 +1247,10 @@ def _(mo):
 
 
 @app.cell
-def _():
-    # === OPERATOR PARAMETERS ===
+def params_calibration():
     CONFIDENCE_CORRECTION = None
     CALIBRATION_DATASET_FP = None
     CALIBRATION_METHOD = "isotonic"
-    # === END OPERATOR PARAMETERS ===
     return CALIBRATION_DATASET_FP, CALIBRATION_METHOD, CONFIDENCE_CORRECTION
 
 
@@ -1351,12 +1335,10 @@ def _(mo):
 
 
 @app.cell
-def _():
-    # === OPERATOR PARAMETERS ===
+def params_rankline():
     RANKLINE_CLASS = None
     MINIMUM_DIFFERENCE = 0.001
     RANKLINE_MAX_ROWS = 200
-    # === END OPERATOR PARAMETERS ===
     return MINIMUM_DIFFERENCE, RANKLINE_CLASS, RANKLINE_MAX_ROWS
 
 
@@ -1505,13 +1487,11 @@ def _(mo):
 
 
 @app.cell
-def _():
-    # === OPERATOR PARAMETERS ===
+def params_confidence_thresholds():
     CONFIDENCE_THRESHOLDS = {
         1: {"threshold": 0.5, "mode": "exclude"},
         2: {"threshold": 0.5, "mode": "exclude"},
     }
-    # === END OPERATOR PARAMETERS ===
     return (CONFIDENCE_THRESHOLDS,)
 
 

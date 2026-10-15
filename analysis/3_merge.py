@@ -36,10 +36,8 @@ def _(mo):
 
 
 @app.cell
-def _():
-    # === OPERATOR PARAMETERS ===
+def params_paths():
     CONFIG_FILE_PATH = "config/config.yml"
-    # === END OPERATOR PARAMETERS ===
     return (CONFIG_FILE_PATH,)
 
 
@@ -112,10 +110,8 @@ def _(mo):
 
 
 @app.cell
-def _():
-    # === OPERATOR PARAMETERS ===
+def params_merge_combos():
     MERGE_COMBO_DF_FP = "config/merge_combo.tsv"
-    # === END OPERATOR PARAMETERS ===
     return (MERGE_COMBO_DF_FP,)
 
 
@@ -160,14 +156,12 @@ def _(mo):
 
 
 @app.cell
-def _():
-    # === OPERATOR PARAMETERS ===
+def params_test_metadata():
     TEST_PLATE = None
     TEST_WELL = None
     SBS_METADATA_CYCLE = 1             # library default; cycle to extract for sbs metadata
     SBS_METADATA_CHANNEL = None
     PH_METADATA_CHANNEL = None
-    # === END OPERATOR PARAMETERS ===
     return (
         PH_METADATA_CHANNEL,
         SBS_METADATA_CHANNEL,
@@ -311,19 +305,12 @@ def _(mo):
 
 
 @app.cell
-def _():
-    # === OPERATOR PARAMETERS ===
+def params_metadata_alignment():
     METADATA_ALIGN = False
     ALIGNMENT_FLIP_X = False
     ALIGNMENT_FLIP_Y = False
     ALIGNMENT_ROTATE_90 = False
-    # === END OPERATOR PARAMETERS ===
-    return (
-        ALIGNMENT_FLIP_X,
-        ALIGNMENT_FLIP_Y,
-        ALIGNMENT_ROTATE_90,
-        METADATA_ALIGN,
-    )
+    return ALIGNMENT_FLIP_X, ALIGNMENT_FLIP_Y, ALIGNMENT_ROTATE_90, METADATA_ALIGN
 
 
 @app.cell
@@ -364,14 +351,17 @@ def _(mo):
 
 
 @app.cell
-def _():
-    # === OPERATOR PARAMETERS ===
+def params_merge_approach():
     MERGE_APPROACH = "fast"            # "fast" | "positions"
     THRESHOLD = None                   # e.g., 2
-    # === END OPERATOR PARAMETERS ===
+    return MERGE_APPROACH, THRESHOLD
+
+
+@app.cell
+def _(MERGE_APPROACH):
     if MERGE_APPROACH not in ("fast", "positions"):
         raise ValueError(f'MERGE_APPROACH must be "fast" or "positions", got {MERGE_APPROACH!r}')
-    return MERGE_APPROACH, THRESHOLD
+    return
 
 
 @app.cell
@@ -429,8 +419,7 @@ def _(MERGE_APPROACH, mo):
 
 
 @app.cell
-def _():
-    # === OPERATOR PARAMETERS: ADVANCED FAST-MERGE LEVERS ===
+def params_triangle_alignment():
     LOCAL_REFINEMENT = None       # None | "polynomial" | "thin_plate_spline"; within-tile warp
     WARP_DEGREE = None            # polynomial warp degree (e.g. 3)
     WARP_ITERATIONS = None        # refine-and-rematch passes (e.g. 2)
@@ -438,7 +427,6 @@ def _():
     SEED_OPTIMIZE = None          # try top-SEED_TOPK nearest tiles per seed, keep best (e.g. True)
     SEED_TOPK = None              # nearest tiles to evaluate when SEED_OPTIMIZE (e.g. 3)
     THRESHOLD_TRIANGLE = None     # triangle hash-match distance (e.g. 0.3)
-    # === END OPERATOR PARAMETERS ===
     return (
         LOCAL_REFINEMENT,
         SEED_OPTIMIZE,
@@ -451,12 +439,10 @@ def _():
 
 
 @app.cell
-def _():
-    # === OPERATOR PARAMETERS ===
+def params_initial_sites():
     INITIAL_SITES_APPROACH = None      # "auto" | "manual"
     INITIAL_SBS_TILES = None           # auto: list of SBS tile indices distributed across the well
     INITIAL_SITES = None               # manual: list of [phenotype_tile, sbs_tile] pairs
-    # === END OPERATOR PARAMETERS ===
     return INITIAL_SBS_TILES, INITIAL_SITES, INITIAL_SITES_APPROACH
 
 
@@ -563,13 +549,15 @@ def _(MERGE_APPROACH, mo):
 
 
 @app.cell
-def _():
-    # === OPERATOR PARAMETERS ===
+def params_gating():
     DET_RANGE = None                   # e.g., [0.06, 0.065]
-    # === END OPERATOR PARAMETERS ===
+    return (DET_RANGE,)
 
+
+@app.cell
+def _():
     SCORE = 0.1                        # library default (auto bucket)
-    return DET_RANGE, SCORE
+    return (SCORE,)
 
 
 @app.cell
@@ -738,12 +726,10 @@ def _(MERGE_APPROACH, mo):
 
 
 @app.cell
-def _():
-    # === OPERATOR PARAMETERS (POSITIONS APPROACH) ===
+def params_merge_positions():
     FLIPUD = False
     FLIPLR = False
     ROT90 = 0
-    # === END OPERATOR PARAMETERS ===
     return FLIPLR, FLIPUD, ROT90
 
 
@@ -922,11 +908,9 @@ def _(mo):
 
 
 @app.cell
-def _():
-    # === OPERATOR PARAMETERS ===
+def params_deduplication():
     SBS_DEDUP_PRIOR = None             # SBS-side deduplication prior
     PHENO_DEDUP_PRIOR = None           # phenotype-side deduplication prior
-    # === END OPERATOR PARAMETERS ===
     return PHENO_DEDUP_PRIOR, SBS_DEDUP_PRIOR
 
 

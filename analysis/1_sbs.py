@@ -36,10 +36,8 @@ def _(mo):
 
 
 @app.cell
-def _():
-    # === OPERATOR PARAMETERS ===
+def params_paths():
     CONFIG_FILE_PATH = "config/config.yml"
-    # === END OPERATOR PARAMETERS ===
     return (CONFIG_FILE_PATH,)
 
 
@@ -268,15 +266,13 @@ def _(mo):
 
 
 @app.cell
-def _():
-    # === OPERATOR PARAMETERS ===
+def params_alignment():
     ALIGNMENT_METHOD = None
     UPSAMPLE_FACTOR = 2  # library default
     WINDOW = 2  # library default
     SKIP_CYCLES = None
     MANUAL_BACKGROUND_CYCLE = None
     MANUAL_CHANNEL_MAPPING = None
-    # === END OPERATOR PARAMETERS ===
     return (
         ALIGNMENT_METHOD,
         MANUAL_BACKGROUND_CYCLE,
@@ -517,8 +513,7 @@ def _(mo):
 
 
 @app.cell
-def _():
-    # === OPERATOR PARAMETERS ===
+def params_spot_detection():
     MAX_FILTER_WIDTH = 3  # library default
     SPOT_DETECTION_METHOD = "standard"  # "standard" | "spotiflow"
     if SPOT_DETECTION_METHOD == "standard":
@@ -529,8 +524,6 @@ def _():
         SPOTIFLOW_MODEL = "general"
         SPOTIFLOW_THRESHOLD = 0.3
         SPOTIFLOW_MIN_DISTANCE = 1
-    # === END OPERATOR PARAMETERS ===
-
     return (
         MAX_FILTER_WIDTH,
         PEAK_WIDTH,
@@ -658,13 +651,23 @@ def _(mo):
 
 
 @app.cell
-def _(BASES, CHANNEL_NAMES, SBS_CYCLES, SKIP_CYCLES):
-    # === OPERATOR PARAMETERS ===
+def params_segmentation_channels():
     DAPI_CYCLE = None
     CYTO_CYCLE = None
     CYTO_CHANNEL = None
-    # === END OPERATOR PARAMETERS ===
+    return CYTO_CHANNEL, CYTO_CYCLE, DAPI_CYCLE
 
+
+@app.cell
+def _(
+    BASES,
+    CHANNEL_NAMES,
+    CYTO_CHANNEL,
+    CYTO_CYCLE,
+    DAPI_CYCLE,
+    SBS_CYCLES,
+    SKIP_CYCLES,
+):
     # Derive DAPI and CYTO indexes
     DAPI_INDEX = CHANNEL_NAMES.index("DAPI")
     CYTO_INDEX = CHANNEL_NAMES.index(CYTO_CHANNEL)
@@ -682,14 +685,7 @@ def _(BASES, CHANNEL_NAMES, SBS_CYCLES, SKIP_CYCLES):
             f"CYTO_CHANNEL should be a base channel {BASES}, but got '{CYTO_CHANNEL}'. "
             f"If using a cellular stain, set DAPI_CYCLE = CYTO_CYCLE."
         )
-    return (
-        CYTO_CYCLE,
-        CYTO_CYCLE_INDEX,
-        CYTO_INDEX,
-        DAPI_CYCLE,
-        DAPI_CYCLE_INDEX,
-        DAPI_INDEX,
-    )
+    return CYTO_CYCLE_INDEX, CYTO_INDEX, DAPI_CYCLE_INDEX, DAPI_INDEX
 
 
 @app.cell
@@ -841,8 +837,7 @@ def _(mo):
 
 
 @app.cell
-def _(CYTO_INDEX, DAPI_INDEX, corrected_image):
-    # === OPERATOR PARAMETERS ===
+def params_segmentation():
     SEGMENTATION_METHOD = "cellpose"  # "cellpose" | "stardist" | "watershed"
     GPU = False
     RECONCILE = "contained_in_cells"
@@ -867,8 +862,30 @@ def _(CYTO_INDEX, DAPI_INDEX, corrected_image):
         THRESHOLD_DAPI = 4260
         THRESHOLD_CELL = 1300
         NUCLEUS_AREA = (45, 450)
-    # === END OPERATOR PARAMETERS ===
+    return (
+        CELLPOSE_MODEL,
+        CELL_CELLPROB_THRESHOLD,
+        CELL_FLOW_THRESHOLD,
+        CELL_NMS_THRESHOLD,
+        CELL_PROB_THRESHOLD,
+        GPU,
+        HELPER_INDEX,
+        NUCLEI_CELLPROB_THRESHOLD,
+        NUCLEI_FLOW_THRESHOLD,
+        NUCLEI_NMS_THRESHOLD,
+        NUCLEI_PROB_THRESHOLD,
+        NUCLEUS_AREA,
+        RECONCILE,
+        SEGMENTATION_METHOD,
+        SEGMENT_CELLS,
+        STARDIST_MODEL,
+        THRESHOLD_CELL,
+        THRESHOLD_DAPI,
+    )
 
+
+@app.cell
+def _(CELLPOSE_MODEL, CYTO_INDEX, DAPI_INDEX, SEGMENTATION_METHOD, corrected_image):
     # Cellpose 4.x, cpsam and custom model paths have no size model: derive diameters from the masks
     from lib.shared.segment_cellpose import CELLPOSE_4X as _CELLPOSE_4X
 
@@ -897,29 +914,7 @@ def _(CYTO_INDEX, DAPI_INDEX, corrected_image):
         )
         NUCLEI_DIAMETER_INPUT = None
         CELL_DIAMETER_INPUT = None
-    return (
-        CELLPOSE_MODEL,
-        CELL_CELLPROB_THRESHOLD,
-        CELL_DIAMETER_INPUT,
-        CELL_FLOW_THRESHOLD,
-        CELL_NMS_THRESHOLD,
-        CELL_PROB_THRESHOLD,
-        GPU,
-        HELPER_INDEX,
-        NUCLEI_CELLPROB_THRESHOLD,
-        NUCLEI_DIAMETER_INPUT,
-        NUCLEI_FLOW_THRESHOLD,
-        NUCLEI_NMS_THRESHOLD,
-        NUCLEI_PROB_THRESHOLD,
-        NUCLEUS_AREA,
-        RECONCILE,
-        SEGMENTATION_METHOD,
-        SEGMENT_CELLS,
-        STARDIST_MODEL,
-        THRESHOLD_CELL,
-        THRESHOLD_DAPI,
-        diameters_from_masks,
-    )
+    return CELL_DIAMETER_INPUT, NUCLEI_DIAMETER_INPUT, diameters_from_masks
 
 
 @app.cell
@@ -1132,8 +1127,7 @@ def _(mo):
 
 
 @app.cell
-def _():
-    # === OPERATOR PARAMETERS ===
+def params_barcodes():
     BARCODE_TYPE = "simple"  # "simple" | "multi"
     DF_DESIGN_FP = None
     DF_BARCODE_LIBRARY_FP = "config/barcode_library.tsv"
@@ -1160,18 +1154,10 @@ def _():
     RECOMB_PREFIX_LENGTH = None  # e.g., 6 for cycles 6-11
     SKIP_CYCLES_RECOMB = None  # 1-based positions to skip in RECOMB region
     SEQUENCING_ORDER = None  # "map_recomb" | "recomb_map"
-    # === END OPERATOR PARAMETERS ===
-
-    # Mode-specific barcode parameters
-    if BARCODE_TYPE == "simple":
-        pass  # values already supplied via OPERATOR PARAMETERS above
-
-    elif BARCODE_TYPE == "multi":
-        # Multi-mode: zero out simple-mode params (operator sets multi-mode params in markers above)
-        BARCODE_COL = None
-        PREFIX_LENGTH = None
     return (
         BARCODE_COL,
+        BARCODE_MAP,
+        BARCODE_RECOMB,
         BARCODE_TYPE,
         DF_BARCODE_LIBRARY_FP,
         DF_DESIGN_FP,
@@ -1318,8 +1304,7 @@ def _(mo):
 
 
 @app.cell
-def _():
-    # === OPERATOR PARAMETERS ===
+def params_read_calling():
     THRESHOLD_READS = 50  # library default; raise to be stricter
     CHEMISTRY = "four_color"  # "four_color" | "combinatorial"
     # four_color: median|percentile; combinatorial: frac|merfish
@@ -1333,13 +1318,24 @@ def _():
     }
     DYE_SCALE = None  # combinatorial frac only, e.g. {"Alexa 488": 1.5}
     BRIGHTNESS_REGIONS = None  # combinatorial frac only, e.g. [[1, 7], [8, 12]]
-    # === END OPERATOR PARAMETERS ===
+    return (
+        BRIGHTNESS_REGIONS,
+        CALL_READS_METHOD,
+        CHEMISTRY,
+        COMBINATORIAL_CODE,
+        DYE_SCALE,
+        THRESHOLD_READS,
+    )
+
+
+@app.cell
+def _(BRIGHTNESS_REGIONS, COMBINATORIAL_CODE, DYE_SCALE):
     COMBINATORIAL = {"code": COMBINATORIAL_CODE}
     if DYE_SCALE:
         COMBINATORIAL["dye_scale"] = DYE_SCALE
     if BRIGHTNESS_REGIONS:
         COMBINATORIAL["brightness_regions"] = BRIGHTNESS_REGIONS
-    return CALL_READS_METHOD, CHEMISTRY, COMBINATORIAL, THRESHOLD_READS
+    return (COMBINATORIAL,)
 
 
 @app.cell
@@ -1505,8 +1501,7 @@ def _(mo):
 
 
 @app.cell
-def _():
-    # === OPERATOR PARAMETERS ===
+def params_cell_calling():
     Q_MIN = 0  # library default
     ERROR_CORRECT = False
     SORT_CALLS = "count"  # "count" | "peak"
@@ -1519,25 +1514,12 @@ def _():
     BARCODE_INFO_COLS = None  # optional additional barcode info cols
     RECOMB_FILTER_COL = "Q_recomb"  # multi mode: quality col for recomb filtering
     RECOMB_Q_THRESH = 0.1  # multi mode: quality threshold for recomb calls
-    # === END OPERATOR PARAMETERS ===
-
-    # Library defaults (auto bucket) — output col names renamed to *_OUT to avoid
-    # colliding with the Cell 8 operator-set PREFIX_MAP/PREFIX_RECOMB (which are
-    # input column names in the design table).
-    N_BARCODES = 2  # number of ranked barcodes to store per cell
-    PREFIX_COL = "prefix"  # simple mode: standardize_barcode_design output col
-    PREFIX_MAP_OUT = "prefix_map"  # multi mode: MAP region output col
-    PREFIX_RECOMB_OUT = "prefix_recomb"  # multi mode: RECOMB region output col
     return (
         BARCODE_INFO_COLS,
         ERROR_CORRECT,
         MAP_END,
         MAP_START,
         MAX_DISTANCE,
-        N_BARCODES,
-        PREFIX_COL,
-        PREFIX_MAP_OUT,
-        PREFIX_RECOMB_OUT,
         Q_MIN,
         RECOMB_END,
         RECOMB_FILTER_COL,
@@ -1545,6 +1527,18 @@ def _():
         RECOMB_START,
         SORT_CALLS,
     )
+
+
+@app.cell
+def _():
+    # Library defaults (auto bucket) — output col names renamed to *_OUT to avoid
+    # colliding with the Cell 8 operator-set PREFIX_MAP/PREFIX_RECOMB (which are
+    # input column names in the design table).
+    N_BARCODES = 2  # number of ranked barcodes to store per cell
+    PREFIX_COL = "prefix"  # simple mode: standardize_barcode_design output col
+    PREFIX_MAP_OUT = "prefix_map"  # multi mode: MAP region output col
+    PREFIX_RECOMB_OUT = "prefix_recomb"  # multi mode: RECOMB region output col
+    return N_BARCODES, PREFIX_COL, PREFIX_MAP_OUT, PREFIX_RECOMB_OUT
 
 
 @app.cell

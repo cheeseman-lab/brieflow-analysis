@@ -86,16 +86,18 @@ def _(mo):
 
 
 @app.cell
-def _(Path):
-    # === OPERATOR PARAMETERS ===
+def params_paths():
     CONFIG_FILE_PATH = "config/config.yml"
     ROOT_FP = "brieflow_output/"
     IMAGE_FORMAT = "zarr"              # "zarr" | "tiff"
-    # === END OPERATOR PARAMETERS ===
+    return CONFIG_FILE_PATH, IMAGE_FORMAT, ROOT_FP
 
+
+@app.cell
+def _(CONFIG_FILE_PATH, Path, ROOT_FP):
     Path(CONFIG_FILE_PATH).parent.mkdir(parents=True, exist_ok=True)
     Path(ROOT_FP).mkdir(parents=True, exist_ok=True)
-    return CONFIG_FILE_PATH, IMAGE_FORMAT, ROOT_FP
+    return
 
 
 @app.cell(hide_code=True)
@@ -174,8 +176,7 @@ def _(mo):
 
 
 @app.cell
-def _():
-    # === OPERATOR PARAMETERS ===
+def params_samples():
     # Paths to sample dataframes (output of this notebook)
     SBS_SAMPLES_DF_FP = "config/sbs_samples.tsv"
     PHENOTYPE_SAMPLES_DF_FP = "config/phenotype_samples.tsv"
@@ -208,7 +209,6 @@ def _():
     # Z-dimension handling (None = 2D / standard input)
     SBS_N_Z_PLANES = None
     PHENOTYPE_N_Z_PLANES = None
-    # === END OPERATOR PARAMETERS ===
     return (
         PHENOTYPE_COMBO_DF_FP,
         PHENOTYPE_DATA_FORMAT,
@@ -447,8 +447,7 @@ def _(mo):
 
 
 @app.cell
-def _():
-    # === OPERATOR PARAMETERS ===
+def params_metadata_source():
     # External metadata files (TIFF-only; leave as None for ND2 data).
     SBS_METADATA_IMAGES_DIR_FP = None
     SBS_METADATA_PATH_PATTERN = None
@@ -460,16 +459,15 @@ def _():
     PHENOTYPE_METADATA_PATH_METADATA = None
     PHENOTYPE_METADATA_PATH_ORDER_TYPE = None
     PHENOTYPE_METADATA_SAMPLES_DF_FP = None
-    # === END OPERATOR PARAMETERS ===
     return (
         PHENOTYPE_METADATA_IMAGES_DIR_FP,
-        PHENOTYPE_METADATA_PATH_ORDER_TYPE,
         PHENOTYPE_METADATA_PATH_METADATA,
+        PHENOTYPE_METADATA_PATH_ORDER_TYPE,
         PHENOTYPE_METADATA_PATH_PATTERN,
         PHENOTYPE_METADATA_SAMPLES_DF_FP,
         SBS_METADATA_IMAGES_DIR_FP,
-        SBS_METADATA_PATH_ORDER_TYPE,
         SBS_METADATA_PATH_METADATA,
+        SBS_METADATA_PATH_ORDER_TYPE,
         SBS_METADATA_PATH_PATTERN,
         SBS_METADATA_SAMPLES_DF_FP,
     )
@@ -621,14 +619,12 @@ def _(mo):
 
 
 @app.cell
-def _():
-    # === OPERATOR PARAMETERS ===
+def params_image_conversion():
     SBS_CHANNEL_ORDER = None             # e.g., ["DAPI", "CY3", "A594", "CY5", "CY7"]
     PHENOTYPE_CHANNEL_ORDER = None       # e.g., ["DAPI", "GFP", "A594", "A750"]
     PHENOTYPE_ROUND_ORDER = None         # e.g., [1] for single-round, [1, 2, 3] for multi-round
     SBS_CHANNEL_ORDER_FLIP = False
     PHENOTYPE_CHANNEL_ORDER_FLIP = False
-    # === END OPERATOR PARAMETERS ===
     return (
         PHENOTYPE_CHANNEL_ORDER,
         PHENOTYPE_CHANNEL_ORDER_FLIP,
@@ -790,10 +786,8 @@ def _(mo):
 
 
 @app.cell
-def _():
-    # === OPERATOR PARAMETERS ===
+def params_illumination():
     SAMPLE_FRACTION = 1.0
-    # === END OPERATOR PARAMETERS ===
     return (SAMPLE_FRACTION,)
 
 
@@ -842,18 +836,14 @@ def _(mo):
 
 
 @app.cell
-def _():
-    # === OPERATOR PARAMETERS ===
+def params_sbs_channels():
     SBS_CHANNELS_METADATA = None        # list[dict]; see markdown above
-    # === END OPERATOR PARAMETERS ===
     return (SBS_CHANNELS_METADATA,)
 
 
 @app.cell
-def _():
-    # === OPERATOR PARAMETERS ===
+def params_phenotype_channels():
     PHENOTYPE_CHANNELS_METADATA = None  # list[dict]; see markdown above
-    # === END OPERATOR PARAMETERS ===
     return (PHENOTYPE_CHANNELS_METADATA,)
 
 

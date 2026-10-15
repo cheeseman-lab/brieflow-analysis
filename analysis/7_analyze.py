@@ -36,10 +36,8 @@ def _(mo):
 
 
 @app.cell
-def _():
-    # === OPERATOR PARAMETERS ===
+def params_paths():
     CONFIG_FILE_PATH = "config/config.yml"
-    # === END OPERATOR PARAMETERS ===
     return (CONFIG_FILE_PATH,)
 
 
@@ -196,11 +194,9 @@ def _(mo):
 
 
 @app.cell
-def _():
-    # === OPERATOR PARAMETERS ===
+def params_resolution_search():
     RESOLUTION_METRIC = "corum_enrichment"
     RESOLUTION_USE_FILTERED = False
-    # === END OPERATOR PARAMETERS ===
     return RESOLUTION_METRIC, RESOLUTION_USE_FILTERED
 
 
@@ -274,13 +270,11 @@ def _(mo):
 
 
 @app.cell
-def _():
-    # === OPERATOR PARAMETERS ===
+def params_cluster_selection():
     CHANNEL_COMBO = None
     CELL_CLASS = None
     LEIDEN_RESOLUTION = None
     COMPARTMENT_COMBO = None
-    # === END OPERATOR PARAMETERS ===
     return CELL_CLASS, CHANNEL_COMBO, COMPARTMENT_COMBO, LEIDEN_RESOLUTION
 
 
@@ -389,10 +383,8 @@ def _(mo):
 
 
 @app.cell
-def _():
-    # === OPERATOR PARAMETERS ===
+def params_cluster_visualization():
     CLUSTER_ID = None
-    # === END OPERATOR PARAMETERS ===
     return (CLUSTER_ID,)
 
 
@@ -457,11 +449,9 @@ def _(mo):
 
 
 @app.cell
-def _():
-    # === OPERATOR PARAMETERS ===
+def params_feature_visualization():
     FEATURES_TO_ANALYZE = None
     GENES_TO_LABEL = None
-    # === END OPERATOR PARAMETERS ===
     return FEATURES_TO_ANALYZE, GENES_TO_LABEL
 
 
@@ -610,12 +600,10 @@ def _(mo):
 
 
 @app.cell
-def _():
-    # === OPERATOR PARAMETERS ===
+def params_volcano():
     VOLCANO_FEATURE = None
     VOLCANO_FDR_THRESHOLD = 0.05
     VOLCANO_ZSCORE_THRESHOLD = 2.0
-    # === END OPERATOR PARAMETERS ===
     return VOLCANO_FDR_THRESHOLD, VOLCANO_FEATURE, VOLCANO_ZSCORE_THRESHOLD
 
 
@@ -699,8 +687,7 @@ def _(mo):
 
 
 @app.cell
-def _():
-    # === OPERATOR PARAMETERS ===
+def params_montage():
     MONTAGE_FEATURE = None
     MONTAGE_PLATE = None
     MONTAGE_WELL = None
@@ -710,7 +697,6 @@ def _():
     MONTAGE_SHAPE = (3, 10)
     MONTAGE_ASCENDING = False
     MONTAGE_SUBSET_ROWS = 25000
-    # === END OPERATOR PARAMETERS ===
     return (
         MONTAGE_ASCENDING,
         MONTAGE_CELL_SIZE,
@@ -864,8 +850,7 @@ def _(mo):
 
 
 @app.cell
-def _():
-    # === OPERATOR PARAMETERS ===
+def params_mozzarellm():
     MOZZARELLM_MODEL = "claude-sonnet-5"
     MOZZARELLM_MODE = "cot"
     MOZZARELLM_MCP = True
@@ -879,7 +864,6 @@ def _():
     MOZZARELLM_MAX_WORKERS = 8
     MOZZARELLM_MAX_FAILED_CLUSTERS = 2
     MOZZARELLM_RUNTIME = 720
-    # === END OPERATOR PARAMETERS ===
     return (
         MOZZARELLM_FDR_THRESHOLD,
         MOZZARELLM_INCLUDE_FEATURES,
@@ -926,12 +910,10 @@ def _(mo):
 
 
 @app.cell
-def _(SPLIT_BY_COMPARTMENT, cluster_combos, config, panel_tier_clusterings, screen):
-    # === OPERATOR PARAMETERS ===
+def params_mozzarellm_selection():
     MOZZARELLM_ANNOTATE_SELECTED = True
     MOZZARELLM_EXTRA_CLUSTERINGS = []
     MOZZARELLM_REWRITE_CONTEXTS = False
-    # === END OPERATOR PARAMETERS ===
     return (
         MOZZARELLM_ANNOTATE_SELECTED,
         MOZZARELLM_EXTRA_CLUSTERINGS,

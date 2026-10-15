@@ -36,10 +36,8 @@ def _(mo):
 
 
 @app.cell
-def _():
-    # === OPERATOR PARAMETERS ===
+def params_paths():
     CONFIG_FILE_PATH = "config/config.yml"
-    # === END OPERATOR PARAMETERS ===
     return (CONFIG_FILE_PATH,)
 
 
@@ -124,12 +122,10 @@ def _(mo):
 
 
 @app.cell
-def _():
-    # === OPERATOR PARAMETERS ===
+def params_test_wells():
     TEST_PLATE = None
     TEST_WELL_1 = None
     TEST_WELL_2 = None
-    # === END OPERATOR PARAMETERS ===
     return TEST_PLATE, TEST_WELL_1, TEST_WELL_2
 
 
@@ -195,14 +191,12 @@ def _(mo):
 
 
 @app.cell
-def _():
-    # === OPERATOR PARAMETERS ===
+def params_metadata():
     WELL_ANNOTATIONS_FP = None              # e.g., "config/well_annotations.tsv"
     SPLIT_COL = 'class'                     # "class" (classifier) or an annotation column
     GROUP_COLS = []                         # e.g., ["treatment"]
     BOOTSTRAP_CONTROL_SCOPE = 'pooled'      # "pooled" | "within_group" | "reference_group" | "within_perturbation"
     BOOTSTRAP_REFERENCE_GROUP = None        # the vehicle group; required by "reference_group" and "within_perturbation"
-    # === END OPERATOR PARAMETERS ===
     return (
         BOOTSTRAP_CONTROL_SCOPE,
         BOOTSTRAP_REFERENCE_GROUP,
@@ -299,25 +293,20 @@ def _(mo):
 
 
 @app.cell
-def _():
-    # === OPERATOR PARAMETERS ===
+def params_split_classes():
     TEST_MONTAGE_CHANNEL = None
     COLLAPSE_COLS = None               # e.g., ["sgRNA_0", "gene_symbol_0"]
     MONTAGE_CELL_SIZE = None           # e.g., 40 — zoom level (pixel size per cell bounding box)
     GENERATE_MONTAGES = True           # write montages in the aggregate pipeline
-    # === END OPERATOR PARAMETERS ===
+    return COLLAPSE_COLS, GENERATE_MONTAGES, MONTAGE_CELL_SIZE, TEST_MONTAGE_CHANNEL
 
+
+@app.cell
+def _():
     # Library defaults (auto bucket)
     MONTAGE_NUM_CELLS = 30
     MONTAGE_SHAPE = (3, 10)
-    return (
-        COLLAPSE_COLS,
-        GENERATE_MONTAGES,
-        MONTAGE_CELL_SIZE,
-        TEST_MONTAGE_CHANNEL,
-        MONTAGE_NUM_CELLS,
-        MONTAGE_SHAPE,
-    )
+    return MONTAGE_NUM_CELLS, MONTAGE_SHAPE
 
 
 @app.cell
@@ -464,10 +453,8 @@ def _(mo):
 
 
 @app.cell
-def _():
-    # === OPERATOR PARAMETERS ===
+def params_secondary_objects():
     SECOND_OBJ_AGG_STRATEGY = "none"   # "none" | "single" | "all" | "average"
-    # === END OPERATOR PARAMETERS ===
     return (SECOND_OBJ_AGG_STRATEGY,)
 
 
@@ -489,15 +476,13 @@ def _(mo):
 
 
 @app.cell
-def _():
-    # === OPERATOR PARAMETERS ===
+def params_channel_combos():
     CHANNEL_COMBOS = None              # e.g., [["DAPI", "COXIV", "CENPA", "WGA"], ["DAPI", "CENPA"]]
     AGGREGATE_COMBO_FP = "config/aggregate_combo.tsv"
     SPLIT_BY_COMPARTMENT = False
     COMPARTMENT_COMBOS = None          # e.g., [["cell", "nucleus", "cytoplasm"], ["nucleus"]]
     TEST_CELL_CLASS = None
     TEST_CHANNEL_COMBO = None
-    # === END OPERATOR PARAMETERS ===
     return (
         AGGREGATE_COMBO_FP,
         CHANNEL_COMBOS,
@@ -621,11 +606,9 @@ def _(mo):
 
 
 @app.cell
-def _():
-    # === OPERATOR PARAMETERS ===
+def params_perturbation_filter():
     FILTER_QUERIES = None              # e.g., ["mapped_single_gene == True"]
     PERTURBATION_NAME_COL = None       # e.g., "gene_symbol_0"
-    # === END OPERATOR PARAMETERS ===
     return FILTER_QUERIES, PERTURBATION_NAME_COL
 
 
@@ -667,12 +650,10 @@ def _(mo):
 
 
 @app.cell
-def _():
-    # === OPERATOR PARAMETERS ===
+def params_missing_values():
     DROP_COLS_THRESHOLD = None         # e.g., 0.1
     DROP_ROWS_THRESHOLD = None         # e.g., 0.01
     IMPUTE = None                      # True | False
-    # === END OPERATOR PARAMETERS ===
     return DROP_COLS_THRESHOLD, DROP_ROWS_THRESHOLD, IMPUTE
 
 
@@ -710,10 +691,8 @@ def _(mo):
 
 
 @app.cell
-def _():
-    # === OPERATOR PARAMETERS ===
+def params_intensity_filter():
     CONTAMINATION = None               # e.g., 0.01
-    # === END OPERATOR PARAMETERS ===
     return (CONTAMINATION,)
 
 
@@ -760,17 +739,11 @@ def _(mo):
 
 
 @app.cell
-def _():
-    # === OPERATOR PARAMETERS ===
+def params_perturbation_score():
     SKIP_PERTURBATION_SCORE = False
     PS_PROBABILITY_THRESHOLD = None
     PS_PERCENTILE_THRESHOLD = None
-    # === END OPERATOR PARAMETERS ===
-    return (
-        PS_PERCENTILE_THRESHOLD,
-        PS_PROBABILITY_THRESHOLD,
-        SKIP_PERTURBATION_SCORE,
-    )
+    return PS_PERCENTILE_THRESHOLD, PS_PROBABILITY_THRESHOLD, SKIP_PERTURBATION_SCORE
 
 
 @app.cell(hide_code=True)
@@ -790,15 +763,19 @@ def _(mo):
 
 
 @app.cell
-def _():
-    # === OPERATOR PARAMETERS ===
+def params_alignment_data():
     BATCH_COLS = None                  # e.g., ["plate", "well"]
     CONTROL_KEY = None                 # e.g., "nontargeting"
     PERTURBATION_ID_COL = "cell_barcode_0"   # or "sgRNA_0" — should essentially always be set
     CONTROL_NAME_COL = None            # e.g., "gene_symbol_0" when PERTURBATION_NAME_COL is a construct column
     TVN_BATCH_CORRECTION = True        # False: one global TVN on the pooled controls
-    # === END OPERATOR PARAMETERS ===
-    return BATCH_COLS, CONTROL_KEY, CONTROL_NAME_COL, PERTURBATION_ID_COL, TVN_BATCH_CORRECTION
+    return (
+        BATCH_COLS,
+        CONTROL_KEY,
+        CONTROL_NAME_COL,
+        PERTURBATION_ID_COL,
+        TVN_BATCH_CORRECTION,
+    )
 
 
 @app.cell
@@ -839,12 +816,10 @@ def _(mo):
 
 
 @app.cell
-def _():
-    # === OPERATOR PARAMETERS ===
+def params_align_aggregate():
     VARIANCE_OR_NCOMP = None           # e.g., 0.99 (variance retained) or integer n_components
     NUM_ALIGN_BATCHES = None           # e.g., 1
     AGG_METHOD = None                  # e.g., "median"
-    # === END OPERATOR PARAMETERS ===
     return AGG_METHOD, NUM_ALIGN_BATCHES, VARIANCE_OR_NCOMP
 
 
@@ -949,14 +924,12 @@ def _(mo):
 
 
 @app.cell
-def _():
-    # === OPERATOR PARAMETERS (BOOTSTRAP — optional) ===
+def params_bootstrap():
     FEATURE_NORMALIZATION = "standard"
     NUM_SIMS = None
     EXCLUSION_STRING = None
     PSEUDOGENE_PATTERNS = None
     BOOTSTRAP_EXTRA_FEATURES = None    # e.g., ["radial_cv", "frac_at_d"]
-    # === END OPERATOR PARAMETERS ===
     return (
         BOOTSTRAP_EXTRA_FEATURES,
         EXCLUSION_STRING,
