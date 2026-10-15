@@ -15,7 +15,7 @@ Brieflow is an extensible computational pipeline for high-throughput analysis of
 This repo is a Github template with the configuration notebooks/files and execution scripts for running an OPS screen analysis.
 [Brieflow](https://github.com/cheeseman-lab/brieflow) contains the source code for running an OPS screen analysis.
 
-On this `marimo` branch, each phase is configured in a [marimo](https://marimo.io) notebook (`analysis/0_preprocess.py` … `analysis/12_analyze.py`) and run with `bash analysis/flow.sh <module>`.
+Each phase is configured in a [marimo](https://marimo.io) notebook (`analysis/0_preprocess.py` … `analysis/7_analyze.py`) and run with `bash analysis/flow.sh <module>`.
 See [Running a Screen](https://brieflow.readthedocs.io/en/latest/3.running_modules.html) and [Working with the Notebooks](https://brieflow.readthedocs.io/en/latest/notebook_editor_setup.html).
 
 ## Example Screen Repositories
@@ -35,6 +35,28 @@ We strongly suggest that Brieflow Analysis is set up with the companion [Brieflo
 
 Full details on setup, installation, test data, usage, module details, and contribution guides:  
 **https://brieflow.readthedocs.io**
+
+### Starting a screen
+
+1. Create a repository from this template and clone it with its submodule: `git clone --recurse-submodules <your-repo-url>`.
+2. Create the conda environment and install Brieflow as described in the [Brieflow documentation](https://brieflow.readthedocs.io).
+3. Fill in `analysis/screen.yaml` with the facts of your experiment (plates, wells, channels, cycles, library).
+4. From `analysis/`, open the notebooks in order with `marimo edit <notebook>`; each writes its section of `config/config.yml`.
+5. After each notebook, run its module with `bash flow.sh <module>` (add `--backend slurm` on a cluster), then open the next notebook.
+
+| Notebook | Module | Run with |
+|---|---|---|
+| `0_preprocess.py` | preprocess | `bash flow.sh preprocess` |
+| `1_sbs.py` | sbs | `bash flow.sh sbs` |
+| `2_phenotype.py` | phenotype | `bash flow.sh phenotype` |
+| `3_merge.py` | merge | `bash flow.sh merge` |
+| `4_classify.py` | (no module; writes the classifier settings aggregate uses) | — |
+| `5_aggregate.py` | aggregate | `bash flow.sh aggregate` |
+| `6_cluster.py` | cluster | `bash flow.sh cluster` |
+| `7_analyze.py` | mozzarellm (optional, calls a paid LLM API) | `bash flow.sh mozzarellm` |
+
+`bash flow.sh --help` lists every option.
+The [brieflow-auto](https://github.com/cheeseman-lab/brieflow-auto) Claude Code plugin can drive this template end to end: it fills the notebook parameters from `screen.yaml`, runs each module, and checks its QC.
 
 ## Contributing
 

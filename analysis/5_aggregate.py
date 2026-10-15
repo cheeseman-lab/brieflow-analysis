@@ -175,7 +175,7 @@ def _(mo):
     ### Cell Data Metadata
 
     - `METADATA_COLS_FP`: Path to TSV to store metadata cols.
-    - `METADATA_COLS`: Loaded from config (set in notebook 7). Modify if needed.
+    - `METADATA_COLS`: Loaded from config (set in notebook 4, classify). Modify if needed.
     """)
     return
 
@@ -214,7 +214,7 @@ def _():
 
 @app.cell
 def _(WELL_ANNOTATIONS_FP, config, pd):
-    # Load classification settings from config (set in notebook 7)
+    # Load classification settings from config (set in notebook 4, classify)
     from lib.phenotype.constants import DEFAULT_METADATA_COLS
     if 'classify' in config:
         METADATA_COLS_FP = config['classify']['metadata_cols_fp']
@@ -1039,7 +1039,7 @@ def _(
     product,
     yaml,
 ):
-    # Add aggregate section (classifier settings are in config["classify"] from notebook 7)
+    # Add aggregate section (classifier settings are in config["classify"] from notebook 4)
     config['aggregate'] = {'metadata_cols_fp': METADATA_COLS_FP, 'collapse_cols': COLLAPSE_COLS, 'aggregate_combo_fp': AGGREGATE_COMBO_FP, 'split_by_compartment': SPLIT_BY_COMPARTMENT, 'second_obj_agg_strategy': SECOND_OBJ_AGG_STRATEGY, 'filter_queries': FILTER_QUERIES, 'perturbation_name_col': PERTURBATION_NAME_COL, 'drop_cols_threshold': DROP_COLS_THRESHOLD, 'drop_rows_threshold': DROP_ROWS_THRESHOLD, 'impute': IMPUTE, 'contamination': CONTAMINATION, 'batch_cols': BATCH_COLS, 'control_key': CONTROL_KEY, 'control_name_col': CONTROL_NAME_COL, 'tvn_batch_correction': TVN_BATCH_CORRECTION, 'perturbation_id_col': PERTURBATION_ID_COL, 'variance_or_ncomp': VARIANCE_OR_NCOMP, 'num_align_batches': NUM_ALIGN_BATCHES, 'agg_method': AGG_METHOD, 'skip_perturbation_score': SKIP_PERTURBATION_SCORE, 'ps_probability_threshold': PS_PROBABILITY_THRESHOLD, 'ps_percentile_threshold': PS_PERCENTILE_THRESHOLD, 'montage_num_cells': MONTAGE_NUM_CELLS, 'montage_cell_size': MONTAGE_CELL_SIZE, 'montage_shape': list(MONTAGE_SHAPE), 'generate_montages': GENERATE_MONTAGES, 'well_annotations_fp': WELL_ANNOTATIONS_FP, 'split_col': SPLIT_COL, 'group_cols': GROUP_COLS, 'bootstrap_control_scope': BOOTSTRAP_CONTROL_SCOPE, 'bootstrap_reference_group': BOOTSTRAP_REFERENCE_GROUP}
     if BOOTSTRAP_CELL_CLASS and BOOTSTRAP_CHANNEL_COMBO:
         cell_classes_list = BOOTSTRAP_CELL_CLASS if isinstance(BOOTSTRAP_CELL_CLASS, list) else [BOOTSTRAP_CELL_CLASS]
