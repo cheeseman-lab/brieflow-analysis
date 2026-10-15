@@ -40,8 +40,10 @@ cellular:
     density_cells_cm2: null
   induction:
     duration: ""
-  well_annotations: null                          # per-well conditions table beside this file: plate, well, one column per variable (e.g. "well_annotations.tsv")
-  split_by: null                                  # annotation column whose values each get their own aggregation and clustering (e.g. "experiment")
+  well_annotations: null                          # table of the wells to analyze, beside this file: plate, well, one column per condition (e.g. "well_annotations.tsv"); only these wells are processed. null = every imaged well
+  split_by: null                                  # table column whose values each get their own aggregation and clustering (e.g. "experiment"); null = one dataset
+  group_by: null                                  # table column aggregated within, in one shared space: each perturbation x value is one point (e.g. "treatment"); null = none
+  reference_group: null                           # value of group_by that each perturbation is scored against within its own arm (e.g. "Ethanol" vehicle); null = scored against the negative controls
 
 # =========================================================================
 # library
