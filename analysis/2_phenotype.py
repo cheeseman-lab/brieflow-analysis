@@ -273,8 +273,10 @@ def _(
     apply_custom_offsets,
     corrected_image,
 ):
-    # Start with the corrected image
+    # Start with the corrected image; channel names and colormaps are copied, never mutated in place
     aligned_image = corrected_image.copy()
+    channel_names = list(CHANNEL_NAMES)
+    channel_cmaps = list(CHANNEL_CMAPS)
 
     # Apply custom offsets 
     if CUSTOM_CHANNEL_OFFSETS:
@@ -296,22 +298,18 @@ def _(
             window=WINDOW,
             verbose=True,
         )
-        # Automatically remove channels based on REMOVE_CHANNEL
+        # Drop the names and colormaps of the channels REMOVE_CHANNEL took out of the aligned image
         if REMOVE_CHANNEL == "source":
-            remove_index = CHANNEL_NAMES.index(SOURCE)
-            CHANNEL_NAMES.pop(remove_index)
-            CHANNEL_CMAPS.pop(remove_index)
+            _removed = [SOURCE]
         elif REMOVE_CHANNEL == "target":
-            remove_index = CHANNEL_NAMES.index(TARGET)
-            CHANNEL_NAMES.pop(remove_index)
-            CHANNEL_CMAPS.pop(remove_index)
+            _removed = [TARGET]
         elif REMOVE_CHANNEL == "riders":
-            # Remove riders in reverse order to maintain correct indices
-            for rider in reversed(RIDERS):
-                remove_index = CHANNEL_NAMES.index(rider)
-                CHANNEL_NAMES.pop(remove_index)
-                CHANNEL_CMAPS.pop(remove_index)
-    return (aligned_image,)
+            _removed = list(RIDERS)
+        else:
+            _removed = []
+        channel_cmaps = [_c for _n, _c in zip(channel_names, channel_cmaps) if _n not in _removed]
+        channel_names = [_n for _n in channel_names if _n not in _removed]
+    return aligned_image, channel_cmaps, channel_names
 
 
 @app.cell(hide_code=True)
@@ -365,15 +363,15 @@ def _(
 @app.cell
 def _(
     ALIGN,
-    CHANNEL_NAMES,
     CYTO_INDEX,
     DAPI_INDEX,
     aligned_image,
+    channel_names,
     plot_phenotype_channel_overlay,
     plt,
 ):
     if not ALIGN:
-        plot_phenotype_channel_overlay(aligned_image, DAPI_INDEX, CYTO_INDEX, CHANNEL_NAMES)
+        plot_phenotype_channel_overlay(aligned_image, DAPI_INDEX, CYTO_INDEX, channel_names)
         plt.show()
     return
 
@@ -461,9 +459,9 @@ def params_segmentation():
 
 
 @app.cell
-def _(CELLPOSE_MODEL, CHANNEL_NAMES, CYTO_CHANNEL, SEGMENTATION_METHOD, aligned_image):
-    DAPI_INDEX = CHANNEL_NAMES.index("DAPI")
-    CYTO_INDEX = CHANNEL_NAMES.index(CYTO_CHANNEL)
+def _(CELLPOSE_MODEL, CYTO_CHANNEL, SEGMENTATION_METHOD, aligned_image, channel_names):
+    DAPI_INDEX = channel_names.index("DAPI")
+    CYTO_INDEX = channel_names.index(CYTO_CHANNEL)
 
     # Cellpose 4.x, cpsam and custom model paths have no size model: derive diameters from the masks
     from lib.shared.segment_cellpose import CELLPOSE_4X as _CELLPOSE_4X
@@ -501,7 +499,6 @@ def _(
     CELL_FLOW_THRESHOLD,
     CELL_NMS_THRESHOLD,
     CELL_PROB_THRESHOLD,
-    CHANNEL_CMAPS,
     CYTO_INDEX,
     DAPI_INDEX,
     GPU,
@@ -517,6 +514,7 @@ def _(
     SEGMENT_CELLS,
     STARDIST_MODEL,
     aligned_image,
+    channel_cmaps,
     create_micropanel,
     diameters_from_masks,
     identify_cytoplasm_cellpose,
@@ -539,18 +537,18 @@ def _(
         cells = None
     print('Example microplots for DAPI channel and nuclei segmentation:')
     nuclei_cmap = random_cmap(num_colors=len(np.unique(nuclei)))
-    nuclei_seg_microimages = [Microimage(aligned_image[DAPI_INDEX], channel_names='DAPI', cmaps=CHANNEL_CMAPS[DAPI_INDEX]), Microimage(nuclei, cmaps=nuclei_cmap, channel_names='Nuclei')]
+    nuclei_seg_microimages = [Microimage(aligned_image[DAPI_INDEX], channel_names='DAPI', cmaps=channel_cmaps[DAPI_INDEX]), Microimage(nuclei, cmaps=nuclei_cmap, channel_names='Nuclei')]
     nuclei_seg_panel = create_micropanel(nuclei_seg_microimages, add_channel_label=True)
     plt.show()
     if SEGMENT_CELLS:
         print('Example microplots for merged channels and cells segmentation:')
         cells_cmap = random_cmap(num_colors=len(np.unique(cells)))
-        cells_seg_microimages = [Microimage(aligned_image, channel_names='Merged', cmaps=CHANNEL_CMAPS), Microimage(cells, cmaps=cells_cmap, channel_names='Cells')]
+        cells_seg_microimages = [Microimage(aligned_image, channel_names='Merged', cmaps=channel_cmaps), Microimage(cells, cmaps=cells_cmap, channel_names='Cells')]
         cells_seg_panel = create_micropanel(cells_seg_microimages, add_channel_label=True)
         plt.show()
         print('Example microplot for phenotype data annotated with segmentation:')
         annotated_data = image_segmentation_annotations(aligned_image, nuclei, cells)
-        annotated_microimage = [Microimage(annotated_data, channel_names='Merged', cmaps=CHANNEL_CMAPS + ['pure_cyan'])]
+        annotated_microimage = [Microimage(annotated_data, channel_names='Merged', cmaps=channel_cmaps + ['pure_cyan'])]
         annotated_panel = create_micropanel(annotated_microimage, num_cols=1, figscaling=10, add_channel_label=False)
         plt.show()
         print('Example microplots for cytoplasms relative to nuclei:')
@@ -648,13 +646,13 @@ def _(CUSTOM_FEATURES, load_custom_features, register_custom_features):
 
 @app.cell
 def _(
-    CHANNEL_NAMES,
     CP_METHOD,
     FOCI_CHANNEL,
     SEGMENT_CELLS,
     WILDCARDS,
     aligned_image,
     cells,
+    channel_names,
     custom_features,
     cytoplasms,
     nuclei,
@@ -664,9 +662,9 @@ def _(
     # Compute foci channel index from channel name(s)
     if FOCI_CHANNEL:
         if isinstance(FOCI_CHANNEL, str):
-            FOCI_CHANNEL_INDEX = CHANNEL_NAMES.index(FOCI_CHANNEL)
+            FOCI_CHANNEL_INDEX = channel_names.index(FOCI_CHANNEL)
         else:
-            FOCI_CHANNEL_INDEX = [CHANNEL_NAMES.index(ch) for ch in FOCI_CHANNEL]
+            FOCI_CHANNEL_INDEX = [channel_names.index(ch) for ch in FOCI_CHANNEL]
     else:
         FOCI_CHANNEL_INDEX = None
 
@@ -678,7 +676,7 @@ def _(
             nuclei=nuclei,
             cells=cells if SEGMENT_CELLS else None,
             cytoplasms=cytoplasms,
-            channel_names=CHANNEL_NAMES,
+            channel_names=channel_names,
         )
     elif CP_METHOD == "cp_emulator":
         from lib.phenotype.extract_phenotype_cp_emulator import (
@@ -692,7 +690,7 @@ def _(
             wildcards=WILDCARDS,
             cytoplasms=cytoplasms,
             foci_channel=FOCI_CHANNEL_INDEX,
-            channel_names=CHANNEL_NAMES,
+            channel_names=channel_names,
             custom_features=custom_features,
         )
     else:
@@ -703,7 +701,7 @@ def _(
 
 
 @app.cell
-def _(CHANNEL_NAMES, phenotype_cp):
+def _(channel_names, phenotype_cp):
     # Remove channel names from feature names
     def remove_channel_name(feature, channels):
         for channel in channels:
@@ -720,7 +718,7 @@ def _(CHANNEL_NAMES, phenotype_cp):
 
     # Apply the function to remove channel names
     feature_types = [
-        remove_channel_name(feature, CHANNEL_NAMES) for feature in filtered_features
+        remove_channel_name(feature, channel_names) for feature in filtered_features
     ]
 
     # Get unique feature types
@@ -839,7 +837,6 @@ def params_secondary_objects():
 
 @app.cell
 def _(
-    CHANNEL_NAMES,
     GPU,
     SECOND_OBJ_CELLPOSE_MODEL,
     SECOND_OBJ_CHANNEL,
@@ -847,9 +844,10 @@ def _(
     SECOND_OBJ_DIAMETER_INPUT,
     SECOND_OBJ_METHOD,
     aligned_image,
+    channel_names,
 ):
     SECOND_OBJ_CHANNEL_INDEX = (
-        CHANNEL_NAMES.index(SECOND_OBJ_CHANNEL) if SECOND_OBJ_DETECTION else None
+        channel_names.index(SECOND_OBJ_CHANNEL) if SECOND_OBJ_DETECTION else None
     )
     SECOND_OBJ_DIAMETER = SECOND_OBJ_DIAMETER_INPUT
     if (
@@ -877,8 +875,6 @@ def _(
 
 @app.cell
 def _(
-    CHANNEL_CMAPS,
-    CHANNEL_NAMES,
     DECLUMP_METHOD,
     DECLUMP_MODE,
     FILL_HOLES,
@@ -911,6 +907,8 @@ def _(
     USE_SHAPE_REFINEMENT,
     aligned_image,
     cells,
+    channel_cmaps,
+    channel_names,
     cytoplasms,
     nuclei,
     plt,
@@ -1009,8 +1007,8 @@ def _(
             SECOND_OBJ_CHANNEL_INDEX,
             cell_masks=cells,
             second_obj_masks=second_obj_masks,
-            channel_names=CHANNEL_NAMES,
-            channel_cmaps=CHANNEL_CMAPS,
+            channel_names=channel_names,
+            channel_cmaps=channel_cmaps,
         )
         plt.show()
     else:
@@ -1020,12 +1018,12 @@ def _(
 
 @app.cell
 def _(
-    CHANNEL_NAMES,
     FOCI_CHANNEL_INDEX,
     SECOND_OBJ_DETECTION,
     WILDCARDS,
     aligned_image,
     cell_second_obj_table,
+    channel_names,
     second_obj_masks,
 ):
     # Extract secondary object features on the test image
@@ -1038,7 +1036,7 @@ def _(
             second_obj_cell_mapping_df=cell_second_obj_table["second_obj_cell_mapping"],
             wildcards=WILDCARDS,
             foci_channel=FOCI_CHANNEL_INDEX,
-            channel_names=CHANNEL_NAMES,
+            channel_names=channel_names,
         )
         print(f"Mean secondary object diameter: {second_obj_phenotype['second_obj_diameter'].mean():.2f}")
         print(f"Mean secondary object area: {second_obj_phenotype['second_obj_area'].mean():.2f}")
@@ -1050,7 +1048,7 @@ def _(
         print(f"Number of secondary object features: {len(_feature_cols)}")
 
         def _strip_channels(feature):
-            for channel in CHANNEL_NAMES:
+            for channel in channel_names:
                 feature = feature.replace(f"_{channel}", "")
             return feature
 
@@ -1076,7 +1074,6 @@ def _(
     CELL_FLOW_THRESHOLD,
     CELL_NMS_THRESHOLD,
     CELL_PROB_THRESHOLD,
-    CHANNEL_NAMES,
     CONFIG_FILE_HEADER,
     CONFIG_FILE_PATH,
     CP_METHOD,
@@ -1131,11 +1128,12 @@ def _(
     USE_MORPHOLOGICAL_OPENING,
     USE_SHAPE_REFINEMENT,
     WINDOW,
+    channel_names,
     config,
     convert_tuples_to_lists,
     yaml,
 ):
-    config['phenotype'] = {'foci_channel_index': FOCI_CHANNEL_INDEX, 'channel_names': CHANNEL_NAMES, 'align': ALIGN, 'dapi_index': DAPI_INDEX, 'cyto_index': CYTO_INDEX, 'segmentation_method': SEGMENTATION_METHOD, 'reconcile': RECONCILE, 'gpu': GPU if PIPELINE_GPU is None else PIPELINE_GPU, 'segment_cells': SEGMENT_CELLS, 'cp_method': CP_METHOD}
+    config['phenotype'] = {'foci_channel_index': FOCI_CHANNEL_INDEX, 'channel_names': channel_names, 'align': ALIGN, 'dapi_index': DAPI_INDEX, 'cyto_index': CYTO_INDEX, 'segmentation_method': SEGMENTATION_METHOD, 'reconcile': RECONCILE, 'gpu': GPU if PIPELINE_GPU is None else PIPELINE_GPU, 'segment_cells': SEGMENT_CELLS, 'cp_method': CP_METHOD}
     if SEGMENTATION_METHOD == 'cellpose':
         config['phenotype'].update({'nuclei_diameter': NUCLEI_DIAMETER, 'cell_diameter': CELL_DIAMETER, 'nuclei_flow_threshold': NUCLEI_FLOW_THRESHOLD, 'nuclei_cellprob_threshold': NUCLEI_CELLPROB_THRESHOLD, 'cell_flow_threshold': CELL_FLOW_THRESHOLD, 'cell_cellprob_threshold': CELL_CELLPROB_THRESHOLD, 'cellpose_model': CELLPOSE_MODEL})
         if HELPER_INDEX is not None:

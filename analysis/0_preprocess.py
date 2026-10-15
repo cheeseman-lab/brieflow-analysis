@@ -355,14 +355,14 @@ def _(
     sbs_samples = _keep_annotated_wells(sbs_samples, "SBS")
     sbs_samples.to_csv(SBS_SAMPLES_DF_FP, sep="\t", index=False)
     print("SBS samples:")
-    mo.ui.table(sbs_samples)
+    mo.output.append(mo.ui.table(sbs_samples))
 
     # Create SBS wildcard combos based on data organization
     if SBS_DATA_ORGANIZATION == "tile":
         sbs_wildcard_combos = sbs_samples[SBS_PATH_METADATA].drop_duplicates().astype(str)
         sbs_wildcard_combos.to_csv(SBS_COMBO_DF_FP, sep="\t", index=False)
         print("SBS wildcard combos (tile organization):")
-        mo.ui.table(sbs_wildcard_combos)
+        mo.output.append(mo.ui.table(sbs_wildcard_combos))
     elif SBS_DATA_ORGANIZATION == "well" and len(sbs_samples) > 0:
         print("SBS: Detecting tile count for well organization...")
         # Get tile count from a sample well
@@ -385,7 +385,7 @@ def _(
         ])
         sbs_wildcard_combos.to_csv(SBS_COMBO_DF_FP, sep="\t", index=False)
         print("SBS wildcard combos (well organization):")
-        mo.ui.table(sbs_wildcard_combos)
+        mo.output.append(mo.ui.table(sbs_wildcard_combos))
 
     # Create phenotype samples DataFrame (always)
     phenotype_samples = create_samples_df(
@@ -397,14 +397,14 @@ def _(
     phenotype_samples = _keep_annotated_wells(phenotype_samples, "Phenotype")
     phenotype_samples.to_csv(PHENOTYPE_SAMPLES_DF_FP, sep="\t", index=False)
     print("Phenotype samples:")
-    mo.ui.table(phenotype_samples)
+    mo.output.append(mo.ui.table(phenotype_samples))
 
     # Create phenotype wildcard combos based on data organization
     if PHENOTYPE_DATA_ORGANIZATION == "tile":
         phenotype_wildcard_combos = phenotype_samples[PHENOTYPE_PATH_METADATA].drop_duplicates().astype(str)
         phenotype_wildcard_combos.to_csv(PHENOTYPE_COMBO_DF_FP, sep="\t", index=False)
         print("Phenotype wildcard combos (tile organization):")
-        mo.ui.table(phenotype_wildcard_combos)
+        mo.output.append(mo.ui.table(phenotype_wildcard_combos))
     elif PHENOTYPE_DATA_ORGANIZATION == "well" and len(phenotype_samples) > 0:
         print("Phenotype: Detecting tile count for well organization...")
         # Get tile count from a sample well
@@ -426,7 +426,7 @@ def _(
         ])
         phenotype_wildcard_combos.to_csv(PHENOTYPE_COMBO_DF_FP, sep="\t", index=False)
         print("Phenotype wildcard combos (well organization):")
-        mo.ui.table(phenotype_wildcard_combos)
+        mo.output.append(mo.ui.table(phenotype_wildcard_combos))
     return phenotype_samples, sbs_samples
 
 
@@ -499,7 +499,7 @@ def _(
         sbs_metadata_samples = create_samples_df(SBS_METADATA_IMAGES_DIR_FP, SBS_METADATA_PATH_PATTERN, SBS_METADATA_PATH_METADATA, SBS_METADATA_PATH_ORDER_TYPE)
         sbs_metadata_samples.to_csv(SBS_METADATA_SAMPLES_DF_FP, sep='\t', index=False)
         print('SBS metadata files found:')
-        mo.ui.table(sbs_metadata_samples)
+        mo.output.append(mo.ui.table(sbs_metadata_samples))
     else:
         print('SBS: No external metadata files - will extract from image files')
         sbs_metadata_samples = pd.DataFrame()
@@ -509,7 +509,7 @@ def _(
         phenotype_metadata_samples = create_samples_df(PHENOTYPE_METADATA_IMAGES_DIR_FP, PHENOTYPE_METADATA_PATH_PATTERN, PHENOTYPE_METADATA_PATH_METADATA, PHENOTYPE_METADATA_PATH_ORDER_TYPE)
         phenotype_metadata_samples.to_csv(PHENOTYPE_METADATA_SAMPLES_DF_FP, sep='\t', index=False)
         print('Phenotype metadata files found:')
-        mo.ui.table(phenotype_metadata_samples)
+        mo.output.append(mo.ui.table(phenotype_metadata_samples))
     else:
         print('Phenotype: No external metadata files - will extract from ND2 files')
         phenotype_metadata_samples = pd.DataFrame()
@@ -567,7 +567,7 @@ def _(
             verbose=True
         )
         print("SBS test metadata:")
-        mo.ui.table(test_sbs_metadata)
+        mo.output.append(mo.ui.table(test_sbs_metadata))
 
     # Test phenotype metadata extraction  
     if len(phenotype_samples) > 0:
@@ -599,7 +599,7 @@ def _(
             verbose=True
         )
         print("Phenotype test metadata:")
-        mo.ui.table(test_phenotype_metadata)
+        mo.output.append(mo.ui.table(test_phenotype_metadata))
     return
 
 

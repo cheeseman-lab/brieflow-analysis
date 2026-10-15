@@ -595,8 +595,8 @@ def _(
     dataset_features = class_features.copy()
 
     # preview metadata and features
-    mo.ui.table(class_metadata)
-    mo.ui.table(class_features)
+    mo.output.append(mo.ui.table(class_metadata))
+    mo.output.append(mo.ui.table(class_features))
     return class_features, class_metadata, dataset_features, dataset_metadata
 
 
@@ -669,6 +669,7 @@ def params_missing_values():
 def _(
     DROP_COLS_THRESHOLD,
     DROP_ROWS_THRESHOLD,
+    IMPUTE,
     missing_values_filter,
     pf_features,
     pf_metadata,
@@ -679,7 +680,7 @@ def _(
         pf_features,
         drop_cols_threshold=DROP_COLS_THRESHOLD,
         drop_rows_threshold=DROP_ROWS_THRESHOLD,
-        impute=True,
+        impute=IMPUTE,
     )
 
     mvf_metadata.shape, mvf_features.shape

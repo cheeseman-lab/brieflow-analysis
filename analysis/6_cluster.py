@@ -234,24 +234,24 @@ def _(
     uniprot_data = get_uniprot_data(species_id=SPECIES_ID)
     uniprot_data.to_csv(UNIPROT_DATA_FP, sep="\t", index=False)
     uniprot_data = pd.read_csv(UNIPROT_DATA_FP, sep="\t")
-    mo.ui.table(uniprot_data)
+    mo.output.append(mo.ui.table(uniprot_data))
 
     string_pair_benchmark = generate_string_pair_benchmark(
         aggregated_data, uniprot_data, "gene_symbol_0", species_id=SPECIES_ID
     )
     string_pair_benchmark.to_csv(STRING_PAIR_BENCHMARK_FP, sep="\t", index=False)
     string_pair_benchmark = pd.read_csv(STRING_PAIR_BENCHMARK_FP, sep="\t")
-    mo.ui.table(string_pair_benchmark)
+    mo.output.append(mo.ui.table(string_pair_benchmark))
 
     corum_group_benchmark = generate_corum_group_benchmark(species_id=SPECIES_ID)
     corum_group_benchmark.to_csv(CORUM_GROUP_BENCHMARK_FP, sep="\t", index=False)
     corum_group_benchmark = pd.read_csv(CORUM_GROUP_BENCHMARK_FP, sep="\t")
-    mo.ui.table(corum_group_benchmark)
+    mo.output.append(mo.ui.table(corum_group_benchmark))
 
     kegg_group_benchmark = generate_msigdb_group_benchmark(species_id=SPECIES_ID)
     kegg_group_benchmark.to_csv(KEGG_GROUP_BENCHMARK_FP, sep="\t", index=False)
     kegg_group_benchmark = pd.read_csv(KEGG_GROUP_BENCHMARK_FP, sep="\t")
-    mo.ui.table(kegg_group_benchmark)
+    mo.output.append(mo.ui.table(kegg_group_benchmark))
     return (
         corum_group_benchmark,
         kegg_group_benchmark,
@@ -446,7 +446,7 @@ def _(
     uniprot_data_1 = uniprot_data.drop_duplicates('gene_name', keep='first')
     uniprot_subset = uniprot_data_1[['gene_name', 'entry', 'function', 'link']].rename(columns={'entry': 'uniprot_entry', 'function': 'uniprot_function', 'link': 'uniprot_link'})
     phate_leiden_clustering = phate_leiden_clustering.merge(uniprot_subset, how='left', left_on='gene_symbol_0', right_on='gene_name').drop(columns='gene_name')
-    mo.ui.table(phate_leiden_clustering)
+    mo.output.append(mo.ui.table(phate_leiden_clustering))
     cluster_size_fig = plot_cluster_sizes(phate_leiden_clustering)
     plt.show()
     clusters_fig = plot_phate_leiden_clusters(phate_leiden_clustering, PERTURBATION_NAME_COL, CONTROL_KEY)

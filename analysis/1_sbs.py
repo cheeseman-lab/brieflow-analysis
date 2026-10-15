@@ -661,11 +661,12 @@ def _(
     # Derive DAPI and CYTO indexes
     DAPI_INDEX = CHANNEL_NAMES.index("DAPI")
     CYTO_INDEX = CHANNEL_NAMES.index(CYTO_CHANNEL)
+    # Positions in the aligned stack, which drops the skipped cycles; SKIP_CYCLES holds cycle numbers
     DAPI_CYCLE_INDEX = SBS_CYCLES.index(DAPI_CYCLE) - len(
-        [skip for skip in (SKIP_CYCLES or []) if skip < SBS_CYCLES.index(DAPI_CYCLE)]
+        [skip for skip in (SKIP_CYCLES or []) if skip < DAPI_CYCLE]
     )
     CYTO_CYCLE_INDEX = SBS_CYCLES.index(CYTO_CYCLE) - len(
-        [skip for skip in (SKIP_CYCLES or []) if skip < SBS_CYCLES.index(CYTO_CYCLE)]
+        [skip for skip in (SKIP_CYCLES or []) if skip < CYTO_CYCLE]
     )
 
     # Validate DAPI and CYTO cycles and channels
@@ -1239,7 +1240,7 @@ def _(
     # Save standardized design table
     df_barcode_library.to_csv(DF_BARCODE_LIBRARY_FP, sep="\t", index=False)
     print(f"Standardized barcode design saved to: {DF_BARCODE_LIBRARY_FP}")
-    mo.ui.table(df_barcode_library)
+    mo.output.append(mo.ui.table(df_barcode_library))
 
     # Extract barcodes (prefixes) for mapping - conditional based on barcode type
     if BARCODE_TYPE == "multi":
@@ -1632,7 +1633,7 @@ def _(
             barcode_info_cols=BARCODE_INFO_COLS,
         )
     print(f"Called {len(df_cells)} cells using {BARCODE_TYPE} mode")
-    mo.ui.table(df_cells)
+    mo.output.append(mo.ui.table(df_cells))
     if BARCODE_TYPE == "multi":
         total_mapped_cells = len(df_cells)
         if "no_recomb_0" in df_cells.columns:
@@ -1651,7 +1652,7 @@ def _(
     df_sbs_info = extract_phenotype_minimal(
         phenotype_data=nuclei, nuclei_data=nuclei, wildcards=WILDCARDS
     )
-    mo.ui.table(df_sbs_info)
+    mo.output.append(mo.ui.table(df_sbs_info))
     print("Summary of the fraction of cells mapping to one barcode:")
     one_barcode_mapping = plot_cell_mapping_heatmap(
         df_cells,
@@ -1662,7 +1663,7 @@ def _(
         return_plot=False,
         return_summary=True,
     )
-    mo.ui.table(one_barcode_mapping)
+    mo.output.append(mo.ui.table(one_barcode_mapping))
     print("Summary of the fraction of cells mapping to any barcode:")
     any_barcode_mapping = plot_cell_mapping_heatmap(
         df_cells,
@@ -1673,7 +1674,7 @@ def _(
         return_plot=False,
         return_summary=True,
     )
-    mo.ui.table(any_barcode_mapping)
+    mo.output.append(mo.ui.table(any_barcode_mapping))
     print("Histogram of the number of reads per cell:")
     outliers = plot_cell_metric_histogram(df_cells, sort_by=SORT_CALLS)
     plt.show()
