@@ -116,6 +116,7 @@ phenotype:
       exposure_time_ms: null
     # ... add one entry per channel ...
   binning: null                                   # 1 (none) | 2 (2x2)
+  channels_imaged_together: null                  # true = every field was imaged in all channels before the stage moved (no channel alignment); false = channels imaged in separate passes, so they are aligned; null = asked
   segment_cells: null                             # true = segment cells around each nucleus (cellpose cyto); false = nuclei-only feature extraction (skip cellpose cell mask)
   background_channel_nucleus: "DAPI"              # biological_name of the nuclear-boundary marker (e.g. "DAPI")
   background_channel_cell: null                   # biological_name of the cell-boundary marker (e.g. "WGA"); required only when segment_cells: true
