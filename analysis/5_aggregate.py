@@ -14,11 +14,17 @@ def _():
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    # Configure Aggregate Module Params
+    # Aggregate: filter, align and aggregate single-cell features per perturbation
 
-    This notebook should be used as a test for ensuring correct aggregate parameters before aggregate processing.
-    Cells marked with <font color='red'>SET PARAMETERS</font> contain crucial variables that need to be set according to your specific experimental setup and data organization.
-    Please review and modify these variables as needed before proceeding with the analysis.
+    This notebook tests the aggregate steps on two wells: cell classes, missing-value and intensity filtering, batch alignment, per-perturbation aggregation and the bootstrap test against controls.
+
+    **Reads:** the merged cell tables from `bash flow.sh merge`, the classifier settings from `4_classify.py` if you trained one, and optionally a table of per-well annotations.
+
+    **Writes:** the `aggregate` section of `config/config.yml`, `config/aggregate_combo.tsv` and `config/cell_data_metadata_cols.tsv`.
+
+    **Next:** run `bash flow.sh aggregate`, then open `6_cluster.py`.
+
+    Cells under a **Set parameters** heading hold the settings you choose for your screen; review each before running the module.
     """)
     return
 
@@ -26,7 +32,7 @@ def _(mo):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## <font color='red'>SET PARAMETERS</font>
+    ## Set parameters
 
     ### Fixed parameters for aggregate module
 
@@ -110,7 +116,7 @@ def _():
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## <font color='red'>SET PARAMETERS</font>
+    ## Set parameters
 
     ### Testing on subset of data
 
@@ -146,8 +152,7 @@ def _(
         config = yaml.safe_load(_config_file)
     ROOT_FP = Path(config['all']['root_fp'])
     merge_final_fp = ROOT_FP / 'merge' / 'parquets' / get_filename({'plate': TEST_PLATE, 'well': TEST_WELL_1}, 'merge_final', 'parquet')
-    # Load subset of data
-    # Takes ~1 minute
+    # Load a 25,000-cell subset of each test well (takes about a minute)
     cell_data = load_parquet_subset(merge_final_fp, n_rows=25000)
     merge_final_fp_2 = ROOT_FP / 'merge' / 'parquets' / get_filename({'plate': TEST_PLATE, 'well': TEST_WELL_2}, 'merge_final', 'parquet')
     cell_data_2 = load_parquet_subset(merge_final_fp_2, n_rows=25000)
@@ -166,7 +171,7 @@ def _(cell_data):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## <font color='red'>SET PARAMETERS</font>
+    ## Set parameters
 
     ### Cell Data Metadata
 
@@ -179,7 +184,9 @@ def _(mo):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## <font color='red'>SET PARAMETERS: WELL ANNOTATIONS, SPLIT AND GROUP</font>
+    ## Set parameters
+
+    ### Well annotations, split and group
 
     - `WELL_ANNOTATIONS_FP`: TSV of per-well experimental variables (`plate`, `well`, then any annotation columns, e.g. `treatment`). Joined onto cell metadata so they can be split or grouped on. Only annotated wells enter the aggregate combos, so leaving a well out of the TSV excludes it. `None` to skip.
     - `SPLIT_COL`: Column to split datasets on. Each value gets its own dataset and its own embedding space, plus `all`. `"class"` is the classifier output; set to an annotation column to split by it instead, and the split values are read from the annotation TSV.
@@ -215,20 +222,21 @@ def _(WELL_ANNOTATIONS_FP, config, pd):
         CLASSIFIER_PATH = config['classify']['classifier_path']
         CONFIDENCE_THRESHOLDS = config['classify']['confidence_thresholds']
         CLASS_TITLE = config['classify']['class_title']
-        CLASS_MAPPING = config['classify']['class_mapping']  # e.g., "cell_stage"
-        METADATA_COLS = pd.read_csv(METADATA_COLS_FP, header=None, sep='\t')[0].tolist()  # e.g., {"label_to_class": {1: "Mitotic", 2: "Interphase"}}
-        print(f'Loaded metadata columns from classify config: {METADATA_COLS_FP}')  # Load metadata columns from file
+        CLASS_MAPPING = config['classify']['class_mapping']
+        METADATA_COLS = pd.read_csv(METADATA_COLS_FP, header=None, sep='\t')[0].tolist()
+        print(f'Loaded metadata columns from classify config: {METADATA_COLS_FP}')
     else:
+        # Classify notebook skipped: no classifier, default metadata columns
         METADATA_COLS_FP = 'config/cell_data_metadata_cols.tsv'
         CLASSIFIER_PATH = None
-        CONFIDENCE_THRESHOLDS = None  # Fall back to defaults if classify notebook was skipped
+        CONFIDENCE_THRESHOLDS = None
         CLASS_TITLE = None
         CLASS_MAPPING = None
         METADATA_COLS = DEFAULT_METADATA_COLS.copy()
         pd.Series(METADATA_COLS).to_csv(METADATA_COLS_FP, index=False, header=False, sep='\t')
         print(f'Using DEFAULT_METADATA_COLS (classify notebook was skipped)')
         print(f'Saved to: {METADATA_COLS_FP}')
-    print(f'\nClassifier path: {CLASSIFIER_PATH}')  # Save default metadata cols to file for pipeline
+    print(f'\nClassifier path: {CLASSIFIER_PATH}')
     print(f'Class title: {CLASS_TITLE}')
     print(f'Class mapping: {CLASS_MAPPING}')
     print(f'Confidence thresholds: {CONFIDENCE_THRESHOLDS}')
@@ -270,7 +278,7 @@ def _(METADATA_COLS, WELL_ANNOTATIONS_FP, cell_data, split_cell_data):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## <font color='red'>SET PARAMETERS</font>
+    ## Set parameters
 
     ### Split cells into classes
 
@@ -303,7 +311,7 @@ def params_split_classes():
 
 @app.cell
 def _():
-    # Library defaults (auto bucket)
+    # Library defaults
     MONTAGE_NUM_CELLS = 30
     MONTAGE_SHAPE = (3, 10)
     return MONTAGE_NUM_CELLS, MONTAGE_SHAPE
@@ -436,7 +444,7 @@ def _(
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## <font color='red'>SET PARAMETERS</font>
+    ## Set parameters
 
     ### Secondary object aggregation (optional)
 
@@ -461,7 +469,7 @@ def params_secondary_objects():
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## <font color='red'>SET PARAMETERS</font>
+    ## Set parameters
 
     ### Aggregate by channel combos
 
@@ -595,7 +603,7 @@ def _(
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## <font color='red'>SET PARAMETERS</font>
+    ## Set parameters
 
     ### Perturbation filtering
 
@@ -636,7 +644,7 @@ def _(
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## <font color='red'>SET PARAMETERS</font>
+    ## Set parameters
 
     ### Missing value filtering
 
@@ -681,7 +689,7 @@ def _(
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## <font color='red'>SET PARAMETERS</font>
+    ## Set parameters
 
     ### Intensity filtering
 
@@ -713,12 +721,12 @@ def _(CONTAMINATION, config, intensity_filter, mvf_features, mvf_metadata):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## <font color='red'>SET PARAMETERS</font>
+    ## Set parameters
 
     ### Perturbation Score Filtering
 
-    One can optionally assigned perturbation scores to each cell with perturbation scoring and filtering. During scoring, we train a Logistic Regression classifier on perturbed and control cell features. The result of this training and classification process is:
-    - `AUC Score` assinged per perturbation: this represents the classifier's ability to distinguish between perturbed and control cells -> higher AUC score, more clear effect on perturbation level
+    One can optionally assign perturbation scores to each cell with perturbation scoring and filtering. During scoring, we train a Logistic Regression classifier on perturbed and control cell features. The result of this training and classification process is:
+    - `AUC Score` assigned per perturbation: this represents the classifier's ability to distinguish between perturbed and control cells -> higher AUC score, more clear effect on perturbation level
     - `Perturbation Probability` assigned per cell: this represents the classifier's assigned probability of the cell being perturbed -> higher perturbation probability, more clear effect on cell level
 
     Once perturbation scores are assigned, one can optionally filter with a probability or percentile threshold before aggregation. Control cells will not be filtered.
@@ -749,7 +757,7 @@ def params_perturbation_score():
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## <font color='red'>SET PARAMETERS</font>
+    ## Set parameters
 
     ### Prepare alignment data
 
@@ -799,12 +807,12 @@ def _(
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## <font color='red'>SET PARAMETERS</font>
+    ## Set parameters
 
     ### Align and aggregate
 
     - `VARIANCE_OR_NCOMP`: Variance or number of components to keep after PCA.
-    - `NUM_ALIGN_BATCHES`: Number of batches to use when aligning, usually `1`. Increase this if you are running out of memory while aligning. We were able to barely fit 8 plates with 6 wells each in 1 TB of memory with `NUM_ALIGN_BATCHES=1`.
+    - `NUM_ALIGN_BATCHES`: Number of batches to use when aligning, usually `1`. Increase this if you are running out of memory while aligning; memory grows with the number of cells aligned in one batch.
     - `AGG_METHOD`: Method used to aggregate features. Can be `mean` or `median`. Usually `median`.
 
     While we use a simplified aggregate method in the notebook, the way this works during a normal run is:
@@ -900,7 +908,7 @@ def _(
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## <font color='red'>SET PARAMETERS</font>
+    ## Set parameters
     ### Generate feature table & bootstrapping
 
     Bootstrapping is a statistical resampling method used to determine if perturbations (gene knockdowns, drug treatments, etc.) cause statistically significant changes compared to controls. The method works by:
@@ -912,7 +920,7 @@ def _(mo):
     - `NUM_SIMS`: Number of bootstrap simulations to run for statistical testing. Ex: `100000`.
     - `EXCLUSION_STRING`: String to exclude certain constructs from analysis (optional). Ex: `"nontargeting_noncutting_"` or `None`.
     - `BOOTSTRAP_CELL_CLASS`: Cell class to run bootstrapping on. Ex: `"Interphase"` or `"all"`.
-    - `BOOTSTRAP_CHANNEL_COMBO`: Channel combination to run bootstrapping on. Ex: `"DAPI_Ki-67_COXIV_Caspase-3_WGA_aTubulin_Vimentin_gH2AX_Phalloidin"`.
+    - `BOOTSTRAP_CHANNEL_COMBO`: Channel combination to run bootstrapping on. Ex: `"DAPI_GFP"`.
     - `PSEUDOGENE_PATTERNS`: Dictionary defining how to group single-construct genes into pseudo-genes for more robust statistical testing. For each pattern category, specify:
       - `pattern`: Regex pattern to match gene names
       - `constructs_per_pseudogene`: Number of constructs to group together
@@ -941,9 +949,7 @@ def params_bootstrap():
 
 @app.cell
 def _(CHANNEL_COMBOS, CELL_CLASSES, COMPARTMENT_COMBOS, SPLIT_BY_COMPARTMENT):
-    # Bootstrap targets default to the largest configured channel combo (most
-    # channels), all available cell classes, and every compartment combo when
-    # splitting by compartment.
+    # Bootstrap the largest channel combo, every cell class, and every compartment combo when splitting by compartment
     BOOTSTRAP_CHANNEL_COMBO = (
         "_".join(max(CHANNEL_COMBOS, key=len)) if CHANNEL_COMBOS else None
     )
@@ -959,7 +965,7 @@ def _(CHANNEL_COMBOS, CELL_CLASSES, COMPARTMENT_COMBOS, SPLIT_BY_COMPARTMENT):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## Add aggregate parameters to config file
+    ## Write config
     """)
     return
 
@@ -1012,7 +1018,7 @@ def _(
     product,
     yaml,
 ):
-    # Add aggregate section (classifier settings are in config["classify"] from notebook 4)
+    # Classifier settings stay in config["classify"], written by 4_classify.py
     config['aggregate'] = {'metadata_cols_fp': METADATA_COLS_FP, 'collapse_cols': COLLAPSE_COLS, 'aggregate_combo_fp': AGGREGATE_COMBO_FP, 'split_by_compartment': SPLIT_BY_COMPARTMENT, 'second_obj_agg_strategy': SECOND_OBJ_AGG_STRATEGY, 'filter_queries': FILTER_QUERIES, 'perturbation_name_col': PERTURBATION_NAME_COL, 'drop_cols_threshold': DROP_COLS_THRESHOLD, 'drop_rows_threshold': DROP_ROWS_THRESHOLD, 'impute': IMPUTE, 'contamination': CONTAMINATION, 'batch_cols': BATCH_COLS, 'control_key': CONTROL_KEY, 'control_name_col': CONTROL_NAME_COL, 'tvn_batch_correction': TVN_BATCH_CORRECTION, 'perturbation_id_col': PERTURBATION_ID_COL, 'variance_or_ncomp': VARIANCE_OR_NCOMP, 'num_align_batches': NUM_ALIGN_BATCHES, 'agg_method': AGG_METHOD, 'skip_perturbation_score': SKIP_PERTURBATION_SCORE, 'ps_probability_threshold': PS_PROBABILITY_THRESHOLD, 'ps_percentile_threshold': PS_PERCENTILE_THRESHOLD, 'montage_num_cells': MONTAGE_NUM_CELLS, 'montage_cell_size': MONTAGE_CELL_SIZE, 'montage_shape': list(MONTAGE_SHAPE), 'generate_montages': GENERATE_MONTAGES, 'well_annotations_fp': WELL_ANNOTATIONS_FP, 'split_col': SPLIT_COL, 'group_cols': GROUP_COLS, 'bootstrap_control_scope': BOOTSTRAP_CONTROL_SCOPE, 'bootstrap_reference_group': BOOTSTRAP_REFERENCE_GROUP}
     if BOOTSTRAP_CELL_CLASS and BOOTSTRAP_CHANNEL_COMBO:
         cell_classes_list = BOOTSTRAP_CELL_CLASS if isinstance(BOOTSTRAP_CELL_CLASS, list) else [BOOTSTRAP_CELL_CLASS]
@@ -1024,25 +1030,17 @@ def _(
     safe_config = convert_tuples_to_lists(config)
     with open(CONFIG_FILE_PATH, 'w') as _config_file:
         _config_file.write(CONFIG_FILE_HEADER)
-    # Convert tuples to lists before dumping
-    # Write the updated configuration
-        yaml.dump(safe_config, _config_file, default_flow_style=False, sort_keys=False)  # Normalize to lists for iteration (supports both single values and lists)  # Create all combinations  # Write the introductory comments  # Dump the updated YAML structure, keeping markdown comments for sections
+        yaml.dump(safe_config, _config_file, default_flow_style=False, sort_keys=False)
     return
 
 
-@app.cell
-def _():
-    # === TUNED EXPORT ===
-    # No notebook-derived tuned values for aggregate (DROP_COLS_THRESHOLD,
-    # DROP_ROWS_THRESHOLD, CONTAMINATION, NUM_ALIGN_BATCHES are operator-set
-    # upfront, not notebook-derived). Empty export for symmetry.
-    import json as _je
-    from pathlib import Path as _Pe
-    _t = {}
-    _out = _Pe(".brieflow") / "tuned_aggregate.json"
-    _out.parent.mkdir(exist_ok=True)
-    _out.write_text(_je.dumps(_t, indent=2, default=str))
-    # === END TUNED EXPORT ===
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## Next
+
+    Run `bash flow.sh aggregate` (add `--backend slurm` on a cluster), then open `6_cluster.py`.
+    """)
     return
 
 

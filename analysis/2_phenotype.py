@@ -14,11 +14,17 @@ def _():
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    # Configure Phenotype Parameters
+    # Phenotype: align channels, segment cells and extract features
 
-    This notebook should be used as a test for ensuring correct phenotype image loading and processing before running phenotype module.
-    Cells marked with <font color='red'>SET PARAMETERS</font> contain crucial variables that need to be set according to your specific experimental setup and data organization.
-    Please review and modify these variables as needed before proceeding with the analysis.
+    This notebook tests phenotype processing on one tile: illumination correction, channel alignment, nuclear and cell segmentation, feature extraction and optional secondary-object detection.
+
+    **Reads:** the preprocessed phenotype images and illumination-correction fields from `bash flow.sh preprocess`.
+
+    **Writes:** the `phenotype` section of `config/config.yml`.
+
+    **Next:** run `bash flow.sh phenotype`, then open `3_merge.py`.
+
+    Cells under a **Set parameters** heading hold the settings you choose for your screen; review each before running the module.
     """)
     return
 
@@ -26,7 +32,7 @@ def _(mo):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## <font color='red'>SET PARAMETERS</font>
+    ## Set parameters
 
     ### Fixed parameters for phenotype processing
 
@@ -110,7 +116,7 @@ def _():
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## <font color='red'>SET PARAMETERS</font>
+    ## Set parameters
 
     ### Parameters for testing phenotype processing
 
@@ -160,13 +166,12 @@ def _(
     # Load config file
     with open(CONFIG_FILE_PATH, 'r') as _config_file:
         config = yaml.safe_load(_config_file)
-    print('Loading test image...')
     # Load test image data
+    print('Loading test image...')
     ROOT_FP = Path(config['all']['root_fp'])
     PREPROCESS_FP = ROOT_FP / 'preprocess'
     IMAGE_FORMAT = config['all'].get('image_format', 'tiff')
-    # HCS-nested zarr layout: preprocess/phenotype/<plate>/<row>/<col>/...
-    # IC field: preprocess/ic_fields/phenotype/<plate>/<row>/<col>/ic_field.zarr/zarr.json
+    # Zarr images and IC fields sit under preprocess/<phenotype|ic_fields/phenotype>/<plate>/<row>/<col>/
     _row, _col = split_well(TEST_WELL)
     if IMAGE_FORMAT == 'zarr':
         phenotype_test_image_path = str(PREPROCESS_FP / 'phenotype' / get_hcs_nested_path({'plate': TEST_PLATE, 'row': _row, 'col': _col, 'tile': TEST_TILE}, 'image'))
@@ -183,9 +188,6 @@ def _(
     print('Example corrected image:')
     corrected_microimages = [Microimage(corrected_image[i], channel_names=CHANNEL_NAMES[i], cmaps=CHANNEL_CMAPS[i]) for i in range(corrected_image.shape[0])]
     corrected_panel = create_micropanel(corrected_microimages, add_channel_label=True)
-    # Read the illumination correction file
-    # Apply illumination correction
-    # Create and display micropanel of corrected images
     plt.show()
     return config, corrected_image
 
@@ -193,7 +195,7 @@ def _(
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## <font color='red'>SET PARAMETERS</font>
+    ## Set parameters
 
     ### Aligning (optional)
 
@@ -379,7 +381,7 @@ def _(
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## <font color='red'>SET PARAMETERS</font>
+    ## Set parameters
 
     ### Segmentation
 
@@ -592,15 +594,29 @@ def _(mo):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## <font color='red'>SET PARAMETERS</font>
+    ## Set parameters
 
     ### Feature extraction
 
     - `CP_METHOD`: Methodology for phenotype feature extraction.
         - `cp_emulator`: Use emulated code from original _Feldman et. al. 2019_ to extract CellProfiler-like features.
-        - `cp_measure`: Use Pythonic version of [CellProfiler](https://github.com/afermg/cp_measure) directly from Imaging Platform. Still in development, may run slowly in Jupyter notebook for testing purposes.
+        - `cp_measure`: Use Pythonic version of [CellProfiler](https://github.com/afermg/cp_measure) directly from Imaging Platform. Still in development, and may run slowly in this notebook.
     - `FOCI_CHANNEL`: Name of the channel(s) used for foci detection (e.g., "GH2AX", "DAPI"). Can be a single channel name (string) or a list of channel names. The channel index(es) will be automatically derived from this name.
     - `CUSTOM_FEATURES`: List of extra per-cell feature functions to extract alongside the built-in ones, for measurements `cp_emulator` does not provide. Each takes a regionprops-like region, whose `region.intensity_image` is `(height, width, channel)` in `CHANNEL_NAMES` order, and returns a single number. Entries are either a bare function, measured on the nucleus, or a `(function, compartment)` pair, where compartment is `"nucleus"`, `"cell"`, or `"cytoplasm"` — measuring a nuclear feature on the cell mask returns plausible but wrong numbers, so declare the compartment the measurement is defined on. Only the function source travels to the workflow, so each function must define or import every name it uses. Each becomes a `{compartment}_custom_{name}_{hash}` column, where the hash pins the definition that produced it. Declaring `"cytoplasm"` requires `SEGMENT_CELLS = True` and cytoplasm segmentation. Requires `CP_METHOD = "cp_emulator"`.
+
+    Define each function in the `CUSTOM_FEATURES` cell below, then list it:
+
+    ```python
+    def puncta_count(region):
+        import skimage.measure
+        import skimage.morphology
+
+        channel = region.intensity_image[..., 1]
+        tophat = skimage.morphology.white_tophat(channel, skimage.morphology.disk(3))
+        return int(skimage.measure.label(tophat > 50).max())
+
+    CUSTOM_FEATURES = [puncta_count, (spread_index, "cell")]
+    ```
     """)
     return
 
@@ -614,27 +630,13 @@ def params_feature_extraction():
 
 @app.cell
 def params_custom_features():
-    # Define each feature with def, then list it in CUSTOM_FEATURES, either bare to
-    # measure it on the nucleus or as a (function, compartment) pair, e.g.
-    #
-    # def puncta_count(region):
-    #     import skimage.measure
-    #     import skimage.morphology
-    #
-    #     channel = region.intensity_image[..., 1]
-    #     tophat = skimage.morphology.white_tophat(channel, skimage.morphology.disk(3))
-    #     return int(skimage.measure.label(tophat > 50).max())
-    #
-    # CUSTOM_FEATURES = [puncta_count, (spread_index, "cell")]
-
-    CUSTOM_FEATURES = []
+    CUSTOM_FEATURES = []  # e.g. [puncta_count, (spread_index, "cell")], with each function defined in this cell
     return (CUSTOM_FEATURES,)
 
 
 @app.cell
 def _(CUSTOM_FEATURES, load_custom_features, register_custom_features):
-    # Round trip through the source text the workflow will receive, so a definition
-    # that cannot survive the config hop fails here rather than on a compute node
+    # Round-trip the source text the workflow receives, so a definition that cannot travel fails here
     CUSTOM_FEATURE_DEFINITIONS = register_custom_features(CUSTOM_FEATURES)
     custom_features = load_custom_features(CUSTOM_FEATURE_DEFINITIONS)
 
@@ -670,8 +672,7 @@ def _(
 
     if CP_METHOD == "cp_measure":
         from lib.phenotype.extract_phenotype_cp_measure import extract_phenotype_cp_measure
-        # Extract features using cp_measure
-        # Pass cells=None when SEGMENT_CELLS=False to skip cell/cytoplasm feature extraction
+        # cells=None when SEGMENT_CELLS is False skips cell and cytoplasm features
         phenotype_cp = extract_phenotype_cp_measure(
             aligned_image,
             nuclei=nuclei,
@@ -683,8 +684,7 @@ def _(
         from lib.phenotype.extract_phenotype_cp_emulator import (
             extract_phenotype_cp_emulator,
         )
-        # Extract features using CellProfiler emulator
-        # Pass cells=None when SEGMENT_CELLS=False to skip cell/cytoplasm feature extraction
+        # cells=None when SEGMENT_CELLS is False skips cell and cytoplasm features
         phenotype_cp = extract_phenotype_cp_emulator(
             aligned_image,
             nuclei=nuclei,
@@ -734,7 +734,7 @@ def _(CHANNEL_NAMES, phenotype_cp):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## <font color='red'>SET PARAMETERS</font>
+    ## Set parameters
 
     ### Secondary object detection (optional)
 
@@ -1062,7 +1062,7 @@ def _(
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## Add phenotype process parameters to config file
+    ## Write config
     """)
     return
 
@@ -1170,29 +1170,13 @@ def _(
     return
 
 
-@app.cell
-def _(
-    NUCLEI_DIAMETER,
-    CELL_DIAMETER,
-    SEGMENTATION_METHOD,
-    CELLPOSE_MODEL,
-    diameters_from_masks,
-):
-    # === TUNED EXPORT ===
-    # Writes derivation-cell outputs the wizard's confirm_tuned_loop reads
-    # post-run (R3). Schema: {param: {derived, src}}.
-    import json as _je
-    from pathlib import Path as _Pe
-    _t = {}
-    if SEGMENTATION_METHOD == 'cellpose':
-        _src = "regionprops on segmented objects" if diameters_from_masks else f"estimate_diameters ({CELLPOSE_MODEL})"
-        _t["NUCLEI_DIAMETER"] = {"derived": float(NUCLEI_DIAMETER), "src": _src}
-        if CELL_DIAMETER is not None:
-            _t["CELL_DIAMETER"] = {"derived": float(CELL_DIAMETER), "src": _src}
-    _out = _Pe(".brieflow") / "tuned_phenotype.json"
-    _out.parent.mkdir(exist_ok=True)
-    _out.write_text(_je.dumps(_t, indent=2, default=str))
-    # === END TUNED EXPORT ===
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## Next
+
+    Run `bash flow.sh phenotype` (add `--backend slurm` on a cluster), then open `3_merge.py`.
+    """)
     return
 
 

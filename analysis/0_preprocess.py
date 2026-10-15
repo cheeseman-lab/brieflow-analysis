@@ -14,13 +14,17 @@ def _():
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    # Configure Preprocessing Params
+    # Preprocess: find the raw images and set how they are converted
 
-    This notebook should be used to set up preprocessing params.
-    Cells marked with <font color='red'>SET PARAMETERS</font> contain crucial variables that need to be set according to your specific experimental setup and data organization.
-    Please review and modify these variables as needed before proceeding with the analysis.
+    This notebook finds your raw SBS and phenotype images, tests metadata extraction and image conversion on one sample of each, and sets the illumination-correction and OME-Zarr channel settings.
 
-    **Dual-mode**: when run interactively (`marimo edit`), edit the SET PARAMETERS cells directly. When run via brieflow-auto, the plugin reads `analysis/.brieflow/interview.json` and rewrites the literal values between the `=== OPERATOR PARAMETERS ===` markers in each parameter cell. Either way, the notebook itself is the readable record of what was set.
+    **Reads:** the raw image directories and file-name patterns you set below; optionally a table of the wells to analyze.
+
+    **Writes:** the `all` and `preprocess` sections of `config/config.yml`, and the sample tables `config/sbs_samples.tsv`, `config/phenotype_samples.tsv`, `config/sbs_combo.tsv` and `config/phenotype_combo.tsv`.
+
+    **Next:** run `bash flow.sh preprocess`, then open `1_sbs.py`.
+
+    Cells under a **Set parameters** heading hold the settings you choose for your screen; review each before running the module.
     """)
     return
 
@@ -70,7 +74,7 @@ def _():
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## <font color='red'>SET PARAMETERS</font>
+    ## Set parameters
 
     ### Fixed parameters for preprocessing
 
@@ -103,7 +107,7 @@ def _(CONFIG_FILE_PATH, Path, ROOT_FP):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## <font color='red'>SET PARAMETERS</font>
+    ## Set parameters
 
     ### Paths to dataframes with sample information
     - `SBS_SAMPLES_DF_FP`/`PHENOTYPE_SAMPLES_DF_FP`: Path to dataframe where SBS/phenotype samples location and metadata will be stored.
@@ -183,7 +187,7 @@ def params_samples():
     SBS_COMBO_DF_FP = "config/sbs_combo.tsv"
     PHENOTYPE_COMBO_DF_FP = "config/phenotype_combo.tsv"
 
-    # Paths to image directories — REQUIRED. e.g.: "/archive/.../input_sbs/"
+    # Paths to image directories — REQUIRED. e.g.: "data/input_sbs/"
     SBS_IMAGES_DIR_FP = None
     PHENOTYPE_IMAGES_DIR_FP = None
 
@@ -274,7 +278,7 @@ def _(mo):
     # If z-dimension is present in filenames, add "z" to metadata:
     # SBS_PATH_METADATA = ["plate", "cycle", "well", "tile", "z"]
     # SBS_METADATA_ORDER_TYPE = {"plate": int, "well": str, "tile": int, "cycle": int, "z": int}
-    # SBS_HAS_Z_DIMENSION = True
+    # SBS_N_Z_PLANES = 2
     ```
 
     Example patterns for reference:
@@ -293,7 +297,7 @@ def _(mo):
     # SBS_PATH_PATTERN = r"plate_(\d+)/c(\d+)/.*_Wells-([A-Z]\d+)_Points-(\d+)_Z-(\d+)\.tif"
     # SBS_PATH_METADATA = ["plate", "cycle", "well", "tile", "z"]
     # SBS_METADATA_ORDER_TYPE = {"plate": int, "well": str, "tile": int, "cycle": int, "z": int}
-    # SBS_HAS_Z_DIMENSION = True
+    # SBS_N_Z_PLANES = 2
     ```
     """)
     return
@@ -429,7 +433,7 @@ def _(
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## <font color='red'>SET PARAMETERS</font>
+    ## Set parameters
 
     ### Metadata Source Configuration
 
@@ -499,13 +503,13 @@ def _(
     else:
         print('SBS: No external metadata files - will extract from image files')
         sbs_metadata_samples = pd.DataFrame()
+    # Generate phenotype metadata samples table
     if PHENOTYPE_METADATA_IMAGES_DIR_FP is not None:
         print('\nGenerating phenotype metadata file inventory...')
         phenotype_metadata_samples = create_samples_df(PHENOTYPE_METADATA_IMAGES_DIR_FP, PHENOTYPE_METADATA_PATH_PATTERN, PHENOTYPE_METADATA_PATH_METADATA, PHENOTYPE_METADATA_PATH_ORDER_TYPE)
         phenotype_metadata_samples.to_csv(PHENOTYPE_METADATA_SAMPLES_DF_FP, sep='\t', index=False)
         print('Phenotype metadata files found:')
         mo.ui.table(phenotype_metadata_samples)
-    # Generate phenotype metadata samples table
     else:
         print('Phenotype: No external metadata files - will extract from ND2 files')
         phenotype_metadata_samples = pd.DataFrame()
@@ -602,7 +606,7 @@ def _(
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## <font color='red'>SET PARAMETERS</font>
+    ## Set parameters
 
     ### Image conversion
 
@@ -776,7 +780,7 @@ def _(
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## <font color='red'>SET PARAMETERS</font>
+    ## Set parameters
 
     ### Calculate illumination correction field
 
@@ -794,9 +798,9 @@ def params_illumination():
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## <font color='red'>SET PARAMETERS</font>
+    ## Set parameters
 
-    ### Parameters for writing OME-Zarr **root** metadata for both SBS and PHENOTYPE (the 2 code cells proceeding this markdown cell)
+    ### Parameters for writing OME-Zarr **root** metadata for both SBS and PHENOTYPE (the 2 code cells following this markdown cell)
 
     These parameters control what gets written into the *plate root* `zarr.json` for the SBS/Phenotype output.
 
@@ -850,7 +854,7 @@ def params_phenotype_channels():
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## Create config file with params
+    ## Write config
     """)
     return
 
@@ -939,19 +943,13 @@ def _(
     return
 
 
-@app.cell
-def _():
-    # === TUNED EXPORT ===
-    # No notebook-derived tuned values for preprocess (all wizard-time auto-probe
-    # + operator-set; no estimate_X cells produce refined values). Empty export
-    # confirms the wizard's R3 walk that there's nothing to surface here.
-    import json as _je
-    from pathlib import Path as _Pe
-    _t = {}
-    _out = _Pe(".brieflow") / "tuned_preprocess.json"
-    _out.parent.mkdir(exist_ok=True)
-    _out.write_text(_je.dumps(_t, indent=2, default=str))
-    # === END TUNED EXPORT ===
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## Next
+
+    Run `bash flow.sh preprocess` (add `--backend slurm` on a cluster), then open `1_sbs.py`.
+    """)
     return
 
 

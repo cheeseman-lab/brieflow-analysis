@@ -108,7 +108,7 @@ phenotype:
     # Every channel needs a biological_name (REQUIRED); the other fields are optional.
     - biological_name: null                       # e.g. "DAPI"  -> channels_metadata.name
       marker_of: null                             # e.g. "Nuclei" -> biological_annotation.biological_target
-      description: null                           # free text used verbatim where marker_of would be, e.g. "sialylated glycoRNA at the cell surface, not RNA abundance"; every mozzarellm screen context containing this channel inherits it
+      description: null                           # free text used verbatim where marker_of would be, e.g. "membrane stain used to outline cells, not a readout of protein level"; every mozzarellm screen context containing this channel inherits it
       marker: null                                # gene/protein stained, e.g. "HSPA1B" -> biological_annotation.marker
       marker_type: null                           # "dye" | "antibody" | "endogenous_tag" -> biological_annotation.marker_type
       fluorophore_token: null                     # filename token (e.g. "GFP" stains "COXIV")
@@ -117,7 +117,7 @@ phenotype:
     # ... add one entry per channel ...
   binning: null                                   # 1 (none) | 2 (2x2)
   segment_cells: null                             # true = segment cells around each nucleus (cellpose cyto); false = nuclei-only feature extraction (skip cellpose cell mask)
-  background_channel_nucleus: "DAPI"              # biological_name of the nuclear-boundary marker (e.g. "DAPI"); 
+  background_channel_nucleus: "DAPI"              # biological_name of the nuclear-boundary marker (e.g. "DAPI")
   background_channel_cell: null                   # biological_name of the cell-boundary marker (e.g. "WGA"); required only when segment_cells: true
   foci_channel: null                              # biological_name of the foci/puncta marker (e.g. "gH2AX", "CENPA"); null = no foci pipeline. Drives FOCI_CHANNEL + routes the foci pipeline on/off.
   second_obj_channel: null                        # biological_name of the secondary object marker (e.g. a pathogen or organelle stain); descriptive only: the notebooks do not read it (the brieflow-auto plugin uses it to prefill SECOND_OBJ_CHANNEL / SECOND_OBJ_DETECTION); secondary objects are switched on by SECOND_OBJ_DETECTION + SECOND_OBJ_CHANNEL in 2_phenotype.py.
@@ -133,7 +133,7 @@ microscope:
 # =========================================================================
 pipeline:
   github: "cheeseman-lab/brieflow"
-  version: null                                   # branch or tag (e.g. "zarr3-merge-main-speed")
+  version: null                                   # branch or tag (e.g. "main" or a release tag)
   conda_env: null                                 # REQUIRED: env that runs the pipeline, e.g. "brieflow_<screen>" (setup fills this when it builds the env)
 
 # =========================================================================
@@ -141,16 +141,13 @@ pipeline:
 # =========================================================================
 data:
   storage_format: null                            # nd2 | tiff | zarr
-  location: null                                  # base path (e.g. /archive/cheeseman/ops_data/<screen>)
+  location: null                                  # base path (e.g. /data/ops/<screen>)
   input_sbs_dir: null                             # REQUIRED: raw SBS images on this machine (plate_<N>/c<M>/ below it); setup fills this when it stages the data
   input_phenotype_dir: null                       # REQUIRED: raw phenotype images on this machine (plate_<N>/round_<M>/ below it)
 
 # =========================================================================
-# additional_notes — free-text operator observations not captured by the
-# structured fields above. Write anything screen-specific and human: imaging
-# anomalies, WHY a cycle was skipped, unusual markers, QC caveats. The wizard
-# surfaces these and may parse intent from them (e.g. a skipped-cycle rationale).
+# additional_notes — free-text observations the fields above miss: imaging anomalies, why a cycle was skipped, QC caveats
 # =========================================================================
-additional_notes: |                               # free text read by the agent; a candidate setting it finds is confirmed with you
+additional_notes: |                               # free text; brieflow-auto reads it and confirms any setting it suggests with you
   # e.g. "Cycle 1 looked misaligned relative to the other channels; it was
   #       skipped and an additional cycle mapped accordingly."

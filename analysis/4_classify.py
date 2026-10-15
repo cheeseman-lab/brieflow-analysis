@@ -14,12 +14,17 @@ def _():
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    # Train Classifier
+    # Classify: train a cell classifier (optional)
 
-    This notebook provides tools for training custom cell or vacuole classifiers. It covers labeling data, training models, and selecting the best classifier.
+    This notebook trains a classifier that sorts cells (or other objects) into classes, such as mitotic and interphase: you label example objects, train and compare models, and pick one with per-class confidence thresholds. Skip it if you do not need cell classes.
 
-    Cells marked with <font color='red'>SET PARAMETERS</font> contain crucial variables that need to be set according to your specific experimental setup and data organization.
-    Please review and modify these variables as needed before proceeding with the analysis.
+    **Reads:** the merge or phenotype outputs from `bash flow.sh merge` and the phenotype images for display.
+
+    **Writes:** the `classify` section of `config/config.yml`, the trained classifier and training data under the output directory's `classifier/` folder, and `config/cell_data_metadata_cols.tsv`.
+
+    **Next:** this notebook has no module of its own; open `5_aggregate.py`, which applies the classifier.
+
+    Cells under a **Set parameters** heading hold the settings you choose for your screen; review each before you label and train.
     """)
     return
 
@@ -27,7 +32,7 @@ def _(mo):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## <font color='red'>SET PARAMETERS</font>
+    ## Set parameters
 
     ### Fixed parameters for classify module
 
@@ -176,7 +181,7 @@ def _(mo):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ### 1a. <font color='red'>SET PARAMETERS</font>: Classification Settings
+    ### 1a. Set parameters: Classification Settings
 
     This section defines the training dataset and classes that will be used for labeling.
 
@@ -288,7 +293,7 @@ def _(
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ### 1b. <font color='red'>SET PARAMETERS</font>: Gating Settings
+    ### 1b. Set parameters: Gating Settings
 
     Use the parameters below to choose what subset of objects to display in the labeling interface.
 
@@ -399,7 +404,7 @@ def _(
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ### 1c. <font color='red'>SET PARAMETERS</font>: Display Settings
+    ### 1c. Set parameters: Display Settings
 
     This section sets how and in what order objects will be displayed by the labeler.
 
@@ -797,7 +802,7 @@ def _(mo):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ### 2a. <font color='red'>SET PARAMETERS</font>: Training Dataset Configuration
+    ### 2a. Set parameters: Training Dataset Configuration
 
     - `TRAINING_DATASET_FP`: Path to training dataset(s) in list format. Set to `None` to use the dataset just saved above.
     - `METADATA_COLS_FP`: Path to save metadata columns for use in aggregate pipeline.
@@ -944,7 +949,7 @@ def _(
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ### 2b. <font color='red'>SET PARAMETERS</font>: Filter Training Classes
+    ### 2b. Set parameters: Filter Training Classes
 
     - `REMOVE_MASK_LABELS`: List of class labels to exclude from training (e.g., `unknown`). Set to `None` to keep all classes.
     """)
@@ -968,7 +973,7 @@ def _(CLASSIFICATION, REMOVE_MASK_LABELS, class_mapping, filter_classes):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ### 2c. <font color='red'>SET PARAMETERS</font>: Model Configuration
+    ### 2c. Set parameters: Model Configuration
 
     - `MODEL_CONFIGS`: Model configurations to train and evaluate, each a `(name, model_type, scaler, feature_options)` tuple.
 
@@ -1073,7 +1078,7 @@ def _(mo):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ### 3a. <font color='red'>SET PARAMETERS</font>: Model Selection Settings
+    ### 3a. Set parameters: Model Selection Settings
 
     - `MODEL_RUN_DIR`: Name of the model run directory to test (e.g., `"run_20250903_114514"`). Set to `None` to use the last training run.
     - `TEST_PLATES`: Plates to use for testing.
@@ -1163,7 +1168,7 @@ def _(CLASSIFIER_DIR_PATH, display_pngs_in_plots_and_list_models, mo):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ### 3b. <font color='red'>SET PARAMETERS</font>: Model Settings
+    ### 3b. Set parameters: Model Settings
 
     - `CLASSIFIER_MODEL`: Name of the model to use (e.g., `"xgb_none"`), from the models listed above. Set to `None` to use the best performing model by accuracy.
     - `COLLAPSE_COLS`: Columns to collapse on when creating classification summaries (e.g., `["plate", "well"]`).
@@ -1225,7 +1230,7 @@ def _(
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ### 3c. <font color='red'>SET PARAMETERS</font>: Confidence Calibration
+    ### 3c. Set parameters: Confidence Calibration
 
     > **⚠️ Experimental Feature**: Confidence calibration is applied only within this notebook for evaluation and threshold selection. The calibrated confidences are **not** persisted or applied in the downstream aggregate pipeline. Set your thresholds based on raw (uncalibrated) confidence scores if you skip calibration, or be aware that thresholds chosen with calibration enabled may behave differently in production.
 
@@ -1323,9 +1328,9 @@ def _(
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ### 3d. <font color='red'>SET PARAMETERS</font>: Ranked Prediction Review
+    ### 3d. Set parameters: Ranked Prediction Review
 
-    The jupyter notebook browses predictions with an ipywidgets "rankline" that steps along the confidence axis. The table below is its replacement: objects of one class ranked by confidence, thinned so that consecutive rows differ by at least `MINIMUM_DIFFERENCE`, so a short table still spans the whole confidence range. Select rows in the table to render their crops underneath, the same rendering the labeler uses, and check whether the confidence the model reports matches what the image shows.
+    The table below lists objects of one class ranked by confidence, thinned so that consecutive rows differ by at least `MINIMUM_DIFFERENCE`, so a short table still spans the whole confidence range. Select rows in the table to render their crops underneath, the same rendering the labeler uses, and check whether the confidence the model reports matches what the image shows.
 
     - `RANKLINE_CLASS`: Class name to review, from `CLASSIFICATION`. Set to `None` to review the first class.
     - `MINIMUM_DIFFERENCE`: Minimum confidence difference between consecutive rows in the ranked table.
@@ -1465,7 +1470,7 @@ def _(
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ### 3e. <font color='red'>SET PARAMETERS</font>: Per-Class Confidence Thresholds
+    ### 3e. Set parameters: Per-Class Confidence Thresholds
 
     - `CONFIDENCE_THRESHOLDS`: Per-class confidence thresholds keyed by class ID, where class IDs follow `CLASSIFICATION` order (1, 2, 3, ...). Each entry is `{"threshold": float, "mode": str}`.
 
@@ -1530,7 +1535,7 @@ def _(
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## Add classify parameters to config file
+    ## Write config
     """)
     return
 
@@ -1563,6 +1568,16 @@ def _(
 
     print("Saved classifier settings to config.")
     return (safe_config,)
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## Next
+
+    Classify has no module of its own. Open `5_aggregate.py`; `bash flow.sh aggregate` applies the classifier saved here.
+    """)
+    return
 
 
 if __name__ == "__main__":

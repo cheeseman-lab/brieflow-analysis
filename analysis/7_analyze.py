@@ -14,11 +14,17 @@ def _():
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    # Downstream Analysis
+    # Analyze: explore clusters and annotate them
 
-    This notebook should be used for downstream analysis of your OPS screen.
-    Cells marked with <font color='red'>SET PARAMETERS</font> contain crucial variables that need to be set according to your specific experimental setup and data organization.
-    Please review and modify these variables as needed before proceeding with the analysis.
+    This notebook explores the clustering results: pipeline statistics, the resolution search, feature, volcano and montage plots for a chosen cluster, and the optional Mozzarellm step that annotates clusters with an LLM.
+
+    **Reads:** the cluster outputs from `bash flow.sh cluster`, the aggregate outputs, and `screen.yaml`.
+
+    **Writes:** a pipeline statistics report next to the outputs; for Mozzarellm, the `mozzarellm` section of `config/config.yml`, `config/mozzarellm_combo.tsv` and the screen contexts under `config/mozzarellm_context/`.
+
+    **Next:** optionally run `bash flow.sh mozzarellm`; it calls a paid LLM API.
+
+    Cells under a **Set parameters** heading hold the settings you choose for your analysis.
     """)
     return
 
@@ -26,7 +32,7 @@ def _(mo):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## <font color='red'>SET PARAMETERS</font>
+    ## Set parameters
 
     ### Fixed parameters for analysis
 
@@ -183,7 +189,7 @@ def _(config, mo, pd):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## <font color='red'>SET PARAMETERS</font>
+    ## Set parameters
 
     ### Resolution search
 
@@ -255,7 +261,7 @@ def _(
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## <font color='red'>SET PARAMETERS</font>
+    ## Set parameters
 
     ### Cluster selection for analysis
 
@@ -373,7 +379,7 @@ def _(aggregate_file, cluster_path, mo, pd):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## <font color='red'>SET PARAMETERS</font>
+    ## Set parameters
 
     ### Cluster selection for visualization
 
@@ -438,7 +444,7 @@ def _(
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## <font color='red'>SET PARAMETERS</font>
+    ## Set parameters
 
     ### Feature selection for visualization
 
@@ -588,7 +594,7 @@ def _(
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## <font color='red'>SET PARAMETERS</font>
+    ## Set parameters
 
     ### Volcano plot configuration
 
@@ -669,7 +675,7 @@ def _(mo):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## <font color='red'>SET PARAMETERS</font>
+    ## Set parameters
 
     ### Montage configuration
 
@@ -828,7 +834,7 @@ def _(mo):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## <font color='red'>SET PARAMETERS</font>
+    ## Set parameters
 
     ### Mozzarellm configuration
 
@@ -884,7 +890,7 @@ def params_mozzarellm():
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## <font color='red'>SET PARAMETERS</font>
+    ## Set parameters
 
     ### Mozzarellm clustering selection
 
@@ -896,7 +902,7 @@ def _(mo):
 
     Resolution defaults to your `LEIDEN_RESOLUTION`. The benchmark-derived pick is never an implicit fallback; ask for it by name with `{"leiden_resolution": "optimal"}`, which reads the resolution search above. That search ranks resolutions by CORUM, KEGG and STRING enrichment, so `"optimal"` favours the resolution that best recovers complexes that are already known.
 
-    To annotate a whole screen, hand `MOZZARELLM_EXTRA_CLUSTERINGS` the lab's panel policy over the screen's own clusterings:
+    To annotate a whole screen, hand `MOZZARELLM_EXTRA_CLUSTERINGS` a panel selection over the screen's own clusterings, such as the one `panel_tier_clusterings` builds:
 
     ```python
     MOZZARELLM_EXTRA_CLUSTERINGS = panel_tier_clusterings(
@@ -1101,8 +1107,7 @@ def _(
     optimal_resolutions,
     pd,
 ):
-    # a row that names its own combo, class and resolution needs nothing from the
-    # selection above, so a whole-screen sweep does not require picking one clustering
+    # A row naming its own combo, class and resolution needs no selection above, so whole-screen sweeps need not pick one
     _mozzarellm_needs_current_selection = MOZZARELLM_ANNOTATE_SELECTED or any(
         _key not in _entry
         for _entry in MOZZARELLM_EXTRA_CLUSTERINGS
@@ -1340,7 +1345,7 @@ def _(
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## Add mozzarellm parameters to config file
+    ## Write config
     """)
     return
 
@@ -1403,6 +1408,16 @@ def _(
 
     print("Saved mozzarellm settings to config.")
     return (safe_config,)
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## Next
+
+    The pipeline is complete once `bash flow.sh cluster` has run. To annotate the selected clusterings, optionally run `bash flow.sh mozzarellm` (add `--backend slurm` on a cluster); it calls a paid LLM API, so check the dry-run cost estimate above first. `bash flow.sh viz` opens the results browser.
+    """)
+    return
 
 
 if __name__ == "__main__":
