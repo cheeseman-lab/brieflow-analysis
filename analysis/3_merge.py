@@ -63,6 +63,7 @@ def _():
         find_closest_tiles,
         filter_low_score_seeds,
         fast_merge_example,
+        get_tile_dimensions,
         load_merge_dapi_pair,
         plot_merge_alignment_overlay,
     )
@@ -86,6 +87,7 @@ def _():
         filter_low_score_seeds,
         find_closest_tiles,
         get_filename,
+        get_tile_dimensions,
         hash_cell_locations,
         image_path_templates,
         initial_alignment,
@@ -177,66 +179,14 @@ def params_test_metadata():
 
 
 @app.cell
-def _(Path, TEST_PLATE, TEST_WELL, config):
-    # Extract image dimensions from a sample tile
-    from lib.shared.image_io import read_image
-
+def _(Path, TEST_PLATE, TEST_WELL, config, get_tile_dimensions):
+    # Read the tile size of each modality from its processed images
     ROOT_FP = Path(config["all"]["root_fp"])
     IMAGE_FORMAT = config["all"].get("image_format", "tiff")
-
-    if IMAGE_FORMAT == "zarr":
-        # Find a sample phenotype zarr image
-        ph_image_dir = ROOT_FP / "phenotype"
-        ph_zarr_stores = list(ph_image_dir.glob("aligned_*.zarr"))
-        if ph_zarr_stores:
-            # Find first tile zarr.json
-            ph_tiles = list(ph_zarr_stores[0].rglob("*/zarr.json"))
-            ph_tiles = [p for p in ph_tiles if "labels" not in str(p) and p.parent.parent.parent.parent == ph_zarr_stores[0]]
-            if ph_tiles:
-                sample_ph = read_image(ph_tiles[0])
-                PHENOTYPE_DIMENSIONS = sample_ph.shape[-2:]
-                print(f"Phenotype image dimensions: {PHENOTYPE_DIMENSIONS} (from zarr)")
-            else:
-                raise ValueError("No phenotype tiles found; run `bash flow.sh phenotype` first so the tile size can be read")
-        else:
-            raise ValueError("No phenotype zarr stores found; run `bash flow.sh phenotype` first so the tile size can be read")
-
-        # Find a sample SBS zarr image (nuclei label store)
-        sbs_image_dir = ROOT_FP / "sbs"
-        sbs_zarr_stores = list(sbs_image_dir.glob("aligned_*.zarr"))
-        if sbs_zarr_stores:
-            sbs_tiles = list(sbs_zarr_stores[0].rglob("*/zarr.json"))
-            sbs_tiles = [p for p in sbs_tiles if "labels" not in str(p) and p.parent.parent.parent.parent == sbs_zarr_stores[0]]
-            if sbs_tiles:
-                sample_sbs = read_image(sbs_tiles[0])
-                SBS_DIMENSIONS = sample_sbs.shape[-2:]
-                print(f"SBS image dimensions: {SBS_DIMENSIONS} (from zarr)")
-            else:
-                raise ValueError("No SBS tiles found; run `bash flow.sh sbs` first so the tile size can be read")
-        else:
-            raise ValueError("No SBS zarr stores found; run `bash flow.sh sbs` first so the tile size can be read")
-    else:
-        from tifffile import imread
-
-        # Find a sample phenotype image (aligned.tiff)
-        ph_image_dir = ROOT_FP / "phenotype" / "images"
-        ph_images = list(ph_image_dir.glob(f"P-{TEST_PLATE}_W-{TEST_WELL}*__aligned.tiff"))
-        if ph_images:
-            sample_ph = imread(ph_images[0])
-            PHENOTYPE_DIMENSIONS = sample_ph.shape[-2:]
-            print(f"Phenotype image dimensions: {PHENOTYPE_DIMENSIONS} (from {ph_images[0].name})")
-        else:
-            raise ValueError("No phenotype images found; run `bash flow.sh phenotype` first so the tile size can be read")
-
-        # Find a sample SBS image (nuclei.tiff as aligned.tiff is usually a temp file)
-        sbs_image_dir = ROOT_FP / "sbs" / "images"
-        sbs_images = list(sbs_image_dir.glob(f"P-{TEST_PLATE}_W-{TEST_WELL}*__nuclei.tiff"))
-        if sbs_images:
-            sample_sbs = imread(sbs_images[0])
-            SBS_DIMENSIONS = sample_sbs.shape[-2:]
-            print(f"SBS image dimensions: {SBS_DIMENSIONS} (from {sbs_images[0].name})")
-        else:
-            raise ValueError("No SBS images found; run `bash flow.sh sbs` first so the tile size can be read")
+    PHENOTYPE_DIMENSIONS = get_tile_dimensions(ROOT_FP, "phenotype", IMAGE_FORMAT, TEST_PLATE, TEST_WELL)
+    SBS_DIMENSIONS = get_tile_dimensions(ROOT_FP, "sbs", IMAGE_FORMAT, TEST_PLATE, TEST_WELL)
+    print(f"Phenotype image dimensions: {PHENOTYPE_DIMENSIONS}")
+    print(f"SBS image dimensions: {SBS_DIMENSIONS}")
     return PHENOTYPE_DIMENSIONS, ROOT_FP, SBS_DIMENSIONS
 
 
