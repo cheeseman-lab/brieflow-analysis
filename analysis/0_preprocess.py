@@ -50,6 +50,7 @@ def _():
         create_samples_df,
         create_micropanel,
         convert_tuples_to_lists,
+        filter_samples_to_wells,
     )
     from lib.preprocess.preprocess import extract_metadata, convert_to_array
     from lib.preprocess.file_utils import get_sample_fps, get_tile_count_from_well
@@ -63,6 +64,7 @@ def _():
         create_micropanel,
         create_samples_df,
         extract_metadata,
+        filter_samples_to_wells,
         get_sample_fps,
         get_tile_count_from_well,
         pd,
@@ -329,30 +331,17 @@ def _(
     SBS_SAMPLES_DF_FP,
     WELL_ANNOTATIONS_FP,
     create_samples_df,
+    filter_samples_to_wells,
     mo,
     get_tile_count_from_well,
     pd,
 ):
-    # Keep only the wells listed in WELL_ANNOTATIONS_FP, when it is set
-    def _keep_annotated_wells(samples, label):
-        if not WELL_ANNOTATIONS_FP:
-            return samples
-        _table = pd.read_csv(WELL_ANNOTATIONS_FP, sep=None, engine="python", dtype=str)
-        _listed = set(_table["plate"].str.strip() + "/" + _table["well"].str.strip())
-        _keys = samples["plate"].astype(str) + "/" + samples["well"].astype(str)
-        _keep = _keys.isin(_listed)
-        if not _keep.any():
-            raise ValueError(
-                f"No {label} well is listed in {WELL_ANNOTATIONS_FP}; compare its plate and well values with the file names"
-            )
-        print(f"{label}: keeping {_keys[_keep].nunique()} of {_keys.nunique()} imaged wells listed in {WELL_ANNOTATIONS_FP}")
-        return samples[_keep].reset_index(drop=True)
-
     # Create SBS samples DataFrame
     sbs_samples = create_samples_df(
         SBS_IMAGES_DIR_FP, SBS_PATH_PATTERN, SBS_PATH_METADATA, SBS_METADATA_ORDER_TYPE
     )
-    sbs_samples = _keep_annotated_wells(sbs_samples, "SBS")
+    if WELL_ANNOTATIONS_FP:
+        sbs_samples = filter_samples_to_wells(sbs_samples, WELL_ANNOTATIONS_FP, "SBS")
     sbs_samples.to_csv(SBS_SAMPLES_DF_FP, sep="\t", index=False)
     print("SBS samples:")
     mo.output.append(mo.ui.table(sbs_samples))
@@ -394,7 +383,10 @@ def _(
         PHENOTYPE_PATH_METADATA,
         PHENOTYPE_METADATA_ORDER_TYPE,
     )
-    phenotype_samples = _keep_annotated_wells(phenotype_samples, "Phenotype")
+    if WELL_ANNOTATIONS_FP:
+        phenotype_samples = filter_samples_to_wells(
+            phenotype_samples, WELL_ANNOTATIONS_FP, "Phenotype"
+        )
     phenotype_samples.to_csv(PHENOTYPE_SAMPLES_DF_FP, sep="\t", index=False)
     print("Phenotype samples:")
     mo.output.append(mo.ui.table(phenotype_samples))
