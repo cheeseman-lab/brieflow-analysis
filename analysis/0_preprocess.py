@@ -46,6 +46,7 @@ def _():
         create_samples_df,
         create_micropanel,
         convert_tuples_to_lists,
+        filter_samples_to_wells,
     )
     from lib.preprocess.preprocess import extract_metadata, convert_to_array
     from lib.preprocess.file_utils import get_sample_fps, get_tile_count_from_well
@@ -59,6 +60,7 @@ def _():
         create_micropanel,
         create_samples_df,
         extract_metadata,
+        filter_samples_to_wells,
         get_sample_fps,
         get_tile_count_from_well,
         pd,
@@ -107,6 +109,7 @@ def _(mo):
     - `SBS_SAMPLES_DF_FP`/`PHENOTYPE_SAMPLES_DF_FP`: Path to dataframe where SBS/phenotype samples location and metadata will be stored.
     - `SBS_COMBO_DF_FP`/`PHENOTYPE_COMBO_DF_FP`: Path to dataframe where SBS/phenotype sample metadata combinations will be stored.
     - `SBS_IMAGES_DIR_FP`/`PHENOTYPE_IMAGES_DIR_FP`: Path to directories with SBS/phenotype sample image files (ND2, Imaris, or TIFF). Set to `None` to ignore SBS/phenotype testing in this notebook.
+    - `WELL_ANNOTATIONS_FP`: Optional table of the wells to analyze (TSV or CSV with `plate` and `well` columns, one row per well; the same table the aggregate notebook uses for per-well conditions). When set, the sample dataframes keep only these wells, so no later module processes the others. Its plate and well values must match the ones parsed from the file names. `None` keeps every imaged well.
 
     ### Pattern configurations for metadata extraction
 
@@ -185,6 +188,9 @@ def _():
     SBS_IMAGES_DIR_FP = None
     PHENOTYPE_IMAGES_DIR_FP = None
 
+    # Wells to analyze: table with plate and well columns; None = every imaged well
+    WELL_ANNOTATIONS_FP = None
+
     # SBS pattern configurations — REQUIRED
     SBS_PATH_PATTERN = None              # e.g. r"plate_(\d+)/c(\d+)/.*Well([A-Z]\d+)..."
     SBS_PATH_METADATA = None             # e.g. ["plate", "cycle", "well", "channel"]
@@ -224,6 +230,7 @@ def _():
         SBS_PATH_METADATA,
         SBS_PATH_PATTERN,
         SBS_SAMPLES_DF_FP,
+        WELL_ANNOTATIONS_FP,
     )
 
 
@@ -318,7 +325,9 @@ def _(
     SBS_PATH_METADATA,
     SBS_PATH_PATTERN,
     SBS_SAMPLES_DF_FP,
+    WELL_ANNOTATIONS_FP,
     create_samples_df,
+    filter_samples_to_wells,
     mo,
     get_tile_count_from_well,
     pd,
@@ -327,6 +336,8 @@ def _(
     sbs_samples = create_samples_df(
         SBS_IMAGES_DIR_FP, SBS_PATH_PATTERN, SBS_PATH_METADATA, SBS_METADATA_ORDER_TYPE
     )
+    if WELL_ANNOTATIONS_FP:
+        sbs_samples = filter_samples_to_wells(sbs_samples, WELL_ANNOTATIONS_FP, "SBS")
     sbs_samples.to_csv(SBS_SAMPLES_DF_FP, sep="\t", index=False)
     print("SBS samples:")
     mo.ui.table(sbs_samples)
@@ -368,6 +379,10 @@ def _(
         PHENOTYPE_PATH_METADATA,
         PHENOTYPE_METADATA_ORDER_TYPE,
     )
+    if WELL_ANNOTATIONS_FP:
+        phenotype_samples = filter_samples_to_wells(
+            phenotype_samples, WELL_ANNOTATIONS_FP, "Phenotype"
+        )
     phenotype_samples.to_csv(PHENOTYPE_SAMPLES_DF_FP, sep="\t", index=False)
     print("Phenotype samples:")
     mo.ui.table(phenotype_samples)
