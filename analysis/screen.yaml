@@ -75,20 +75,17 @@ library:
 iss:
   cycles: null                                    # REQUIRED: number of SBS cycles imaged
   objective: null                                 # e.g. "10X 0.45 NA"; descriptive (pixel sizes are read from the image metadata)
-  chemistry: "four color"                         # REQUIRED: "four color" (one base per channel) | "combinatorial" (two-color: bases encoded by which dyes are on)
+  chemistry: null                                 # REQUIRED: "four color" (one base per channel) | "combinatorial" (two-color: bases encoded by which dyes are on)
   combinatorial:                                  # combinatorial chemistry only; leave code null for four color
     code: null                                    # each base -> the dye channels that are ON for it (names must match iss.channels); [] = no dye
     # Two-color example: channels keep their dye names and the code maps bases to dyes.
     #   channels: DAPI, Dye1, Dye2, Dye3
     #   code: { G: [], T: ["Dye1"], C: ["Dye1", "Dye2"], A: ["Dye2", "Dye3"] }
   channels:                                       # REQUIRED: one entry per imaging channel, in file order. Four color: name base channels G/T/A/C. Combinatorial: use the dye names from the code
-    - { name: "DAPI", laser_wavelength_nm: 408, exposure_time_ms: null }
-    - { name: "G",    laser_wavelength_nm: null, exposure_time_ms: null }
-    - { name: "T",    laser_wavelength_nm: null, exposure_time_ms: null }
-    - { name: "A",    laser_wavelength_nm: null, exposure_time_ms: null }
-    - { name: "C",    laser_wavelength_nm: null, exposure_time_ms: null }
+    - { name: null, laser_wavelength_nm: null, exposure_time_ms: null }  # e.g. four color: DAPI, G, T, A, C
+    # ... add one entry per channel ...
   binning: null                                   # 1 (none) | 2 (2x2); descriptive
-  cycle_order: "GTAC"                             # descriptive: base order across the four sequencing channels
+  cycle_order: null                               # descriptive: base order across the four sequencing channels
   background_channel_nucleus:                     # channel and cycle used as the SBS nuclear background
     channel: "DAPI"                               # descriptive: always the DAPI channel
     cycle: null                                   # cycle whose DAPI image segments SBS nuclei (usually 1); null = asked at launch

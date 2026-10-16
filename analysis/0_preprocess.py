@@ -449,12 +449,12 @@ def params_metadata_source():
     SBS_METADATA_PATH_PATTERN = None
     SBS_METADATA_PATH_METADATA = None
     SBS_METADATA_PATH_ORDER_TYPE = None
-    SBS_METADATA_SAMPLES_DF_FP = None
+    SBS_METADATA_SAMPLES_DF_FP = 'config/sbs_metadata_samples.tsv'
     PHENOTYPE_METADATA_IMAGES_DIR_FP = None
     PHENOTYPE_METADATA_PATH_PATTERN = None
     PHENOTYPE_METADATA_PATH_METADATA = None
     PHENOTYPE_METADATA_PATH_ORDER_TYPE = None
-    PHENOTYPE_METADATA_SAMPLES_DF_FP = None
+    PHENOTYPE_METADATA_SAMPLES_DF_FP = 'config/phenotype_metadata_samples.tsv'
     return (
         PHENOTYPE_METADATA_IMAGES_DIR_FP,
         PHENOTYPE_METADATA_PATH_METADATA,
@@ -783,7 +783,7 @@ def _(mo):
 
 @app.cell
 def params_illumination():
-    SAMPLE_FRACTION = 1.0
+    SAMPLE_FRACTION = 0.1
     return (SAMPLE_FRACTION,)
 
 

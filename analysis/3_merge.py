@@ -197,11 +197,9 @@ def _(Path, TEST_PLATE, TEST_WELL, config):
                 PHENOTYPE_DIMENSIONS = sample_ph.shape[-2:]
                 print(f"Phenotype image dimensions: {PHENOTYPE_DIMENSIONS} (from zarr)")
             else:
-                print("No phenotype tiles found, using default (2960, 2960)")
-                PHENOTYPE_DIMENSIONS = (2960, 2960)
+                raise ValueError("No phenotype tiles found; run `bash flow.sh phenotype` first so the tile size can be read")
         else:
-            print("No phenotype zarr stores found, using default (2960, 2960)")
-            PHENOTYPE_DIMENSIONS = (2960, 2960)
+            raise ValueError("No phenotype zarr stores found; run `bash flow.sh phenotype` first so the tile size can be read")
 
         # Find a sample SBS zarr image (nuclei label store)
         sbs_image_dir = ROOT_FP / "sbs"
@@ -214,11 +212,9 @@ def _(Path, TEST_PLATE, TEST_WELL, config):
                 SBS_DIMENSIONS = sample_sbs.shape[-2:]
                 print(f"SBS image dimensions: {SBS_DIMENSIONS} (from zarr)")
             else:
-                print("No SBS tiles found, using default (1480, 1480)")
-                SBS_DIMENSIONS = (1480, 1480)
+                raise ValueError("No SBS tiles found; run `bash flow.sh sbs` first so the tile size can be read")
         else:
-            print("No SBS zarr stores found, using default (1480, 1480)")
-            SBS_DIMENSIONS = (1480, 1480)
+            raise ValueError("No SBS zarr stores found; run `bash flow.sh sbs` first so the tile size can be read")
     else:
         from tifffile import imread
 
@@ -230,8 +226,7 @@ def _(Path, TEST_PLATE, TEST_WELL, config):
             PHENOTYPE_DIMENSIONS = sample_ph.shape[-2:]
             print(f"Phenotype image dimensions: {PHENOTYPE_DIMENSIONS} (from {ph_images[0].name})")
         else:
-            print("No phenotype images found, using default (2960, 2960)")
-            PHENOTYPE_DIMENSIONS = (2960, 2960)
+            raise ValueError("No phenotype images found; run `bash flow.sh phenotype` first so the tile size can be read")
 
         # Find a sample SBS image (nuclei.tiff as aligned.tiff is usually a temp file)
         sbs_image_dir = ROOT_FP / "sbs" / "images"
@@ -241,8 +236,7 @@ def _(Path, TEST_PLATE, TEST_WELL, config):
             SBS_DIMENSIONS = sample_sbs.shape[-2:]
             print(f"SBS image dimensions: {SBS_DIMENSIONS} (from {sbs_images[0].name})")
         else:
-            print("No SBS images found, using default (1480, 1480)")
-            SBS_DIMENSIONS = (1480, 1480)
+            raise ValueError("No SBS images found; run `bash flow.sh sbs` first so the tile size can be read")
     return PHENOTYPE_DIMENSIONS, ROOT_FP, SBS_DIMENSIONS
 
 
@@ -352,7 +346,7 @@ def _(mo):
 @app.cell
 def params_merge_approach():
     MERGE_APPROACH = "fast"            # "fast" | "positions"
-    THRESHOLD = None                   # e.g., 2
+    THRESHOLD = 2                   # e.g., 2
     return MERGE_APPROACH, THRESHOLD
 
 
@@ -439,7 +433,7 @@ def params_triangle_alignment():
 
 @app.cell
 def params_initial_sites():
-    INITIAL_SITES_APPROACH = None      # "auto" | "manual"
+    INITIAL_SITES_APPROACH = 'auto'      # "auto" | "manual"
     INITIAL_SBS_TILES = None           # auto: list of SBS tile indices distributed across the well
     INITIAL_SITES = None               # manual: list of [phenotype_tile, sbs_tile] pairs
     return INITIAL_SBS_TILES, INITIAL_SITES, INITIAL_SITES_APPROACH
@@ -906,8 +900,8 @@ def _(mo):
 
 @app.cell
 def params_deduplication():
-    SBS_DEDUP_PRIOR = None             # SBS-side deduplication prior
-    PHENO_DEDUP_PRIOR = None           # phenotype-side deduplication prior
+    SBS_DEDUP_PRIOR = {'distance': True, 'mapped_single_gene': False}             # SBS-side deduplication prior
+    PHENO_DEDUP_PRIOR = {'distance': True, 'fov_distance_0': True}           # phenotype-side deduplication prior
     return PHENO_DEDUP_PRIOR, SBS_DEDUP_PRIOR
 
 

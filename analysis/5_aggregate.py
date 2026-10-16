@@ -302,9 +302,9 @@ def _(mo):
 
 @app.cell
 def params_split_classes():
-    TEST_MONTAGE_CHANNEL = None
-    COLLAPSE_COLS = None               # e.g., ["sgRNA_0", "gene_symbol_0"]
-    MONTAGE_CELL_SIZE = None           # e.g., 40 — zoom level (pixel size per cell bounding box)
+    TEST_MONTAGE_CHANNEL = 'DAPI'
+    COLLAPSE_COLS = ['cell_barcode_0', 'gene_symbol_0']               # e.g., ["sgRNA_0", "gene_symbol_0"]
+    MONTAGE_CELL_SIZE = 40           # e.g., 40 — zoom level (pixel size per cell bounding box)
     GENERATE_MONTAGES = True           # write montages in the aggregate pipeline
     return COLLAPSE_COLS, GENERATE_MONTAGES, MONTAGE_CELL_SIZE, TEST_MONTAGE_CHANNEL
 
@@ -489,7 +489,7 @@ def params_channel_combos():
     AGGREGATE_COMBO_FP = "config/aggregate_combo.tsv"
     SPLIT_BY_COMPARTMENT = False
     COMPARTMENT_COMBOS = None          # e.g., [["cell", "nucleus", "cytoplasm"], ["nucleus"]]
-    TEST_CELL_CLASS = None
+    TEST_CELL_CLASS = 'all'
     TEST_CHANNEL_COMBO = None
     return (
         AGGREGATE_COMBO_FP,
@@ -616,7 +616,7 @@ def _(mo):
 @app.cell
 def params_perturbation_filter():
     FILTER_QUERIES = None              # e.g., ["mapped_single_gene == True"]
-    PERTURBATION_NAME_COL = None       # e.g., "gene_symbol_0"
+    PERTURBATION_NAME_COL = 'gene_symbol_0'       # e.g., "gene_symbol_0"
     return FILTER_QUERIES, PERTURBATION_NAME_COL
 
 
@@ -659,9 +659,9 @@ def _(mo):
 
 @app.cell
 def params_missing_values():
-    DROP_COLS_THRESHOLD = None         # e.g., 0.1
-    DROP_ROWS_THRESHOLD = None         # e.g., 0.01
-    IMPUTE = None                      # True | False
+    DROP_COLS_THRESHOLD = 0.1         # e.g., 0.1
+    DROP_ROWS_THRESHOLD = 0.01         # e.g., 0.01
+    IMPUTE = True                      # True | False
     return DROP_COLS_THRESHOLD, DROP_ROWS_THRESHOLD, IMPUTE
 
 
@@ -701,7 +701,7 @@ def _(mo):
 
 @app.cell
 def params_intensity_filter():
-    CONTAMINATION = None               # e.g., 0.01
+    CONTAMINATION = 0.01               # e.g., 0.01
     return (CONTAMINATION,)
 
 
@@ -773,7 +773,7 @@ def _(mo):
 
 @app.cell
 def params_alignment_data():
-    BATCH_COLS = None                  # e.g., ["plate", "well"]
+    BATCH_COLS = ['plate', 'well']                  # e.g., ["plate", "well"]
     CONTROL_KEY = None                 # e.g., "nontargeting"
     PERTURBATION_ID_COL = "cell_barcode_0"   # or "sgRNA_0" — should essentially always be set
     CONTROL_NAME_COL = None            # e.g., "gene_symbol_0" when PERTURBATION_NAME_COL is a construct column
@@ -826,9 +826,9 @@ def _(mo):
 
 @app.cell
 def params_align_aggregate():
-    VARIANCE_OR_NCOMP = None           # e.g., 0.99 (variance retained) or integer n_components
-    NUM_ALIGN_BATCHES = None           # e.g., 1
-    AGG_METHOD = None                  # e.g., "median"
+    VARIANCE_OR_NCOMP = 0.99           # e.g., 0.99 (variance retained) or integer n_components
+    NUM_ALIGN_BATCHES = 1           # e.g., 1
+    AGG_METHOD = 'median'                  # e.g., "median"
     return AGG_METHOD, NUM_ALIGN_BATCHES, VARIANCE_OR_NCOMP
 
 
@@ -934,7 +934,7 @@ def _(mo):
 
 @app.cell
 def params_bootstrap():
-    FEATURE_NORMALIZATION = "standard"
+    FEATURE_NORMALIZATION = 'mad'
     NUM_SIMS = None
     EXCLUSION_STRING = None
     PSEUDOGENE_PATTERNS = None

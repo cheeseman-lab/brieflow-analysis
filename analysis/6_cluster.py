@@ -134,7 +134,7 @@ def _(mo):
 
 @app.cell
 def params_preprocessing():
-    MIN_CELL_CUTOFFS = None            # e.g., {"all": 5, "Interphase": 5, "Mitotic": 5}
+    MIN_CELL_CUTOFFS = {'all': 0}            # e.g., {"all": 5, "Interphase": 5, "Mitotic": 5}
     TEST_COMPARTMENT_COMBO = None
     return MIN_CELL_CUTOFFS, TEST_COMPARTMENT_COMBO
 
@@ -288,14 +288,14 @@ def _(mo):
 
 @app.cell
 def params_test_dataset():
-    TEST_CELL_CLASS = None
+    TEST_CELL_CLASS = 'all'
     TEST_CHANNEL_COMBO = None
-    PHATE_DISTANCE_METRIC = None       # "cosine" | "euclidean"
+    PHATE_DISTANCE_METRIC = 'cosine'       # "cosine" | "euclidean"
     PERTURBATION_AUC_THRESHOLD = None
     CONTROL_SCOPE = 'pooled'               # "pooled" | "within_group" | "reference_group" | "within_perturbation"
     CONTROL_REFERENCE_GROUP = None         # the vehicle group; required by "reference_group" and "within_perturbation"
     CLUSTER_CONTROL_KEY = None             # None inherits the aggregate CONTROL_KEY
-    TEST_LEIDEN_RESOLUTIONS = None     # e.g., [2, 3, 4, 5]
+    TEST_LEIDEN_RESOLUTIONS = [0.1, 1, 5, 7, 9, 11, 13, 15, 20, 100]     # e.g., [2, 3, 4, 5]
     return (
         CLUSTER_CONTROL_KEY,
         CONTROL_REFERENCE_GROUP,
@@ -423,7 +423,7 @@ def _(mo):
 
 @app.cell
 def params_test_resolution():
-    TEST_LEIDEN_RESOLUTION = None
+    TEST_LEIDEN_RESOLUTION = 5
     return (TEST_LEIDEN_RESOLUTION,)
 
 

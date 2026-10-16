@@ -848,9 +848,9 @@ def params_segmentation():
         CELL_NMS_THRESHOLD = 0.3
     elif SEGMENTATION_METHOD == "watershed":
         # Parameters for Watershed method
-        THRESHOLD_DAPI = 4260
-        THRESHOLD_CELL = 1300
-        NUCLEUS_AREA = (45, 450)
+        THRESHOLD_DAPI = None  # raw intensity for your camera, e.g. 4260
+        THRESHOLD_CELL = None  # raw intensity for your camera, e.g. 1300
+        NUCLEUS_AREA = None  # (min, max) pixels, e.g. (45, 450)
     return (
         CELLPOSE_MODEL,
         CELL_CELLPROB_THRESHOLD,
