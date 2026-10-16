@@ -14,11 +14,17 @@ def _():
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    # Configure Merge Module Params
+    # Merge: match SBS cells to phenotype cells
 
-    This notebook should be used as a test for ensuring correct merge parameters before merge processing.
-    Cells marked with <font color='red'>SET PARAMETERS</font> contain crucial variables that need to be set according to your specific experimental setup and data organization.
-    Please review and modify these variables as needed before proceeding with the analysis.
+    This notebook tests how SBS and phenotype tiles are aligned within a well and how cells are matched across the two imaging rounds, with either the fast (triangle hashing) or the positions approach.
+
+    **Reads:** the preprocess metadata, and the SBS and phenotype outputs from `bash flow.sh sbs` and `bash flow.sh phenotype`.
+
+    **Writes:** the `merge` section of `config/config.yml` and `config/merge_combo.tsv`.
+
+    **Next:** run `bash flow.sh merge`, then open `4_classify.py` (or `5_aggregate.py` if you do not train a classifier).
+
+    Cells under a **Set parameters** heading hold the settings you choose for your screen; review each before running the module.
     """)
     return
 
@@ -26,7 +32,7 @@ def _(mo):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## <font color='red'>SET PARAMETERS</font>
+    ## Set parameters
 
     ### Fixed parameters for merge processing
 
@@ -36,10 +42,8 @@ def _(mo):
 
 
 @app.cell
-def _():
-    # === OPERATOR PARAMETERS ===
+def params_paths():
     CONFIG_FILE_PATH = "config/config.yml"
-    # === END OPERATOR PARAMETERS ===
     return (CONFIG_FILE_PATH,)
 
 
@@ -103,7 +107,7 @@ def _():
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## <font color='red'>SET PARAMETERS</font>
+    ## Set parameters
 
     ### Determine merge plate-well combos
     - `MERGE_COMBO_DF_FP`: Plate used for testing configuration
@@ -112,10 +116,8 @@ def _(mo):
 
 
 @app.cell
-def _():
-    # === OPERATOR PARAMETERS ===
+def params_merge_combos():
     MERGE_COMBO_DF_FP = "config/merge_combo.tsv"
-    # === END OPERATOR PARAMETERS ===
     return (MERGE_COMBO_DF_FP,)
 
 
@@ -130,12 +132,11 @@ def _(CONFIG_FILE_PATH, MERGE_COMBO_DF_FP, Path, pd, warnings, yaml):
     phenotype_wildcard_combos = pd.read_csv(PHENOTYPE_COMBO_FP, sep='\t')
     sbs_combos = set(zip(sbs_wildcard_combos['plate'], sbs_wildcard_combos['well']))
     phenotype_combos = set(zip(phenotype_wildcard_combos['plate'], phenotype_wildcard_combos['well']))
-    # Generate plate-well combinations for merge
+    # Merge needs SBS and phenotype to cover the same plate-well combinations
     if sbs_combos == phenotype_combos:
         merge_wildcard_combos = pd.DataFrame(list(sbs_combos), columns=['plate', 'well'])
     else:
         warnings.warn('SBS and PHENOTYPE do not have matching plate-well combinations. Merging requires identical sets.')
-    # Check if SBS and PHENOTYPE have the same plate-well combinations
         merge_wildcard_combos = pd.DataFrame(columns=['plate', 'well'])
     merge_wildcard_combos.to_csv(MERGE_COMBO_DF_FP, sep='\t', index=False)
     merge_wildcard_combos
@@ -145,7 +146,7 @@ def _(CONFIG_FILE_PATH, MERGE_COMBO_DF_FP, Path, pd, warnings, yaml):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## <font color='red'>SET PARAMETERS</font>
+    ## Set parameters
 
     ### Parameters for testing merge module
     - `TEST_PLATE`: Plate used for testing configuration
@@ -160,14 +161,12 @@ def _(mo):
 
 
 @app.cell
-def _():
-    # === OPERATOR PARAMETERS ===
+def params_test_metadata():
     TEST_PLATE = None
     TEST_WELL = None
     SBS_METADATA_CYCLE = 1             # library default; cycle to extract for sbs metadata
     SBS_METADATA_CHANNEL = None
     PH_METADATA_CHANNEL = None
-    # === END OPERATOR PARAMETERS ===
     return (
         PH_METADATA_CHANNEL,
         SBS_METADATA_CHANNEL,
@@ -198,11 +197,9 @@ def _(Path, TEST_PLATE, TEST_WELL, config):
                 PHENOTYPE_DIMENSIONS = sample_ph.shape[-2:]
                 print(f"Phenotype image dimensions: {PHENOTYPE_DIMENSIONS} (from zarr)")
             else:
-                print("No phenotype tiles found, using default (2960, 2960)")
-                PHENOTYPE_DIMENSIONS = (2960, 2960)
+                raise ValueError("No phenotype tiles found; run `bash flow.sh phenotype` first so the tile size can be read")
         else:
-            print("No phenotype zarr stores found, using default (2960, 2960)")
-            PHENOTYPE_DIMENSIONS = (2960, 2960)
+            raise ValueError("No phenotype zarr stores found; run `bash flow.sh phenotype` first so the tile size can be read")
 
         # Find a sample SBS zarr image (nuclei label store)
         sbs_image_dir = ROOT_FP / "sbs"
@@ -215,11 +212,9 @@ def _(Path, TEST_PLATE, TEST_WELL, config):
                 SBS_DIMENSIONS = sample_sbs.shape[-2:]
                 print(f"SBS image dimensions: {SBS_DIMENSIONS} (from zarr)")
             else:
-                print("No SBS tiles found, using default (1480, 1480)")
-                SBS_DIMENSIONS = (1480, 1480)
+                raise ValueError("No SBS tiles found; run `bash flow.sh sbs` first so the tile size can be read")
         else:
-            print("No SBS zarr stores found, using default (1480, 1480)")
-            SBS_DIMENSIONS = (1480, 1480)
+            raise ValueError("No SBS zarr stores found; run `bash flow.sh sbs` first so the tile size can be read")
     else:
         from tifffile import imread
 
@@ -231,8 +226,7 @@ def _(Path, TEST_PLATE, TEST_WELL, config):
             PHENOTYPE_DIMENSIONS = sample_ph.shape[-2:]
             print(f"Phenotype image dimensions: {PHENOTYPE_DIMENSIONS} (from {ph_images[0].name})")
         else:
-            print("No phenotype images found, using default (2960, 2960)")
-            PHENOTYPE_DIMENSIONS = (2960, 2960)
+            raise ValueError("No phenotype images found; run `bash flow.sh phenotype` first so the tile size can be read")
 
         # Find a sample SBS image (nuclei.tiff as aligned.tiff is usually a temp file)
         sbs_image_dir = ROOT_FP / "sbs" / "images"
@@ -242,8 +236,7 @@ def _(Path, TEST_PLATE, TEST_WELL, config):
             SBS_DIMENSIONS = sample_sbs.shape[-2:]
             print(f"SBS image dimensions: {SBS_DIMENSIONS} (from {sbs_images[0].name})")
         else:
-            print("No SBS images found, using default (1480, 1480)")
-            SBS_DIMENSIONS = (1480, 1480)
+            raise ValueError("No SBS images found; run `bash flow.sh sbs` first so the tile size can be read")
     return PHENOTYPE_DIMENSIONS, ROOT_FP, SBS_DIMENSIONS
 
 
@@ -261,9 +254,7 @@ def _(
     pd,
     plot_combined_tile_grid,
 ):
-    # load phenotype and SBS metadata dfs (HCS-nested zarr layout: metadata + info parquets at
-    # preprocess/metadata/{phenotype,sbs}/<plate>/<row>/<col>/combined_metadata.parquet and
-    # {phenotype,sbs}/parquets/<plate>/<row>/<col>/{phenotype_info,sbs_info}.parquet)
+    # Load the test well's metadata (one row per tile) and the SBS and phenotype info tables
     _row, _col = split_well(TEST_WELL)
     ph_test_metadata_fp = ROOT_FP / 'preprocess' / 'metadata' / 'phenotype' / str(TEST_PLATE) / _row / _col / 'combined_metadata.parquet'
     ph_test_metadata = pd.read_parquet(ph_test_metadata_fp)
@@ -283,18 +274,14 @@ def _(
     _sbs_info_fp = ROOT_FP / 'sbs' / 'parquets' / str(TEST_PLATE) / _row / _col / 'sbs_info.parquet'
     sbs_info = pd.read_parquet(_sbs_info_fp)
     _combined_tile_grid = plot_combined_tile_grid(ph_test_metadata, sbs_test_metadata, ph_image_dims=PHENOTYPE_DIMENSIONS, sbs_image_dims=SBS_DIMENSIONS)
-    # Apply SBS filtering - always filter by cycle, optionally by channel, otherwise deduplicate
-    # Derive phenotype alignment hash
-    # Derive SBS alignment hash
-    # create plot with combined tile view
-    _combined_tile_grid.show()  # Only deduplicate if no channel filter was applied (cycle filter was already applied)
+    _combined_tile_grid.show()
     return ph_test_metadata, phenotype_info, sbs_info, sbs_test_metadata
 
 
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## <font color='red'>SET PARAMETERS</font>
+    ## Set parameters
 
     ### Parameters for metadata alignment
     Each microscope handles global coordinates differently. If datasets were acquired in two different microscopes the metadata of the wells needs to be aligned.
@@ -311,19 +298,12 @@ def _(mo):
 
 
 @app.cell
-def _():
-    # === OPERATOR PARAMETERS ===
+def params_metadata_alignment():
     METADATA_ALIGN = False
     ALIGNMENT_FLIP_X = False
     ALIGNMENT_FLIP_Y = False
     ALIGNMENT_ROTATE_90 = False
-    # === END OPERATOR PARAMETERS ===
-    return (
-        ALIGNMENT_FLIP_X,
-        ALIGNMENT_FLIP_Y,
-        ALIGNMENT_ROTATE_90,
-        METADATA_ALIGN,
-    )
+    return ALIGNMENT_FLIP_X, ALIGNMENT_FLIP_Y, ALIGNMENT_ROTATE_90, METADATA_ALIGN
 
 
 @app.cell
@@ -343,17 +323,17 @@ def _(
     if METADATA_ALIGN:
         sbs_aligned, ph_aligned, transform_info = align_metadata(sbs_test_metadata, ph_test_metadata, flip_x=ALIGNMENT_FLIP_X, flip_y=ALIGNMENT_FLIP_Y, rotate_90=ALIGNMENT_ROTATE_90)
         _combined_tile_grid = plot_combined_tile_grid(ph_aligned, sbs_aligned, ph_image_dims=PHENOTYPE_DIMENSIONS, sbs_image_dims=SBS_DIMENSIONS)
-        _combined_tile_grid.show()  # Flip x coordinates (horizontal flip)
-    else:  # Flip y coordinates (vertical flip)
-        sbs_aligned = sbs_test_metadata  # Rotation
-        ph_aligned = ph_test_metadata  # Check the result with your combined tile grid
+        _combined_tile_grid.show()
+    else:
+        sbs_aligned = sbs_test_metadata
+        ph_aligned = ph_test_metadata
     return ph_aligned, sbs_aligned
 
 
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## <font color='red'>SET PARAMETERS</font>
+    ## Set parameters
 
     ### Merge approach
 
@@ -364,14 +344,17 @@ def _(mo):
 
 
 @app.cell
-def _():
-    # === OPERATOR PARAMETERS ===
+def params_merge_approach():
     MERGE_APPROACH = "fast"            # "fast" | "positions"
-    THRESHOLD = None                   # e.g., 2
-    # === END OPERATOR PARAMETERS ===
+    THRESHOLD = 2                   # e.g., 2
+    return MERGE_APPROACH, THRESHOLD
+
+
+@app.cell
+def _(MERGE_APPROACH):
     if MERGE_APPROACH not in ("fast", "positions"):
         raise ValueError(f'MERGE_APPROACH must be "fast" or "positions", got {MERGE_APPROACH!r}')
-    return MERGE_APPROACH, THRESHOLD
+    return
 
 
 @app.cell
@@ -398,7 +381,7 @@ def _(MERGE_APPROACH, mo):
 def _(MERGE_APPROACH, mo):
     mo.stop(MERGE_APPROACH != "fast")
     mo.md(r"""
-    ## <font color='red'>SET PARAMETERS</font>
+    ## Set parameters
 
     ### Initial Sites Configuration
 
@@ -421,7 +404,7 @@ def _(MERGE_APPROACH, mo):
 def _(MERGE_APPROACH, mo):
     mo.stop(MERGE_APPROACH != "fast")
     mo.md(r"""
-    ## <font color='red'>SET PARAMETERS (OPTIONAL): ADVANCED FAST-MERGE LEVERS</font>
+    ## Set parameters (optional): advanced fast-merge levers
 
     Optional levers to improve a difficult merge (e.g. a large rotation / scale offset between the two scopes). All default to `None` (pipeline built-in behavior). Set them here; the alignment and match-preview cells below use them, so you can evaluate a setting before committing the config. Only levers set to a non-`None` value are written to `config.yml`.
     """)
@@ -429,8 +412,7 @@ def _(MERGE_APPROACH, mo):
 
 
 @app.cell
-def _():
-    # === OPERATOR PARAMETERS: ADVANCED FAST-MERGE LEVERS ===
+def params_triangle_alignment():
     LOCAL_REFINEMENT = None       # None | "polynomial" | "thin_plate_spline"; within-tile warp
     WARP_DEGREE = None            # polynomial warp degree (e.g. 3)
     WARP_ITERATIONS = None        # refine-and-rematch passes (e.g. 2)
@@ -438,7 +420,6 @@ def _():
     SEED_OPTIMIZE = None          # try top-SEED_TOPK nearest tiles per seed, keep best (e.g. True)
     SEED_TOPK = None              # nearest tiles to evaluate when SEED_OPTIMIZE (e.g. 3)
     THRESHOLD_TRIANGLE = None     # triangle hash-match distance (e.g. 0.3)
-    # === END OPERATOR PARAMETERS ===
     return (
         LOCAL_REFINEMENT,
         SEED_OPTIMIZE,
@@ -451,12 +432,10 @@ def _():
 
 
 @app.cell
-def _():
-    # === OPERATOR PARAMETERS ===
-    INITIAL_SITES_APPROACH = None      # "auto" | "manual"
+def params_initial_sites():
+    INITIAL_SITES_APPROACH = 'auto'      # "auto" | "manual"
     INITIAL_SBS_TILES = None           # auto: list of SBS tile indices distributed across the well
     INITIAL_SITES = None               # manual: list of [phenotype_tile, sbs_tile] pairs
-    # === END OPERATOR PARAMETERS ===
     return INITIAL_SBS_TILES, INITIAL_SITES, INITIAL_SITES_APPROACH
 
 
@@ -475,11 +454,9 @@ def _(
 ):
     mo.stop(MERGE_APPROACH != "fast")
     if INITIAL_SITES_APPROACH == 'auto':
-    # Option 2: Manual - specify explicit [phenotype_tile, sbs_tile] pairs
-    # Only used if INITIAL_SITES_APPROACH = "manual"
-        candidate_pairs = []  # Set to list of pairs if using manual approach
+        # Auto: find the closest phenotype tiles for each listed SBS tile
+        candidate_pairs = []
         print('Discovering phenotype tiles for each SBS tile...')
-    # Auto-discover matches from SBS tiles (for visualization and validation)
         for _sbs_tile in INITIAL_SBS_TILES:
             closest = find_closest_tiles(sbs_aligned, ph_aligned, _sbs_tile, verbose=True)
             if SEED_OPTIMIZE:
@@ -492,6 +469,7 @@ def _(
         print('=' * 50)
         print(f'candidate_pairs = {candidate_pairs}')
     else:
+        # Manual: explicit [phenotype_tile, sbs_tile] pairs
         if INITIAL_SITES is None:
             raise ValueError('INITIAL_SITES must be set when using manual approach')
         candidate_pairs = INITIAL_SITES
@@ -540,7 +518,7 @@ def _(
 def _(MERGE_APPROACH, mo):
     mo.stop(MERGE_APPROACH != "fast")
     mo.md(r"""
-    ## <font color='red'>SET PARAMETERS</font>
+    ## Set parameters
 
     ### Visualize gating strategy based on initial alignment
 
@@ -563,13 +541,15 @@ def _(MERGE_APPROACH, mo):
 
 
 @app.cell
-def _():
-    # === OPERATOR PARAMETERS ===
+def params_gating():
     DET_RANGE = None                   # e.g., [0.06, 0.065]
-    # === END OPERATOR PARAMETERS ===
+    return (DET_RANGE,)
 
-    SCORE = 0.1                        # library default (auto bucket)
-    return DET_RANGE, SCORE
+
+@app.cell
+def _():
+    SCORE = 0.1                        # library default
+    return (SCORE,)
 
 
 @app.cell
@@ -588,8 +568,7 @@ def _(DET_RANGE, SCORE, SEED_OPTIMIZE, filter_low_score_seeds, initial_alignment
         "@d0 <= determinant <= @d1 & score > @SCORE"
     )
 
-    # Collapse top-K seed candidates to the best-scoring phenotype tile per SBS site.
-    # Mirrors the pipeline (fast_alignment.py) so this preview shows the 1:1 mapping the run will use.
+    # Keep the best-scoring phenotype tile per SBS site, as the merge module does
     if SEED_OPTIMIZE:
         _n_before = len(valid_pairs_df)
         valid_pairs_df = valid_pairs_df.sort_values(
@@ -723,7 +702,7 @@ def _(MERGE_APPROACH, mo):
 
     The positions approach places every cell from its tile's stage position and its centroid, fits each microscope's camera scale, rotation and lens distortion plus one phenotype-to-SBS offset from all cells of the well, corrects each tile's stage position, and matches cells one-to-one within `THRESHOLD`. No initial sites are needed.
 
-    ### <font color='red'>SET PARAMETERS</font>: tile orientation
+    ### Set parameters: tile orientation
     Each microscope relates tile images to stage coordinates differently. The fit scores all eight orientations on the tile overlaps and names the best one when the configured one looks wrong; set these to match.
 
     `FLIPUD`: Tile rows run against stage y (vertical flip). Defaults `False`.
@@ -738,12 +717,10 @@ def _(MERGE_APPROACH, mo):
 
 
 @app.cell
-def _():
-    # === OPERATOR PARAMETERS (POSITIONS APPROACH) ===
+def params_merge_positions():
     FLIPUD = False
     FLIPLR = False
     ROT90 = 0
-    # === END OPERATOR PARAMETERS ===
     return FLIPLR, FLIPUD, ROT90
 
 
@@ -900,7 +877,7 @@ def _():
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## <font color='red'>SET PARAMETERS</font>
+    ## Set parameters
 
     `SBS_DEDUP_PRIOR` & `PHENO_DEDUP_PRIOR`: Control how duplicate cell mappings are resolved through two sequential steps:
 
@@ -922,18 +899,16 @@ def _(mo):
 
 
 @app.cell
-def _():
-    # === OPERATOR PARAMETERS ===
-    SBS_DEDUP_PRIOR = None             # SBS-side deduplication prior
-    PHENO_DEDUP_PRIOR = None           # phenotype-side deduplication prior
-    # === END OPERATOR PARAMETERS ===
+def params_deduplication():
+    SBS_DEDUP_PRIOR = {'distance': True, 'mapped_single_gene': False}             # SBS-side deduplication prior
+    PHENO_DEDUP_PRIOR = {'distance': True, 'fov_distance_0': True}           # phenotype-side deduplication prior
     return PHENO_DEDUP_PRIOR, SBS_DEDUP_PRIOR
 
 
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## Add merge parameters to config file
+    ## Write config
     """)
     return
 
@@ -997,18 +972,13 @@ def _(
     return
 
 
-@app.cell
-def _():
-    # === TUNED EXPORT ===
-    # No notebook-derived tuned values for merge (det_range + threshold are
-    # operator-set upfront, not notebook-derived). Empty export for symmetry.
-    import json as _je
-    from pathlib import Path as _Pe
-    _t = {}
-    _out = _Pe(".brieflow") / "tuned_merge.json"
-    _out.parent.mkdir(exist_ok=True)
-    _out.write_text(_je.dumps(_t, indent=2, default=str))
-    # === END TUNED EXPORT ===
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## Next
+
+    Run `bash flow.sh merge` (add `--backend slurm` on a cluster), then open `4_classify.py` to train a cell classifier, or go straight to `5_aggregate.py`.
+    """)
     return
 
 

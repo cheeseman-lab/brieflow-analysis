@@ -14,13 +14,17 @@ def _():
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    # Configure Preprocessing Params
+    # Preprocess: find the raw images and set how they are converted
 
-    This notebook should be used to set up preprocessing params.
-    Cells marked with <font color='red'>SET PARAMETERS</font> contain crucial variables that need to be set according to your specific experimental setup and data organization.
-    Please review and modify these variables as needed before proceeding with the analysis.
+    This notebook finds your raw SBS and phenotype images, tests metadata extraction and image conversion on one sample of each, and sets the illumination-correction and OME-Zarr channel settings.
 
-    **Dual-mode**: when run interactively (`marimo edit`), edit the SET PARAMETERS cells directly. When run via brieflow-auto, the plugin reads `analysis/.brieflow/interview.json` and rewrites the literal values between the `=== OPERATOR PARAMETERS ===` markers in each parameter cell. Either way, the notebook itself is the readable record of what was set.
+    **Reads:** the raw image directories and file-name patterns you set below; optionally a table of the wells to analyze.
+
+    **Writes:** the `all` and `preprocess` sections of `config/config.yml`, and the sample tables `config/sbs_samples.tsv`, `config/phenotype_samples.tsv`, `config/sbs_combo.tsv` and `config/phenotype_combo.tsv`.
+
+    **Next:** run `bash flow.sh preprocess`, then open `1_sbs.py`.
+
+    Cells under a **Set parameters** heading hold the settings you choose for your screen; review each before running the module.
     """)
     return
 
@@ -72,7 +76,7 @@ def _():
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## <font color='red'>SET PARAMETERS</font>
+    ## Set parameters
 
     ### Fixed parameters for preprocessing
 
@@ -88,22 +92,24 @@ def _(mo):
 
 
 @app.cell
-def _(Path):
-    # === OPERATOR PARAMETERS ===
+def params_paths():
     CONFIG_FILE_PATH = "config/config.yml"
     ROOT_FP = "brieflow_output/"
     IMAGE_FORMAT = "zarr"              # "zarr" | "tiff"
-    # === END OPERATOR PARAMETERS ===
+    return CONFIG_FILE_PATH, IMAGE_FORMAT, ROOT_FP
 
+
+@app.cell
+def _(CONFIG_FILE_PATH, Path, ROOT_FP):
     Path(CONFIG_FILE_PATH).parent.mkdir(parents=True, exist_ok=True)
     Path(ROOT_FP).mkdir(parents=True, exist_ok=True)
-    return CONFIG_FILE_PATH, IMAGE_FORMAT, ROOT_FP
+    return
 
 
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## <font color='red'>SET PARAMETERS</font>
+    ## Set parameters
 
     ### Paths to dataframes with sample information
     - `SBS_SAMPLES_DF_FP`/`PHENOTYPE_SAMPLES_DF_FP`: Path to dataframe where SBS/phenotype samples location and metadata will be stored.
@@ -176,15 +182,14 @@ def _(mo):
 
 
 @app.cell
-def _():
-    # === OPERATOR PARAMETERS ===
+def params_samples():
     # Paths to sample dataframes (output of this notebook)
     SBS_SAMPLES_DF_FP = "config/sbs_samples.tsv"
     PHENOTYPE_SAMPLES_DF_FP = "config/phenotype_samples.tsv"
     SBS_COMBO_DF_FP = "config/sbs_combo.tsv"
     PHENOTYPE_COMBO_DF_FP = "config/phenotype_combo.tsv"
 
-    # Paths to image directories — REQUIRED. e.g.: "/archive/.../input_sbs/"
+    # Paths to image directories — REQUIRED. e.g.: "data/input_sbs/"
     SBS_IMAGES_DIR_FP = None
     PHENOTYPE_IMAGES_DIR_FP = None
 
@@ -210,7 +215,6 @@ def _():
     # Z-dimension handling (None = 2D / standard input)
     SBS_N_Z_PLANES = None
     PHENOTYPE_N_Z_PLANES = None
-    # === END OPERATOR PARAMETERS ===
     return (
         PHENOTYPE_COMBO_DF_FP,
         PHENOTYPE_DATA_FORMAT,
@@ -276,7 +280,7 @@ def _(mo):
     # If z-dimension is present in filenames, add "z" to metadata:
     # SBS_PATH_METADATA = ["plate", "cycle", "well", "tile", "z"]
     # SBS_METADATA_ORDER_TYPE = {"plate": int, "well": str, "tile": int, "cycle": int, "z": int}
-    # SBS_HAS_Z_DIMENSION = True
+    # SBS_N_Z_PLANES = 2
     ```
 
     Example patterns for reference:
@@ -295,7 +299,7 @@ def _(mo):
     # SBS_PATH_PATTERN = r"plate_(\d+)/c(\d+)/.*_Wells-([A-Z]\d+)_Points-(\d+)_Z-(\d+)\.tif"
     # SBS_PATH_METADATA = ["plate", "cycle", "well", "tile", "z"]
     # SBS_METADATA_ORDER_TYPE = {"plate": int, "well": str, "tile": int, "cycle": int, "z": int}
-    # SBS_HAS_Z_DIMENSION = True
+    # SBS_N_Z_PLANES = 2
     ```
     """)
     return
@@ -340,14 +344,14 @@ def _(
         sbs_samples = filter_samples_to_wells(sbs_samples, WELL_ANNOTATIONS_FP, "SBS")
     sbs_samples.to_csv(SBS_SAMPLES_DF_FP, sep="\t", index=False)
     print("SBS samples:")
-    mo.ui.table(sbs_samples)
+    mo.output.append(mo.ui.table(sbs_samples))
 
     # Create SBS wildcard combos based on data organization
     if SBS_DATA_ORGANIZATION == "tile":
         sbs_wildcard_combos = sbs_samples[SBS_PATH_METADATA].drop_duplicates().astype(str)
         sbs_wildcard_combos.to_csv(SBS_COMBO_DF_FP, sep="\t", index=False)
         print("SBS wildcard combos (tile organization):")
-        mo.ui.table(sbs_wildcard_combos)
+        mo.output.append(mo.ui.table(sbs_wildcard_combos))
     elif SBS_DATA_ORGANIZATION == "well" and len(sbs_samples) > 0:
         print("SBS: Detecting tile count for well organization...")
         # Get tile count from a sample well
@@ -370,7 +374,7 @@ def _(
         ])
         sbs_wildcard_combos.to_csv(SBS_COMBO_DF_FP, sep="\t", index=False)
         print("SBS wildcard combos (well organization):")
-        mo.ui.table(sbs_wildcard_combos)
+        mo.output.append(mo.ui.table(sbs_wildcard_combos))
 
     # Create phenotype samples DataFrame (always)
     phenotype_samples = create_samples_df(
@@ -385,14 +389,14 @@ def _(
         )
     phenotype_samples.to_csv(PHENOTYPE_SAMPLES_DF_FP, sep="\t", index=False)
     print("Phenotype samples:")
-    mo.ui.table(phenotype_samples)
+    mo.output.append(mo.ui.table(phenotype_samples))
 
     # Create phenotype wildcard combos based on data organization
     if PHENOTYPE_DATA_ORGANIZATION == "tile":
         phenotype_wildcard_combos = phenotype_samples[PHENOTYPE_PATH_METADATA].drop_duplicates().astype(str)
         phenotype_wildcard_combos.to_csv(PHENOTYPE_COMBO_DF_FP, sep="\t", index=False)
         print("Phenotype wildcard combos (tile organization):")
-        mo.ui.table(phenotype_wildcard_combos)
+        mo.output.append(mo.ui.table(phenotype_wildcard_combos))
     elif PHENOTYPE_DATA_ORGANIZATION == "well" and len(phenotype_samples) > 0:
         print("Phenotype: Detecting tile count for well organization...")
         # Get tile count from a sample well
@@ -414,14 +418,14 @@ def _(
         ])
         phenotype_wildcard_combos.to_csv(PHENOTYPE_COMBO_DF_FP, sep="\t", index=False)
         print("Phenotype wildcard combos (well organization):")
-        mo.ui.table(phenotype_wildcard_combos)
+        mo.output.append(mo.ui.table(phenotype_wildcard_combos))
     return phenotype_samples, sbs_samples
 
 
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## <font color='red'>SET PARAMETERS</font>
+    ## Set parameters
 
     ### Metadata Source Configuration
 
@@ -439,29 +443,27 @@ def _(mo):
 
 
 @app.cell
-def _():
-    # === OPERATOR PARAMETERS ===
+def params_metadata_source():
     # External metadata files (TIFF-only; leave as None for ND2 data).
     SBS_METADATA_IMAGES_DIR_FP = None
     SBS_METADATA_PATH_PATTERN = None
     SBS_METADATA_PATH_METADATA = None
     SBS_METADATA_PATH_ORDER_TYPE = None
-    SBS_METADATA_SAMPLES_DF_FP = None
+    SBS_METADATA_SAMPLES_DF_FP = 'config/sbs_metadata_samples.tsv'
     PHENOTYPE_METADATA_IMAGES_DIR_FP = None
     PHENOTYPE_METADATA_PATH_PATTERN = None
     PHENOTYPE_METADATA_PATH_METADATA = None
     PHENOTYPE_METADATA_PATH_ORDER_TYPE = None
-    PHENOTYPE_METADATA_SAMPLES_DF_FP = None
-    # === END OPERATOR PARAMETERS ===
+    PHENOTYPE_METADATA_SAMPLES_DF_FP = 'config/phenotype_metadata_samples.tsv'
     return (
         PHENOTYPE_METADATA_IMAGES_DIR_FP,
-        PHENOTYPE_METADATA_PATH_ORDER_TYPE,
         PHENOTYPE_METADATA_PATH_METADATA,
+        PHENOTYPE_METADATA_PATH_ORDER_TYPE,
         PHENOTYPE_METADATA_PATH_PATTERN,
         PHENOTYPE_METADATA_SAMPLES_DF_FP,
         SBS_METADATA_IMAGES_DIR_FP,
-        SBS_METADATA_PATH_ORDER_TYPE,
         SBS_METADATA_PATH_METADATA,
+        SBS_METADATA_PATH_ORDER_TYPE,
         SBS_METADATA_PATH_PATTERN,
         SBS_METADATA_SAMPLES_DF_FP,
     )
@@ -489,17 +491,17 @@ def _(
         sbs_metadata_samples = create_samples_df(SBS_METADATA_IMAGES_DIR_FP, SBS_METADATA_PATH_PATTERN, SBS_METADATA_PATH_METADATA, SBS_METADATA_PATH_ORDER_TYPE)
         sbs_metadata_samples.to_csv(SBS_METADATA_SAMPLES_DF_FP, sep='\t', index=False)
         print('SBS metadata files found:')
-        mo.ui.table(sbs_metadata_samples)
+        mo.output.append(mo.ui.table(sbs_metadata_samples))
     else:
         print('SBS: No external metadata files - will extract from image files')
         sbs_metadata_samples = pd.DataFrame()
+    # Generate phenotype metadata samples table
     if PHENOTYPE_METADATA_IMAGES_DIR_FP is not None:
         print('\nGenerating phenotype metadata file inventory...')
         phenotype_metadata_samples = create_samples_df(PHENOTYPE_METADATA_IMAGES_DIR_FP, PHENOTYPE_METADATA_PATH_PATTERN, PHENOTYPE_METADATA_PATH_METADATA, PHENOTYPE_METADATA_PATH_ORDER_TYPE)
         phenotype_metadata_samples.to_csv(PHENOTYPE_METADATA_SAMPLES_DF_FP, sep='\t', index=False)
         print('Phenotype metadata files found:')
-        mo.ui.table(phenotype_metadata_samples)
-    # Generate phenotype metadata samples table
+        mo.output.append(mo.ui.table(phenotype_metadata_samples))
     else:
         print('Phenotype: No external metadata files - will extract from ND2 files')
         phenotype_metadata_samples = pd.DataFrame()
@@ -557,7 +559,7 @@ def _(
             verbose=True
         )
         print("SBS test metadata:")
-        mo.ui.table(test_sbs_metadata)
+        mo.output.append(mo.ui.table(test_sbs_metadata))
 
     # Test phenotype metadata extraction  
     if len(phenotype_samples) > 0:
@@ -589,14 +591,14 @@ def _(
             verbose=True
         )
         print("Phenotype test metadata:")
-        mo.ui.table(test_phenotype_metadata)
+        mo.output.append(mo.ui.table(test_phenotype_metadata))
     return
 
 
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## <font color='red'>SET PARAMETERS</font>
+    ## Set parameters
 
     ### Image conversion
 
@@ -613,14 +615,12 @@ def _(mo):
 
 
 @app.cell
-def _():
-    # === OPERATOR PARAMETERS ===
+def params_image_conversion():
     SBS_CHANNEL_ORDER = None             # e.g., ["DAPI", "CY3", "A594", "CY5", "CY7"]
     PHENOTYPE_CHANNEL_ORDER = None       # e.g., ["DAPI", "GFP", "A594", "A750"]
     PHENOTYPE_ROUND_ORDER = None         # e.g., [1] for single-round, [1, 2, 3] for multi-round
     SBS_CHANNEL_ORDER_FLIP = False
     PHENOTYPE_CHANNEL_ORDER_FLIP = False
-    # === END OPERATOR PARAMETERS ===
     return (
         PHENOTYPE_CHANNEL_ORDER,
         PHENOTYPE_CHANNEL_ORDER_FLIP,
@@ -772,7 +772,7 @@ def _(
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## <font color='red'>SET PARAMETERS</font>
+    ## Set parameters
 
     ### Calculate illumination correction field
 
@@ -782,19 +782,17 @@ def _(mo):
 
 
 @app.cell
-def _():
-    # === OPERATOR PARAMETERS ===
-    SAMPLE_FRACTION = 1.0
-    # === END OPERATOR PARAMETERS ===
+def params_illumination():
+    SAMPLE_FRACTION = 0.1
     return (SAMPLE_FRACTION,)
 
 
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## <font color='red'>SET PARAMETERS</font>
+    ## Set parameters
 
-    ### Parameters for writing OME-Zarr **root** metadata for both SBS and PHENOTYPE (the 2 code cells proceeding this markdown cell)
+    ### Parameters for writing OME-Zarr **root** metadata for both SBS and PHENOTYPE (the 2 code cells following this markdown cell)
 
     These parameters control what gets written into the *plate root* `zarr.json` for the SBS/Phenotype output.
 
@@ -834,25 +832,21 @@ def _(mo):
 
 
 @app.cell
-def _():
-    # === OPERATOR PARAMETERS ===
+def params_sbs_channels():
     SBS_CHANNELS_METADATA = None        # list[dict]; see markdown above
-    # === END OPERATOR PARAMETERS ===
     return (SBS_CHANNELS_METADATA,)
 
 
 @app.cell
-def _():
-    # === OPERATOR PARAMETERS ===
+def params_phenotype_channels():
     PHENOTYPE_CHANNELS_METADATA = None  # list[dict]; see markdown above
-    # === END OPERATOR PARAMETERS ===
     return (PHENOTYPE_CHANNELS_METADATA,)
 
 
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## Create config file with params
+    ## Write config
     """)
     return
 
@@ -941,19 +935,13 @@ def _(
     return
 
 
-@app.cell
-def _():
-    # === TUNED EXPORT ===
-    # No notebook-derived tuned values for preprocess (all wizard-time auto-probe
-    # + operator-set; no estimate_X cells produce refined values). Empty export
-    # confirms the wizard's R3 walk that there's nothing to surface here.
-    import json as _je
-    from pathlib import Path as _Pe
-    _t = {}
-    _out = _Pe(".brieflow") / "tuned_preprocess.json"
-    _out.parent.mkdir(exist_ok=True)
-    _out.write_text(_je.dumps(_t, indent=2, default=str))
-    # === END TUNED EXPORT ===
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## Next
+
+    Run `bash flow.sh preprocess` (add `--backend slurm` on a cluster), then open `1_sbs.py`.
+    """)
     return
 
 

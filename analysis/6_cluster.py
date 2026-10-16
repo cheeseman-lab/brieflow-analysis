@@ -14,11 +14,17 @@ def _():
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    # Configure Cluster Module Params
+    # Cluster: embed perturbations and group them into clusters
 
-    This notebook should be used as a test for ensuring correct cluster parameters before cluster processing.
-    Cells marked with <font color='red'>SET PARAMETERS</font> contain crucial variables that need to be set according to your specific experimental setup and data organization.
-    Please review and modify these variables as needed before proceeding with the analysis.
+    This notebook tests clustering on one cell class and channel combo: cell-count cutoffs, PHATE embedding, Leiden clustering at several resolutions, and benchmarking the clusters against known protein complexes and pathways.
+
+    **Reads:** the aggregated tables from `bash flow.sh aggregate`, and UniProt, STRING, CORUM and pathway benchmarks pulled from public databases.
+
+    **Writes:** the `cluster` section of `config/config.yml`, `config/cluster_combo.tsv` and the benchmark tables under `config/benchmark_clusters/`.
+
+    **Next:** run `bash flow.sh cluster`, then open `7_analyze.py`.
+
+    Cells under a **Set parameters** heading hold the settings you choose for your screen; review each before running the module.
     """)
     return
 
@@ -26,7 +32,7 @@ def _(mo):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## <font color='red'>SET PARAMETERS</font>
+    ## Set parameters
 
     ### Fixed parameters for cluster module
 
@@ -36,10 +42,8 @@ def _(mo):
 
 
 @app.cell
-def _():
-    # === OPERATOR PARAMETERS ===
+def params_paths():
     CONFIG_FILE_PATH = "config/config.yml"
-    # === END OPERATOR PARAMETERS ===
     return (CONFIG_FILE_PATH,)
 
 
@@ -118,29 +122,31 @@ def _(CONFIG_FILE_PATH, Path, pd, yaml):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## <font color='red'>SET PARAMETERS</font>
+    ## Set parameters
 
     ### Cluster preprocessing
 
     - `TEST_COMPARTMENT_COMBO`: Compartment combo to load the test aggregated data from, ex `"nucleus"`. Only used when `aggregate.split_by_compartment` is on; leave `None` otherwise.
-    - `MIN_CELL_CUTOFFS`: Dictionary with minimum cells for each gene to be used in clusetering analysis. More cells per gene increases confidence, but some dataset types (ex mitotic) may have an inherently low number of cells for a particular perturbation. Ex `{"mitotic": 0, "interphase": 3, "all": 3}`.
+    - `MIN_CELL_CUTOFFS`: Dictionary with minimum cells for each gene to be used in clustering analysis. More cells per gene increases confidence, but some dataset types (ex mitotic) may have an inherently low number of cells for a particular perturbation. Ex `{"mitotic": 0, "interphase": 3, "all": 3}`.
     """)
     return
 
 
 @app.cell
-def _(config):
-    # === OPERATOR PARAMETERS ===
-    MIN_CELL_CUTOFFS = None            # e.g., {"all": 5, "Interphase": 5, "Mitotic": 5}
+def params_preprocessing():
+    MIN_CELL_CUTOFFS = {'all': 0}            # e.g., {"all": 5, "Interphase": 5, "Mitotic": 5}
     TEST_COMPARTMENT_COMBO = None
-    # === END OPERATOR PARAMETERS ===
+    return MIN_CELL_CUTOFFS, TEST_COMPARTMENT_COMBO
 
+
+@app.cell
+def _(TEST_COMPARTMENT_COMBO, config):
     PERTURBATION_NAME_COL = config["aggregate"]["perturbation_name_col"]
     # filename metadata for the compartment-specific aggregated tables
     COMPARTMENT_METADATA = (
         {"compartment_combo": TEST_COMPARTMENT_COMBO} if TEST_COMPARTMENT_COMBO else {}
     )
-    return COMPARTMENT_METADATA, MIN_CELL_CUTOFFS, PERTURBATION_NAME_COL
+    return COMPARTMENT_METADATA, PERTURBATION_NAME_COL
 
 
 @app.cell
@@ -155,10 +161,7 @@ def _(
     plot_cell_histogram,
     plt,
 ):
-    # QC: cell-count histogram per cell class. Uses a cell-local `_data` so the
-    # cross-cell-class loop result doesn't accidentally leak as the canonical
-    # aggregated_data; the canonical load (for TEST_CELL_CLASS / TEST_CHANNEL_COMBO)
-    # happens in a dedicated cell below.
+    # Cell-count histogram per cell class; the test class/combo table is loaded in its own cell below
     for cell_class, min_cell_cutoff in MIN_CELL_CUTOFFS.items():
         channel_combo = CHANNEL_COMBOS[0]
         _aggregated_data_path = ROOT_FP / 'aggregate' / 'tsvs' / get_filename({'cell_class': cell_class, 'channel_combo': channel_combo, **COMPARTMENT_METADATA}, 'aggregated', 'tsv')
@@ -172,7 +175,7 @@ def _(
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## <font color='red'>SET PARAMETERS</font>
+    ## Set parameters
 
     ### Benchmark Generation
 
@@ -182,12 +185,18 @@ def _(mo):
     - `SPECIES_ID`: NCBI taxonomy ID of the screen organism (`"9606"` human, `"10090"` mouse, `"10116"` rat). Sets which organism the STRING/CORUM/pathway benchmarks below are pulled for.
 
     **Note**: We use the following benchmark schemas:
-    - Pair Bechmark: `gene_name` column for gene matching with a cluster gene (or does not exist in cluster genes); `pair` column with a pair ID. Used to benchmark known pair relationships in generated cluster.
-    - Group Bechmark: `gene_name` column for gene matching with a cluster gene (or does not exist in cluster genes); `group` column with a group ID. Used to benchmark known group relationships in generated cluster, where a group represents genes involved in a pathway, protein complex, etc.
+    - Pair Benchmark: `gene_name` column for gene matching with a cluster gene (or does not exist in cluster genes); `pair` column with a pair ID. Used to benchmark known pair relationships in generated cluster.
+    - Group Benchmark: `gene_name` column for gene matching with a cluster gene (or does not exist in cluster genes); `group` column with a group ID. Used to benchmark known group relationships in generated cluster, where a group represents genes involved in a pathway, protein complex, etc.
 
     The generation cell below is just a convenience: it *pulls* pair/group benchmarks for `SPECIES_ID` from public databases. The pipeline itself only reads whatever TSV each `*_FP` points at, so these tables can just as easily be built by hand — assemble your own `gene_name`/`pair` or `gene_name`/`group` TSV (for an organism or curated gene set we do not auto-generate), point the matching `*_FP` at it, and skip the generation cell.
     """)
     return
+
+
+@app.cell
+def params_benchmarks():
+    SPECIES_ID = "9606"  # NCBI taxid: 9606 human, 10090 mouse, 10116 rat
+    return (SPECIES_ID,)
 
 
 @app.cell
@@ -196,13 +205,9 @@ def _():
     STRING_PAIR_BENCHMARK_FP = "config/benchmark_clusters/string_pair_benchmark.tsv"
     CORUM_GROUP_BENCHMARK_FP = "config/benchmark_clusters/corum_group_benchmark.tsv"
     KEGG_GROUP_BENCHMARK_FP = "config/benchmark_clusters/kegg_group_benchmark.tsv"
-    # === OPERATOR PARAMETERS ===
-    SPECIES_ID = "9606"  # NCBI taxid: 9606 human, 10090 mouse, 10116 rat
-    # === END OPERATOR PARAMETERS ===
     return (
         CORUM_GROUP_BENCHMARK_FP,
         KEGG_GROUP_BENCHMARK_FP,
-        SPECIES_ID,
         STRING_PAIR_BENCHMARK_FP,
         UNIPROT_DATA_FP,
     )
@@ -229,24 +234,24 @@ def _(
     uniprot_data = get_uniprot_data(species_id=SPECIES_ID)
     uniprot_data.to_csv(UNIPROT_DATA_FP, sep="\t", index=False)
     uniprot_data = pd.read_csv(UNIPROT_DATA_FP, sep="\t")
-    mo.ui.table(uniprot_data)
+    mo.output.append(mo.ui.table(uniprot_data))
 
     string_pair_benchmark = generate_string_pair_benchmark(
         aggregated_data, uniprot_data, "gene_symbol_0", species_id=SPECIES_ID
     )
     string_pair_benchmark.to_csv(STRING_PAIR_BENCHMARK_FP, sep="\t", index=False)
     string_pair_benchmark = pd.read_csv(STRING_PAIR_BENCHMARK_FP, sep="\t")
-    mo.ui.table(string_pair_benchmark)
+    mo.output.append(mo.ui.table(string_pair_benchmark))
 
     corum_group_benchmark = generate_corum_group_benchmark(species_id=SPECIES_ID)
     corum_group_benchmark.to_csv(CORUM_GROUP_BENCHMARK_FP, sep="\t", index=False)
     corum_group_benchmark = pd.read_csv(CORUM_GROUP_BENCHMARK_FP, sep="\t")
-    mo.ui.table(corum_group_benchmark)
+    mo.output.append(mo.ui.table(corum_group_benchmark))
 
     kegg_group_benchmark = generate_msigdb_group_benchmark(species_id=SPECIES_ID)
     kegg_group_benchmark.to_csv(KEGG_GROUP_BENCHMARK_FP, sep="\t", index=False)
     kegg_group_benchmark = pd.read_csv(KEGG_GROUP_BENCHMARK_FP, sep="\t")
-    mo.ui.table(kegg_group_benchmark)
+    mo.output.append(mo.ui.table(kegg_group_benchmark))
     return (
         corum_group_benchmark,
         kegg_group_benchmark,
@@ -258,18 +263,18 @@ def _(
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## <font color='red'>SET PARAMETERS</font>
+    ## Set parameters
 
     ### Test Dataset
 
-    - `TEST_CELL_CLASS`: Cell class to test clustering on. Must be one of the values in `CELL_CLASSES` printed above (e.g., `"Uninfected"`, `"all"`).
-    - `TEST_CHANNEL_COMBO`: Channel combo string to test clustering on. Must be one of the values in `CHANNEL_COMBOS` printed above (e.g., `"DAPI_NHS_ester_STAT6_Mitotracker_ConA_CDPK1_WGA_cMYC_Tubulin"`). This is an underscore-separated string, **not** a list.
+    - `TEST_CELL_CLASS`: Cell class to test clustering on. Must be one of the values in `CELL_CLASSES` printed above (e.g., `"treated"`, `"all"`).
+    - `TEST_CHANNEL_COMBO`: Channel combo string to test clustering on. Must be one of the values in `CHANNEL_COMBOS` printed above (e.g., `"DAPI_GFP"`). This is an underscore-separated string, **not** a list.
 
     ### Phate/Leiden Clustering
 
     - `PHATE_DISTANCE_METRIC`: Distance metric used by phate during dimensionality reduction. Can be `euclidean` or `cosine`, `cosine` is recommended. Check out this [blog post](https://cmry.github.io/notes/euclidean-v-cosine) for more insight on how to choose a clustering metric.
     - `PERTURBATION_AUC_THRESHOLD`: AUC value used to filter out perturbations. Higher AUC value means more selective, usually `0.6`. Can be left as `None` for no filtering. Controls are always kept; under `CONTROL_SCOPE = "within_perturbation"` the `CONTROL_REFERENCE_GROUP` arms are kept too whatever their AUC, since they are each perturbation's null.
-    - `CONTROL_SCOPE`: Controls that `mean_potential_to_nontargeting` averages each point's distance over. `"pooled"` uses all controls; `"within_group"` uses controls sharing the point's own `GROUP_COLS` group; `"reference_group"` uses controls in `CONTROL_REFERENCE_GROUP` whatever the point's own group; `"within_perturbation"` uses the point's own perturbation in `CONTROL_REFERENCE_GROUP`; `CONTROL_KEY` (or `CLUSTER_CONTROL_KEY`) no longer picks that null, but still sets the controls the AUC filter keeps, the plots mark and the benchmarks drop. Only matters when `GROUP_COLS` is set in notebook 8 — otherwise every scope is the same set. Use `"reference_group"` when the group is a treatment acting on the perturbation itself, so the null has to be the untreated state. Use `"within_perturbation"` when perturbations are not knockouts, so each arm is scored against its own vehicle arm; a perturbation with no reference arm gets a NaN potential.
+    - `CONTROL_SCOPE`: Controls that `mean_potential_to_nontargeting` averages each point's distance over. `"pooled"` uses all controls; `"within_group"` uses controls sharing the point's own `GROUP_COLS` group; `"reference_group"` uses controls in `CONTROL_REFERENCE_GROUP` whatever the point's own group; `"within_perturbation"` uses the point's own perturbation in `CONTROL_REFERENCE_GROUP`; `CONTROL_KEY` (or `CLUSTER_CONTROL_KEY`) no longer picks that null, but still sets the controls the AUC filter keeps, the plots mark and the benchmarks drop. Only matters when `GROUP_COLS` is set in notebook 5 (aggregate) — otherwise every scope is the same set. Use `"reference_group"` when the group is a treatment acting on the perturbation itself, so the null has to be the untreated state. Use `"within_perturbation"` when perturbations are not knockouts, so each arm is scored against its own vehicle arm; a perturbation with no reference arm gets a NaN potential.
     - `CONTROL_REFERENCE_GROUP`: The `GROUP_COLS` value the null is pinned to — the untreated or vehicle group. Several `GROUP_COLS` join their values with `=`. Ignored by the other scopes.
     - `CLUSTER_CONTROL_KEY`: Control perturbations for the cluster-space null, when they differ from the aggregate `CONTROL_KEY` (optional; `None` inherits it). Needed when the aggregate key names a treatment through `CONTROL_NAME_COL`: the alignment reference is then a treatment, but `mean_potential_to_nontargeting` under `"reference_group"` still needs control *perturbations* to pin the null to, e.g. the control constructs' vehicle arms. The key also sets the controls the AUC filter keeps, the plots mark and the benchmarks drop.
     - `TEST_LEIDEN_RESOLUTIONS`: Resolutions for Leiden clustering. Higher means more clusters (and therefore less genes per cluster). Should be a list of numbers. We recommend `[0.1, 1, 5, 7, 9, 11, 13, 15, 20, 100]`.
@@ -282,26 +287,17 @@ def _(mo):
 
 
 @app.cell
-def _(config):
-    # === OPERATOR PARAMETERS ===
-    TEST_CELL_CLASS = None
+def params_test_dataset():
+    TEST_CELL_CLASS = 'all'
     TEST_CHANNEL_COMBO = None
-    PHATE_DISTANCE_METRIC = None       # "cosine" | "euclidean"
+    PHATE_DISTANCE_METRIC = 'cosine'       # "cosine" | "euclidean"
     PERTURBATION_AUC_THRESHOLD = None
     CONTROL_SCOPE = 'pooled'               # "pooled" | "within_group" | "reference_group" | "within_perturbation"
     CONTROL_REFERENCE_GROUP = None         # the vehicle group; required by "reference_group" and "within_perturbation"
     CLUSTER_CONTROL_KEY = None             # None inherits the aggregate CONTROL_KEY
-    TEST_LEIDEN_RESOLUTIONS = None     # e.g., [2, 3, 4, 5]
-    # === END OPERATOR PARAMETERS ===
-
-    CONTROL_KEY = (
-        CLUSTER_CONTROL_KEY
-        if CLUSTER_CONTROL_KEY is not None
-        else config["aggregate"]["control_key"]
-    )
+    TEST_LEIDEN_RESOLUTIONS = [0.1, 1, 5, 7, 9, 11, 13, 15, 20, 100]     # e.g., [2, 3, 4, 5]
     return (
         CLUSTER_CONTROL_KEY,
-        CONTROL_KEY,
         CONTROL_REFERENCE_GROUP,
         CONTROL_SCOPE,
         PERTURBATION_AUC_THRESHOLD,
@@ -310,6 +306,16 @@ def _(config):
         TEST_CHANNEL_COMBO,
         TEST_LEIDEN_RESOLUTIONS,
     )
+
+
+@app.cell
+def _(CLUSTER_CONTROL_KEY, config):
+    CONTROL_KEY = (
+        CLUSTER_CONTROL_KEY
+        if CLUSTER_CONTROL_KEY is not None
+        else config["aggregate"]["control_key"]
+    )
+    return (CONTROL_KEY,)
 
 
 @app.cell
@@ -322,8 +328,7 @@ def _(
     mo,
     pd,
 ):
-    # Canonical load: aggregated data for the test class/combo pair. Used by
-    # every downstream cell that needs the aggregated table.
+    # Aggregated data for the test class/combo pair, used by every cell below
     _aggregated_data_path = ROOT_FP / 'aggregate' / 'tsvs' / get_filename({'cell_class': TEST_CELL_CLASS, 'channel_combo': TEST_CHANNEL_COMBO, **COMPARTMENT_METADATA}, 'aggregated', 'tsv')
     aggregated_data = pd.read_csv(_aggregated_data_path, sep='\t')
     mo.ui.table(aggregated_data)
@@ -349,9 +354,7 @@ def _(
         shuffled_aggregated_data[col] = np.random.permutation(shuffled_aggregated_data[col].values)
     group_benchmarks = {'CORUM': corum_group_benchmark}
     results_df, thresholding_fig = evaluate_resolution(aggregated_data, PHATE_DISTANCE_METRIC, TEST_LEIDEN_RESOLUTIONS, group_benchmarks, PERTURBATION_NAME_COL, CONTROL_KEY)
-    # evaluate_resolution returns no figure when a benchmark shares no gene names with the
-    # screen, e.g. a construct-indexed library (SYMBOL_1, SYMBOL_2) against CORUM's bare
-    # gene symbols
+    # No figure when no benchmark gene names match the screen's, e.g. a construct-indexed library
     if thresholding_fig is None:
         print('No benchmark pairs matched this screen - skipping resolution figure')
     else:
@@ -363,22 +366,20 @@ def _(
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## <font color='red'>SET PARAMETERS</font>
+    ## Set parameters
 
     ### Phate/Leiden Clustering
 
     - `CLUSTER_COMBO_FP`: Location of cluster combinations dataframe.
-    - `FINAL_LEIDEN_RESOLUTIONS`: Final list of resolutions for Leiden clustering. The snakmake cluster module will create and benchmark clusters for each of these resolutions. For the rest of the cluster testing in this notebook, we will show one example of this cluster generation and benchmarking (see below).
+    - `FINAL_LEIDEN_RESOLUTIONS`: Final list of resolutions for Leiden clustering. The snakemake cluster module will create and benchmark clusters for each of these resolutions. For the rest of the cluster testing in this notebook, we will show one example of this cluster generation and benchmarking (see below).
     """)
     return
 
 
 @app.cell
-def _():
-    # === OPERATOR PARAMETERS ===
+def params_leiden():
     CLUSTER_COMBO_FP = "config/cluster_combo.tsv"
     FINAL_LEIDEN_RESOLUTIONS = None    # e.g., [2, 3, 4, 5, 6, 7, 8, 9, 10]
-    # === END OPERATOR PARAMETERS ===
     return CLUSTER_COMBO_FP, FINAL_LEIDEN_RESOLUTIONS
 
 
@@ -400,7 +401,7 @@ def _(CLUSTER_COMBO_FP, FINAL_LEIDEN_RESOLUTIONS, Path, config, pd):
         "leiden_resolution", ignore_index=True
     )
 
-    # Save aggregate wildcard combos
+    # Save cluster wildcard combos
     cluster_wildcard_combos.to_csv(CLUSTER_COMBO_FP, sep="\t", index=False)
 
     print("Cluster wildcard combos:")
@@ -411,20 +412,18 @@ def _(CLUSTER_COMBO_FP, FINAL_LEIDEN_RESOLUTIONS, Path, config, pd):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## <font color='red'>SET PARAMETERS</font>
+    ## Set parameters
 
     ### Cluster Generation/Benchmarking Test
 
-    - `TEST_LEIDEN_RESOLUTION`: Resolution for testing Leiden cluster creation and evaluation within this notebook. Each leiden resolution listed in `LEIDEN_RESOLUTIONS` above will be used during snakemake run to generate separate clusterings (see above).
+    - `TEST_LEIDEN_RESOLUTION`: Resolution for testing Leiden cluster creation and evaluation within this notebook. Each leiden resolution listed in `FINAL_LEIDEN_RESOLUTIONS` above will be used during snakemake run to generate separate clusterings (see above).
     """)
     return
 
 
 @app.cell
-def _():
-    # === OPERATOR PARAMETERS ===
-    TEST_LEIDEN_RESOLUTION = None
-    # === END OPERATOR PARAMETERS ===
+def params_test_resolution():
+    TEST_LEIDEN_RESOLUTION = 5
     return (TEST_LEIDEN_RESOLUTION,)
 
 
@@ -447,7 +446,7 @@ def _(
     uniprot_data_1 = uniprot_data.drop_duplicates('gene_name', keep='first')
     uniprot_subset = uniprot_data_1[['gene_name', 'entry', 'function', 'link']].rename(columns={'entry': 'uniprot_entry', 'function': 'uniprot_function', 'link': 'uniprot_link'})
     phate_leiden_clustering = phate_leiden_clustering.merge(uniprot_subset, how='left', left_on='gene_symbol_0', right_on='gene_name').drop(columns='gene_name')
-    mo.ui.table(phate_leiden_clustering)
+    mo.output.append(mo.ui.table(phate_leiden_clustering))
     cluster_size_fig = plot_cluster_sizes(phate_leiden_clustering)
     plt.show()
     clusters_fig = plot_phate_leiden_clusters(phate_leiden_clustering, PERTURBATION_NAME_COL, CONTROL_KEY)
@@ -520,7 +519,7 @@ def _(
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## Add cluster parameters to config file
+    ## Write config
     """)
     return
 
@@ -552,24 +551,17 @@ def _(
     safe_config = convert_tuples_to_lists(config)
     with open(CONFIG_FILE_PATH, 'w') as _config_file:
         _config_file.write(CONFIG_FILE_HEADER)
-    # Convert tuples to lists before dumping
-    # Write the updated configuration
-        yaml.dump(safe_config, _config_file, default_flow_style=False, sort_keys=False)  # Write the introductory comments  # Dump the updated YAML structure, keeping markdown comments for sections
+        yaml.dump(safe_config, _config_file, default_flow_style=False, sort_keys=False)
     return
 
 
-@app.cell
-def _():
-    # === TUNED EXPORT ===
-    # No notebook-derived tuned values for cluster (resolutions + cell_cutoffs
-    # are operator-set upfront, not notebook-derived). Empty export for symmetry.
-    import json as _je
-    from pathlib import Path as _Pe
-    _t = {}
-    _out = _Pe(".brieflow") / "tuned_cluster.json"
-    _out.parent.mkdir(exist_ok=True)
-    _out.write_text(_je.dumps(_t, indent=2, default=str))
-    # === END TUNED EXPORT ===
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## Next
+
+    Run `bash flow.sh cluster` (add `--backend slurm` on a cluster), then open `7_analyze.py`.
+    """)
     return
 
 

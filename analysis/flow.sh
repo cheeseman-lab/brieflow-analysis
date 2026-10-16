@@ -108,31 +108,14 @@ USE_ARRAYS=false
 MODULES=()
 VIZ_ARGS=()
 EXTRA_CONFIG=""
-# Snakemake --forcerun passthrough (HARDENING #7 layer 1): comma-separated
-# list of rules to force-rerun even if their outputs are up-to-date.
-# Use after editing a rule's script so mtime-based caching doesn't silently
-# skip the change.
+# Comma-separated rules to force-rerun even when their outputs are up to date
 FORCERUN=""
 
-# HARDENING #23: resolve per-rule mem caps from scaling formulas + geometry
-# + mem_recommendations.json before launching snakemake. The resolver lives
-# in the brieflow-ops plugin; we invoke it once per flow.sh run and pass its
-# output to snakemake as --set-resources. Set BRIEFLOW_SKIP_RESOLVE=1 to
-# disable (falls back to slurm/config.yaml set-resources floor only).
-# Plugin location is auto-discovered: BRIEFLOW_OPS_PLUGIN_DIR wins, then the
-# Claude Code plugin cache, then on-VM /data checkouts, then the HPC paths.
-# Before this auto-discovery the default pointed ONLY at the HPC path, so on a
-# cloud VM the resolver silently no-op'd → no per-rule mem caps reached
-# snakemake → aggregate OOM (damavand 2026-06-13). The HPC default still works
-# unchanged.
+# Per-rule memory caps from brieflow-auto's resolver (BRIEFLOW_OPS_PLUGIN_DIR, else the Claude Code plugin cache); BRIEFLOW_SKIP_RESOLVE=1 disables
 _find_plugin_dir() {
     local cands=() d
     [ -n "${BRIEFLOW_OPS_PLUGIN_DIR:-}" ] && cands+=("${BRIEFLOW_OPS_PLUGIN_DIR}")
     cands+=( "${HOME}"/.claude/plugins/cache/brieflow-auto/brieflow-auto/* )
-    cands+=( /data/*/brieflow-auto/plugins/brieflow-auto )
-    cands+=( /data/*/.ba-push/plugins/brieflow-auto )
-    cands+=( /lab/barcheese01/mdiberna/brieflow-auto/plugins/brieflow-auto )
-    cands+=( /lab/barcheese01/mdiberna/brieflow-ops/plugins/brieflow-ops )
     for d in "${cands[@]}"; do
         if [ -x "${d}/scripts/brieflow_resolve_resources.py" ]; then
             printf '%s\n' "${d}"; return 0
@@ -344,12 +327,7 @@ build_snakemake_cmd() {
         fi
     else
         cmd+=" --cores ${CORES} --jobs ${JOBS} --keep-going"
-        # Local backend: snakemake only enforces memory throttling when a global
-        # mem_mb *budget* is declared via --resources. Without it the per-rule
-        # mem_mb caps (--set-resources, below) are ignored and heavy rules
-        # over-schedule → OOM (hit live on damavand: 8× format_singlecell_anndata
-        # at --cores 288 blew past 2.8 TB). Default the budget to ~90% of machine
-        # RAM (OS/driver headroom); override with BRIEFLOW_LOCAL_MEM_MB.
+        # Local snakemake honors per-rule mem_mb only under a global budget: ~90% of RAM, or BRIEFLOW_LOCAL_MEM_MB
         local _mem_budget="${BRIEFLOW_LOCAL_MEM_MB:-}"
         if [ -z "${_mem_budget}" ]; then
             local _mem_total
@@ -365,32 +343,19 @@ build_snakemake_cmd() {
     cmd+=" --snakefile ${SNAKEFILE}"
     cmd+=" --configfile ${CONFIGFILE}"
     cmd+=" --rerun-triggers mtime"
-    # --rerun-incomplete: snakemake tracks files whose write-side started but
-    # whose job never marked completion (slurm OOM-kill, SIGKILL, node crash).
-    # Default behavior throws IncompleteFilesException at DAG-build time,
-    # blocking ALL execution. With --rerun-incomplete, snakemake re-runs
-    # those specific jobs to completion. Caught 2026-05-10 baker v22 phase 2:
-    # 222 align_phenotype zarr.json files marked incomplete from v20's
-    # OOM-killed attempts blocked DAG build entirely.
+    # Re-run jobs left incomplete by a killed job instead of refusing to build the DAG
     cmd+=" --rerun-incomplete"
-    # --set-resources from the HARDENING #23 resolver (formulas × geometry
-    # × mem_recommendations.json). Appended BEFORE --until so snakemake's
-    # arg parser treats them as positional set-resources entries.
+    # Resolved --set-resources go before --until so snakemake parses them as set-resources entries
     if [ -n "$RESOLVED_SET_RESOURCES" ]; then
         cmd+=" --set-resources ${RESOLVED_SET_RESOURCES}"
     fi
-    # --forcerun: HARDENING #7 layer 1. Comma-separated list translated into
-    # snakemake's space-separated --forcerun rules. Use after editing a
-    # rule's script — mtime-only triggers will silently skip the change
-    # otherwise (caught 2026-05-12 baker v26 format_merge silent skip).
+    # mtime triggers miss an edited rule script, so --forcerun reruns the listed rules
     if [[ -n "$FORCERUN" ]]; then
         local forcerun_rules="${FORCERUN//,/ }"
         cmd+=" --forcerun ${forcerun_rules}"
     fi
     cmd+=" --until ${target}"
-    # --verbose: preserves the plugin's array-submission debug logs ("call with array:")
-    # so every run captures the wrap content per chunk. Cheap, useful for diagnosing the
-    # wrap-target collision documented in COLLAB.md Phase 7.
+    # Verbose keeps the slurm executor's submission logs for diagnosing failed jobs
     cmd+=" --verbose"
 
     # Dry run
@@ -417,16 +382,7 @@ build_snakemake_cmd() {
 }
 
 get_groups_flag() {
-    # ALWAYS emit both SBS and PHENOTYPE groups regardless of which module is
-    # being run. The grouping is metadata about how rules should be bundled
-    # when their wildcards align — declaring it doesn't force any rule to run.
-    # Without this, downstream phases (merge/aggregate/cluster) that incidentally
-    # need to re-materialize per-tile sbs/phenotype outputs schedule them as
-    # standalone slurm jobs at the un-grouped per-rule mem cap, which OOMs
-    # because phenotype tile dimensions need ~4× per-rule mem (2400×2400 vs
-    # 1200×1200 for sbs). Caught 2026-05-10 baker v20 phase 4: 1247
-    # align_phenotype OOMs in one attempt before the cap was bumped.
-    # The module argument is now unused but kept for API compat.
+    # Always emit both groups so tile rules re-run by a later module stay grouped (the argument is unused)
     local _module_unused="$1"
     local groups_flag="--groups"
     for g in "${SBS_GROUPS[@]}"; do

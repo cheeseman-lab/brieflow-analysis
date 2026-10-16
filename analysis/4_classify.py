@@ -14,12 +14,17 @@ def _():
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    # Train Classifier
+    # Classify: train a cell classifier (optional)
 
-    This notebook provides tools for training custom cell or vacuole classifiers. It covers labeling data, training models, and selecting the best classifier.
+    This notebook trains a classifier that sorts cells (or other objects) into classes, such as mitotic and interphase: you label example objects, train and compare models, and pick one with per-class confidence thresholds. Skip it if you do not need cell classes.
 
-    Cells marked with <font color='red'>SET PARAMETERS</font> contain crucial variables that need to be set according to your specific experimental setup and data organization.
-    Please review and modify these variables as needed before proceeding with the analysis.
+    **Reads:** the merge or phenotype outputs from `bash flow.sh merge` and the phenotype images for display.
+
+    **Writes:** the `classify` section of `config/config.yml`, the trained classifier and training data under the output directory's `classifier/` folder, and `config/cell_data_metadata_cols.tsv`.
+
+    **Next:** this notebook has no module of its own; open `5_aggregate.py`, which applies the classifier.
+
+    Cells under a **Set parameters** heading hold the settings you choose for your screen; review each before you label and train.
     """)
     return
 
@@ -27,7 +32,7 @@ def _(mo):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## <font color='red'>SET PARAMETERS</font>
+    ## Set parameters
 
     ### Fixed parameters for classify module
 
@@ -37,10 +42,8 @@ def _(mo):
 
 
 @app.cell
-def _():
-    # === OPERATOR PARAMETERS ===
+def params_paths():
     CONFIG_FILE_PATH = "config/config.yml"
-    # === END OPERATOR PARAMETERS ===
     return (CONFIG_FILE_PATH,)
 
 
@@ -178,7 +181,7 @@ def _(mo):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ### 1a. <font color='red'>SET PARAMETERS</font>: Classification Settings
+    ### 1a. Set parameters: Classification Settings
 
     This section defines the training dataset and classes that will be used for labeling.
 
@@ -207,20 +210,18 @@ def _(mo):
 
 
 @app.cell
-def _():
-    # === OPERATOR PARAMETERS ===
+def params_labeling():
     ADD_TRAINING_DATA = False
     EXISTING_TRAINING_DATA = None
     RELABEL_CLASSIFICATIONS = True
     TRAINING_DATA_SOURCE = "merge"
     MODE = "cell"
-    CLASS_TITLE = "cell_stage"
-    CLASSIFICATION = ["Mitotic", "Interphase"]
-    PLATES_TO_CLASSIFY = [1]
-    WELLS_TO_CLASSIFY = ["A1"]
+    CLASS_TITLE = None  # e.g. "cell_stage"
+    CLASSIFICATION = None  # e.g. ["Mitotic", "Interphase"]
+    PLATES_TO_CLASSIFY = None  # e.g. [1]
+    WELLS_TO_CLASSIFY = None  # e.g. ["A1"]
     DATA_SAMPLE_FRACTION = None
     DATA_MAX_ROWS = None
-    # === END OPERATOR PARAMETERS ===
     return (
         ADD_TRAINING_DATA,
         CLASSIFICATION,
@@ -292,7 +293,7 @@ def _(
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ### 1b. <font color='red'>SET PARAMETERS</font>: Gating Settings
+    ### 1b. Set parameters: Gating Settings
 
     Use the parameters below to choose what subset of objects to display in the labeling interface.
 
@@ -314,8 +315,7 @@ def _(mo):
 
 
 @app.cell
-def _():
-    # === OPERATOR PARAMETERS ===
+def params_gating():
     GATE_FEATURE = None
     GATE_MIN = None
     GATE_MAX = None
@@ -323,7 +323,6 @@ def _():
     GATE_MAX_PERCENTILE = None
     BATCH_SIZE = 10
     OUT_OF_GATE_COUNT = 1
-    # === END OPERATOR PARAMETERS ===
     return (
         BATCH_SIZE,
         GATE_FEATURE,
@@ -405,7 +404,7 @@ def _(
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ### 1c. <font color='red'>SET PARAMETERS</font>: Display Settings
+    ### 1c. Set parameters: Display Settings
 
     This section sets how and in what order objects will be displayed by the labeler.
 
@@ -428,15 +427,13 @@ def _(mo):
 
 
 @app.cell
-def _():
-    # === OPERATOR PARAMETERS ===
+def params_display():
     DISPLAY_CHANNEL = ["DAPI"]
     CHANNEL_COLORS = ["b"]
     TRAINING_DATASET_SELECTION = "random"
     TOP_N = 0
     SCALE_BAR = 30
     RANDOM_SEED = 42
-    # === END OPERATOR PARAMETERS ===
     return (
         CHANNEL_COLORS,
         DISPLAY_CHANNEL,
@@ -805,7 +802,7 @@ def _(mo):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ### 2a. <font color='red'>SET PARAMETERS</font>: Training Dataset Configuration
+    ### 2a. Set parameters: Training Dataset Configuration
 
     - `TRAINING_DATASET_FP`: Path to training dataset(s) in list format. Set to `None` to use the dataset just saved above.
     - `METADATA_COLS_FP`: Path to save metadata columns for use in aggregate pipeline.
@@ -818,8 +815,7 @@ def _(mo):
 
 
 @app.cell
-def _():
-    # === OPERATOR PARAMETERS ===
+def params_training_data():
     TRAINING_DATASET_FP = None
     METADATA_COLS_FP = "config/cell_data_metadata_cols.tsv"
     TRAINING_CHANNELS = None
@@ -878,7 +874,6 @@ def _():
         "cytoplasm_bounds_2",
         "cytoplasm_bounds_3",
     ]
-    # === END OPERATOR PARAMETERS ===
     return (
         METADATA_COLS,
         METADATA_COLS_FP,
@@ -954,7 +949,7 @@ def _(
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ### 2b. <font color='red'>SET PARAMETERS</font>: Filter Training Classes
+    ### 2b. Set parameters: Filter Training Classes
 
     - `REMOVE_MASK_LABELS`: List of class labels to exclude from training (e.g., `unknown`). Set to `None` to keep all classes.
     """)
@@ -962,11 +957,13 @@ def _(mo):
 
 
 @app.cell
-def _(CLASSIFICATION, class_mapping, filter_classes):
-    # === OPERATOR PARAMETERS ===
+def params_class_filter():
     REMOVE_MASK_LABELS = None
-    # === END OPERATOR PARAMETERS ===
+    return (REMOVE_MASK_LABELS,)
 
+
+@app.cell
+def _(CLASSIFICATION, REMOVE_MASK_LABELS, class_mapping, filter_classes):
     class_labels, filtered_class_mapping, class_id = filter_classes(
         CLASSIFICATION, class_mapping, REMOVE_MASK_LABELS
     )
@@ -976,7 +973,7 @@ def _(CLASSIFICATION, class_mapping, filter_classes):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ### 2c. <font color='red'>SET PARAMETERS</font>: Model Configuration
+    ### 2c. Set parameters: Model Configuration
 
     - `MODEL_CONFIGS`: Model configurations to train and evaluate, each a `(name, model_type, scaler, feature_options)` tuple.
 
@@ -1008,15 +1005,13 @@ def _(mo):
 
 
 @app.cell
-def _():
-    # === OPERATOR PARAMETERS ===
+def params_models():
     MODEL_CONFIGS = [
         ("lr_standard", "lr", "standard", None),
         ("rf_standard", "rf", "standard", None),
         ("xgb_none", "xgb", "none", None),
         ("lgb_standard", "lgb", "standard", None),
     ]
-    # === END OPERATOR PARAMETERS ===
     return (MODEL_CONFIGS,)
 
 
@@ -1083,7 +1078,7 @@ def _(mo):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ### 3a. <font color='red'>SET PARAMETERS</font>: Model Selection Settings
+    ### 3a. Set parameters: Model Selection Settings
 
     - `MODEL_RUN_DIR`: Name of the model run directory to test (e.g., `"run_20250903_114514"`). Set to `None` to use the last training run.
     - `TEST_PLATES`: Plates to use for testing.
@@ -1095,12 +1090,10 @@ def _(mo):
 
 
 @app.cell
-def _():
-    # === OPERATOR PARAMETERS ===
+def params_model_run():
     MODEL_RUN_DIR = None
-    TEST_PLATES = ["1"]
-    TEST_WELLS = ["A1", "A2", "A3"]
-    # === END OPERATOR PARAMETERS ===
+    TEST_PLATES = None  # e.g. ["1"]
+    TEST_WELLS = None  # e.g. ["A1", "A2", "A3"]
     return MODEL_RUN_DIR, TEST_PLATES, TEST_WELLS
 
 
@@ -1175,7 +1168,7 @@ def _(CLASSIFIER_DIR_PATH, display_pngs_in_plots_and_list_models, mo):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ### 3b. <font color='red'>SET PARAMETERS</font>: Model Settings
+    ### 3b. Set parameters: Model Settings
 
     - `CLASSIFIER_MODEL`: Name of the model to use (e.g., `"xgb_none"`), from the models listed above. Set to `None` to use the best performing model by accuracy.
     - `COLLAPSE_COLS`: Columns to collapse on when creating classification summaries (e.g., `["plate", "well"]`).
@@ -1184,11 +1177,9 @@ def _(mo):
 
 
 @app.cell
-def _():
-    # === OPERATOR PARAMETERS ===
+def params_classifier():
     CLASSIFIER_MODEL = None
     COLLAPSE_COLS = ["plate", "well"]
-    # === END OPERATOR PARAMETERS ===
     return CLASSIFIER_MODEL, COLLAPSE_COLS
 
 
@@ -1239,7 +1230,7 @@ def _(
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ### 3c. <font color='red'>SET PARAMETERS</font>: Confidence Calibration
+    ### 3c. Set parameters: Confidence Calibration
 
     > **⚠️ Experimental Feature**: Confidence calibration is applied only within this notebook for evaluation and threshold selection. The calibrated confidences are **not** persisted or applied in the downstream aggregate pipeline. Set your thresholds based on raw (uncalibrated) confidence scores if you skip calibration, or be aware that thresholds chosen with calibration enabled may behave differently in production.
 
@@ -1261,12 +1252,10 @@ def _(mo):
 
 
 @app.cell
-def _():
-    # === OPERATOR PARAMETERS ===
+def params_calibration():
     CONFIDENCE_CORRECTION = None
     CALIBRATION_DATASET_FP = None
     CALIBRATION_METHOD = "isotonic"
-    # === END OPERATOR PARAMETERS ===
     return CALIBRATION_DATASET_FP, CALIBRATION_METHOD, CONFIDENCE_CORRECTION
 
 
@@ -1339,9 +1328,9 @@ def _(
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ### 3d. <font color='red'>SET PARAMETERS</font>: Ranked Prediction Review
+    ### 3d. Set parameters: Ranked Prediction Review
 
-    The jupyter notebook browses predictions with an ipywidgets "rankline" that steps along the confidence axis. The table below is its replacement: objects of one class ranked by confidence, thinned so that consecutive rows differ by at least `MINIMUM_DIFFERENCE`, so a short table still spans the whole confidence range. Select rows in the table to render their crops underneath, the same rendering the labeler uses, and check whether the confidence the model reports matches what the image shows.
+    The table below lists objects of one class ranked by confidence, thinned so that consecutive rows differ by at least `MINIMUM_DIFFERENCE`, so a short table still spans the whole confidence range. Select rows in the table to render their crops underneath, the same rendering the labeler uses, and check whether the confidence the model reports matches what the image shows.
 
     - `RANKLINE_CLASS`: Class name to review, from `CLASSIFICATION`. Set to `None` to review the first class.
     - `MINIMUM_DIFFERENCE`: Minimum confidence difference between consecutive rows in the ranked table.
@@ -1351,12 +1340,10 @@ def _(mo):
 
 
 @app.cell
-def _():
-    # === OPERATOR PARAMETERS ===
+def params_rankline():
     RANKLINE_CLASS = None
     MINIMUM_DIFFERENCE = 0.001
     RANKLINE_MAX_ROWS = 200
-    # === END OPERATOR PARAMETERS ===
     return MINIMUM_DIFFERENCE, RANKLINE_CLASS, RANKLINE_MAX_ROWS
 
 
@@ -1483,7 +1470,7 @@ def _(
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ### 3e. <font color='red'>SET PARAMETERS</font>: Per-Class Confidence Thresholds
+    ### 3e. Set parameters: Per-Class Confidence Thresholds
 
     - `CONFIDENCE_THRESHOLDS`: Per-class confidence thresholds keyed by class ID, where class IDs follow `CLASSIFICATION` order (1, 2, 3, ...). Each entry is `{"threshold": float, "mode": str}`.
 
@@ -1505,13 +1492,8 @@ def _(mo):
 
 
 @app.cell
-def _():
-    # === OPERATOR PARAMETERS ===
-    CONFIDENCE_THRESHOLDS = {
-        1: {"threshold": 0.5, "mode": "exclude"},
-        2: {"threshold": 0.5, "mode": "exclude"},
-    }
-    # === END OPERATOR PARAMETERS ===
+def params_confidence_thresholds():
+    CONFIDENCE_THRESHOLDS = None  # one entry per class, e.g. {1: {"threshold": 0.5, "mode": "exclude"}}
     return (CONFIDENCE_THRESHOLDS,)
 
 
@@ -1550,7 +1532,7 @@ def _(
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## Add classify parameters to config file
+    ## Write config
     """)
     return
 
@@ -1583,6 +1565,16 @@ def _(
 
     print("Saved classifier settings to config.")
     return (safe_config,)
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## Next
+
+    Classify has no module of its own. Open `5_aggregate.py`; `bash flow.sh aggregate` applies the classifier saved here.
+    """)
+    return
 
 
 if __name__ == "__main__":
