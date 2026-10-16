@@ -216,10 +216,10 @@ def params_labeling():
     RELABEL_CLASSIFICATIONS = True
     TRAINING_DATA_SOURCE = "merge"
     MODE = "cell"
-    CLASS_TITLE = "cell_stage"
-    CLASSIFICATION = ["Mitotic", "Interphase"]
-    PLATES_TO_CLASSIFY = [1]
-    WELLS_TO_CLASSIFY = ["A1"]
+    CLASS_TITLE = None  # e.g. "cell_stage"
+    CLASSIFICATION = None  # e.g. ["Mitotic", "Interphase"]
+    PLATES_TO_CLASSIFY = None  # e.g. [1]
+    WELLS_TO_CLASSIFY = None  # e.g. ["A1"]
     DATA_SAMPLE_FRACTION = None
     DATA_MAX_ROWS = None
     return (
@@ -1092,8 +1092,8 @@ def _(mo):
 @app.cell
 def params_model_run():
     MODEL_RUN_DIR = None
-    TEST_PLATES = ["1"]
-    TEST_WELLS = ["A1", "A2", "A3"]
+    TEST_PLATES = None  # e.g. ["1"]
+    TEST_WELLS = None  # e.g. ["A1", "A2", "A3"]
     return MODEL_RUN_DIR, TEST_PLATES, TEST_WELLS
 
 
@@ -1493,10 +1493,7 @@ def _(mo):
 
 @app.cell
 def params_confidence_thresholds():
-    CONFIDENCE_THRESHOLDS = {
-        1: {"threshold": 0.5, "mode": "exclude"},
-        2: {"threshold": 0.5, "mode": "exclude"},
-    }
+    CONFIDENCE_THRESHOLDS = None  # one entry per class, e.g. {1: {"threshold": 0.5, "mode": "exclude"}}
     return (CONFIDENCE_THRESHOLDS,)
 
 

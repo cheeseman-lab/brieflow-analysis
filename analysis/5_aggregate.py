@@ -473,19 +473,19 @@ def _(mo):
 
     ### Aggregate by channel combos
 
-    - `CHANNEL_COMBOS`: Combinations of channels to aggregate by. This is a list of lists with channel names, ex `[["DAPI", "CENPA"], ["DAPI", "WGA"]]`.
+    - `CHANNEL_COMBOS`: Combinations of channels to aggregate by. This is a list of lists with channel names, ex `[["DAPI", "GFP", "WGA"], ["DAPI", "GFP"]]`.
     - `AGGREGATE_COMBO_FP`: Location of aggregate combinations dataframe.
     - `SPLIT_BY_COMPARTMENT`: Split aggregate and cluster outputs by compartment (`cell`, `nucleus`, `cytoplasm`, `second_obj`). When `False` (default) outputs keep the standard paths and use every compartment.
     - `COMPARTMENT_COMBOS`: Compartment combinations to aggregate by when splitting, as a list of lists, ex `[["cell", "nucleus", "cytoplasm"], ["nucleus"]]`. Every channel combo is paired with every compartment combo.
     - `TEST_CELL_CLASS`: Cell class to configure aggregate params with. Can be any of the cell classes or `all`.
-    - `TEST_CHANNEL_COMBO`: Channel combo to configure aggregate params with; must be one of the channel combos. Ex `["DAPI", "CENPA"]`.
+    - `TEST_CHANNEL_COMBO`: Channel combo to configure aggregate params with; must be one of the channel combos. Ex `["DAPI", "GFP"]`.
     """)
     return
 
 
 @app.cell
 def params_channel_combos():
-    CHANNEL_COMBOS = None              # e.g., [["DAPI", "COXIV", "CENPA", "WGA"], ["DAPI", "CENPA"]]
+    CHANNEL_COMBOS = None              # e.g., [["DAPI", "GFP", "WGA"], ["DAPI", "GFP"]]
     AGGREGATE_COMBO_FP = "config/aggregate_combo.tsv"
     SPLIT_BY_COMPARTMENT = False
     COMPARTMENT_COMBOS = None          # e.g., [["cell", "nucleus", "cytoplasm"], ["nucleus"]]

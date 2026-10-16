@@ -1295,13 +1295,7 @@ def params_read_calling():
     CHEMISTRY = "four_color"  # "four_color" | "combinatorial"
     # four_color: median|percentile; combinatorial: frac|merfish
     CALL_READS_METHOD = "median"
-    # Example only: replace these ON-channel lists with your assay's encoding.
-    COMBINATORIAL_CODE = {
-        "A": ["Red"],
-        "C": ["Green"],
-        "G": ["Red", "Green"],
-        "T": [],
-    }
+    COMBINATORIAL_CODE = None  # combinatorial only, e.g. {"A": ["Red"], "C": ["Green"], "G": ["Red", "Green"], "T": []}
     DYE_SCALE = None  # combinatorial frac only, e.g. {"Alexa 488": 1.5}
     BRIGHTNESS_REGIONS = None  # combinatorial frac only, e.g. [[1, 7], [8, 12]]
     return (

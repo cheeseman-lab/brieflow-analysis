@@ -134,7 +134,7 @@ def params_test_tile():
     TEST_PLATE = None
     TEST_WELL = None
     TEST_TILE = None
-    CHANNEL_NAMES = None              # e.g., ["DAPI", "COXIV", "CENPA", "WGA"]
+    CHANNEL_NAMES = None              # e.g., ["DAPI", "GFP", "WGA"]
     CHANNEL_CMAPS = None              # e.g., ["pure_blue", "pure_green", "pure_red", "pure_magenta"]
     return CHANNEL_CMAPS, CHANNEL_NAMES, TEST_PLATE, TEST_TILE, TEST_WELL
 
