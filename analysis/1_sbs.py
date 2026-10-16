@@ -380,6 +380,7 @@ def _(
         skip_cycles=SKIP_CYCLES_INDICES,
         manual_background_cycle=MANUAL_BACKGROUND_CYCLE_INDEX,
         manual_channel_mapping=MANUAL_CHANNEL_MAPPING,
+        verbose=True,
     )
     print("Example aligned image for first cycle:")
     _aligned_microimages_c0 = [
@@ -961,6 +962,7 @@ def _(
             gpu=GPU,
             reconcile=RECONCILE,
             cells=SEGMENT_CELLS,
+            verbose=True,
         )
     elif SEGMENTATION_METHOD == "stardist":
         from lib.shared.segment_stardist import segment_stardist
@@ -979,6 +981,7 @@ def _(
             gpu=GPU,
             reconcile=RECONCILE,
             cells=SEGMENT_CELLS,
+            verbose=True,
         )
     elif SEGMENTATION_METHOD == "watershed":
         from lib.shared.segment_watershed import segment_watershed
@@ -990,6 +993,7 @@ def _(
             nuclei_area_max=NUCLEUS_AREA[1],
             cell_threshold=THRESHOLD_CELL,
             cells=SEGMENT_CELLS,
+            verbose=True,
         )
     if SEGMENT_CELLS:
         nuclei, cells = result

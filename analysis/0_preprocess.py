@@ -85,6 +85,7 @@ def _(mo):
     - `IMAGE_FORMAT`: Output image format for Brieflow (`"zarr"` or `"tiff"`).
       - Use `"zarr"` for OME-Zarr outputs (writes `*.zarr/` directories + `zarr.json` metadata).
       - Use `"tiff"` for legacy TIFF-based outputs.
+    - `ZARR_MAX_LEVELS`: Resolution levels written for each converted raw image in `"zarr"` mode. `1` writes no pyramid; more levels make large tiles quick to browse in napari and cost disk (5 levels added ~16% on the small test). Pixels at full resolution never change.
 
     *Note: Paths can be absolute or relative to where workflows are run from.*
     """)
@@ -96,7 +97,8 @@ def params_paths():
     CONFIG_FILE_PATH = "config/config.yml"
     ROOT_FP = "brieflow_output/"
     IMAGE_FORMAT = "zarr"              # "zarr" | "tiff"
-    return CONFIG_FILE_PATH, IMAGE_FORMAT, ROOT_FP
+    ZARR_MAX_LEVELS = 1                # 1 = no pyramid
+    return CONFIG_FILE_PATH, IMAGE_FORMAT, ROOT_FP, ZARR_MAX_LEVELS
 
 
 @app.cell
@@ -539,7 +541,8 @@ def _(
             test_metadata_file = get_sample_fps(
                 sbs_metadata_samples,
                 plate=sbs_samples["plate"].iloc[0],
-                cycle=sbs_samples["cycle"].iloc[0] if "cycle" in sbs_samples.columns else None
+                cycle=sbs_samples["cycle"].iloc[0] if "cycle" in sbs_samples.columns else None,
+                verbose=True,
             )
             print(f"Using metadata file: {test_metadata_file}")
         else:
@@ -571,7 +574,8 @@ def _(
             test_metadata_file = get_sample_fps(
                 phenotype_metadata_samples,
                 plate=phenotype_samples["plate"].iloc[0],
-                round_order=phenotype_samples["round"].iloc[0] if "round" in phenotype_samples.columns else None
+                round_order=phenotype_samples["round"].iloc[0] if "round" in phenotype_samples.columns else None,
+                verbose=True,
             )
             print(f"Using metadata file: {test_metadata_file}")
         else:
@@ -672,6 +676,7 @@ def _(
                 tile=sbs_samples["tile"].iloc[0] if "tile" in sbs_samples.columns else 0,
                 cycle=sbs_samples["cycle"].iloc[0] if "cycle" in sbs_samples.columns else None,
                 channel_order=SBS_CHANNEL_ORDER,
+                verbose=True,
             )
         else:  # well organization
             sbs_sample_files = get_sample_fps(
@@ -680,6 +685,7 @@ def _(
                 well=sbs_samples["well"].iloc[0],
                 cycle=sbs_samples["cycle"].iloc[0] if "cycle" in sbs_samples.columns else None,
                 channel_order=SBS_CHANNEL_ORDER,
+                verbose=True,
             )
 
         # Convert using unified function
@@ -738,6 +744,7 @@ def _(
                 tile=phenotype_samples["tile"].iloc[0] if "tile" in phenotype_samples.columns else 0,
                 round_order=PHENOTYPE_ROUND_ORDER,
                 channel_order=PHENOTYPE_CHANNEL_ORDER,
+                verbose=True,
             )
         else:  # well organization
             phenotype_sample_files = get_sample_fps(
@@ -746,6 +753,7 @@ def _(
                 well=phenotype_samples["well"].iloc[0],
                 round_order=PHENOTYPE_ROUND_ORDER,
                 channel_order=PHENOTYPE_CHANNEL_ORDER,
+                verbose=True,
             )
 
         # Convert using unified function
@@ -877,6 +885,7 @@ def _(
     SBS_METADATA_SAMPLES_DF_FP,
     SBS_N_Z_PLANES,
     SBS_SAMPLES_DF_FP,
+    ZARR_MAX_LEVELS,
     convert_tuples_to_lists,
     yaml,
 ):
@@ -887,6 +896,7 @@ def _(
     config["all"] = {
         "root_fp": ROOT_FP,
         "image_format": IMAGE_FORMAT,
+        "zarr_max_levels": ZARR_MAX_LEVELS,
     }
 
     # Add preprocess section
