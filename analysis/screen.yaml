@@ -58,7 +58,7 @@ library:
   number_of_genes: null
   raw_design_table_fp: null                       # REQUIRED: barcode/design table inside this repository (e.g. "config/barcode_library_design.tsv")
   # --- simple mode (type: simple): one barcode column ---
-  barcode_col: null                               # REQUIRED for simple: sgRNA-sequence column in raw_design_table_fp (canonical: "sgRNA")
+  barcode_col: null                               # REQUIRED for simple: name of the column in raw_design_table_fp that holds each guide's barcode sequence
   # --- multi mode (type: multi): two barcode columns + per-region lengths + sequencing order ---
   barcode_map_col: null                           # REQUIRED for multi: column of MAP-region barcode sequences (e.g. "iBAR_2")
   barcode_recomb_col: null                        # REQUIRED for multi: column of RECOMB-region barcode sequences (e.g. "iBAR_1")
@@ -66,8 +66,8 @@ library:
   barcode_length_recomb: null                     # REQUIRED for multi: RECOMB-region length in cycles (e.g. 2)
   sequencing_order: null                          # REQUIRED for multi: "map_recomb" (MAP sequenced first) | "recomb_map"
   skip_cycles: null                               # SBS cycle numbers dropped on every plate (e.g. [6] for a cycle that failed); null = none
-  gene_symbol_col: null                           # REQUIRED: gene-symbol column in raw_design_table_fp (canonical: "gene_symbol")
-  gene_id_col: null                               # canonical: "gene_id"
+  gene_symbol_col: null                           # REQUIRED: name of the column in raw_design_table_fp that holds each guide's gene symbol
+  gene_id_col: null                               # name of the column in raw_design_table_fp that holds a gene identifier (e.g. Ensembl); null = none
 
 # =========================================================================
 # iss (in-situ sequencing / SBS)
@@ -79,8 +79,8 @@ iss:
   combinatorial:                                  # combinatorial chemistry only; leave code null for four color
     code: null                                    # each base -> the dye channels that are ON for it (names must match iss.channels); [] = no dye
     # Two-color example: channels keep their dye names and the code maps bases to dyes.
-    #   channels: DAPI, Alexa 568, Alexa 488, Alexa 647
-    #   code: { G: [], T: ["Alexa 568"], C: ["Alexa 488", "Alexa 568"], A: ["Alexa 488", "Alexa 647"] }
+    #   channels: DAPI, Dye1, Dye2, Dye3
+    #   code: { G: [], T: ["Dye1"], C: ["Dye1", "Dye2"], A: ["Dye2", "Dye3"] }
   channels:                                       # REQUIRED: one entry per imaging channel, in file order. Four color: name base channels G/T/A/C. Combinatorial: use the dye names from the code
     - { name: "DAPI", laser_wavelength_nm: 408, exposure_time_ms: null }
     - { name: "G",    laser_wavelength_nm: null, exposure_time_ms: null }
@@ -103,15 +103,15 @@ iss:
 phenotype:
   objective: null                                 # e.g. "20X 0.75 NA"
   channels:                                       # one entry per phenotype channel
-    # biological_name is what features get named (DAPI_mean, CENPA_mean, …).
+    # biological_name is what features get named (e.g. DAPI_mean, GFP_mean).
     # fluorophore_token is what appears in the raw filename (DAPI, GFP, A594, A750).
     # Every channel needs a biological_name (REQUIRED); the other fields are optional.
     - biological_name: null                       # e.g. "DAPI"  -> channels_metadata.name
       marker_of: null                             # e.g. "Nuclei" -> biological_annotation.biological_target
       description: null                           # free text used verbatim where marker_of would be, e.g. "sialylated glycoRNA at the cell surface, not RNA abundance"; every mozzarellm screen context containing this channel inherits it
-      marker: null                                # gene/protein stained, e.g. "HSPA1B" -> biological_annotation.marker
+      marker: null                                # gene or protein the stain marks -> biological_annotation.marker
       marker_type: null                           # "dye" | "antibody" | "endogenous_tag" -> biological_annotation.marker_type
-      fluorophore_token: null                     # filename token (e.g. "GFP" stains "COXIV")
+      fluorophore_token: null                     # the channel's name in the raw file names (e.g. "GFP")
       laser_wavelength_nm: null
       exposure_time_ms: null
     # ... add one entry per channel ...
@@ -119,7 +119,7 @@ phenotype:
   segment_cells: null                             # true = segment cells around each nucleus (cellpose cyto); false = nuclei-only feature extraction (skip cellpose cell mask)
   background_channel_nucleus: "DAPI"              # biological_name of the nuclear-boundary marker (e.g. "DAPI"); 
   background_channel_cell: null                   # biological_name of the cell-boundary marker (e.g. "WGA"); required only when segment_cells: true
-  foci_channel: null                              # biological_name of the foci/puncta marker (e.g. "gH2AX", "CENPA"); null = no foci pipeline. Drives FOCI_CHANNEL + routes the foci pipeline on/off.
+  foci_channel: null                              # biological_name of the foci/puncta marker (e.g. "gH2AX"); null = no foci pipeline. Drives FOCI_CHANNEL + routes the foci pipeline on/off.
   second_obj_channel: null                        # biological_name of the secondary object marker (e.g. a pathogen or organelle stain); descriptive only: the notebooks do not read it (the brieflow-auto plugin uses it to prefill SECOND_OBJ_CHANNEL / SECOND_OBJ_DETECTION); secondary objects are switched on by SECOND_OBJ_DETECTION + SECOND_OBJ_CHANNEL in 3_phenotype.py.
 
 # =========================================================================
