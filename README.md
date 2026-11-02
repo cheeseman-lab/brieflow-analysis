@@ -4,7 +4,7 @@
 [![Python](https://img.shields.io/badge/python-3.11-blue)](https://www.python.org/downloads/)
 [![Documentation](https://img.shields.io/badge/docs-brieflow.readthedocs.io-brightgreen)](https://brieflow.readthedocs.io)
 [![Tests](https://github.com/cheeseman-lab/brieflow/actions/workflows/test_analysis.yml/badge.svg)](https://github.com/cheeseman-lab/brieflow/actions/workflows/test_analysis.yml)
-[![Discord](https://img.shields.io/badge/forum-discord-7289da)](https://discord.gg/yrEh6GP8JJ)
+[![Discussions](https://img.shields.io/badge/forum-GitHub%20Discussions-24292f)](https://github.com/cheeseman-lab/brieflow/discussions)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Nature Communications](https://img.shields.io/badge/Nat%20Commun-10.1038%2Fs41467--026--73643--7-b31b1b)](https://doi.org/10.1038/s41467-026-73643-7)
 
@@ -57,13 +57,19 @@ Full details on setup, installation, test data, usage, module details, and contr
 
 `bash flow.sh --help` lists every option.
 The [brieflow-auto](https://github.com/cheeseman-lab/brieflow-auto) Claude Code plugin can drive this template end to end: it fills the notebook parameters from `screen.yaml`, runs each module, and checks its QC.
+Install it from inside Claude Code:
+
+```
+/plugin marketplace add cheeseman-lab/brieflow-auto
+/plugin install brieflow-auto@brieflow-auto
+```
 
 ## Contributing
 
 We welcome community contributions to Brieflow!
 Feel free to:
 - Give [Brieflow](https://github.com/cheeseman-lab/brieflow) a star to boost its visibility!
-- Join Brieflow's [Discord](https://discord.gg/yrEh6GP8JJ) to chat with the developers.
+- Ask questions and share approaches in [GitHub Discussions](https://github.com/cheeseman-lab/brieflow/discussions).
 - File a [GitHub issue](https://github.com/cheeseman-lab/brieflow/issues) to share comments and issues. We aim to keep brieflow-related issues in the [main Brieflow repository](https://github.com/cheeseman-lab/brieflow/issues).
 - Clone the repository, create a new branch, and submit a [pull request](https://github.com/cheeseman-lab/brieflow-analysis/compare).
 

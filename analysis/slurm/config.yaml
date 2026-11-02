@@ -1,6 +1,5 @@
 # BrieFlow slurm workflow profile, read by `flow.sh --backend slurm` (override the path with --slurm-profile).
 # Set slurm_partition and slurm_account for your cluster; left unset, sbatch uses the cluster default partition and snakemake guesses the account.
-# Example (Whitehead): slurm_partition: u20 and slurm_account: wibrusers.
 # Job logs go to slurm/slurm_output/rule via flow.sh --slurm-logdir; the executor rejects --output in slurm_extra.
 # flow.sh uses `jobs` below as the concurrent-job limit unless --jobs is given.
 
