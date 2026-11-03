@@ -1,19 +1,19 @@
-
-
-# BrieFlow cluster configuration file
+# BrieFlow slurm workflow profile, read by `flow.sh --backend slurm` (override the path with --slurm-profile).
+# Set slurm_partition and slurm_account for your cluster; left unset, sbatch uses the cluster default partition and snakemake guesses the account.
+# Job logs go to slurm/slurm_output/rule via flow.sh --slurm-logdir; the executor rejects --output in slurm_extra.
+# flow.sh uses `jobs` below as the concurrent-job limit unless --jobs is given.
 
 default-resources:
-    slurm_partition: u20
-    slurm_account: wibrusers
+    # slurm_partition: <partition>
+    # slurm_account: <account>
     mem_mb: 3000
     tasks: 1
     cpus_per_task: 1
-    runtime: 400
-    slurm_extra: "'--output=slurm/slurm_output/rule/%j.out'"
+    runtime: "1d"
 jobs: 150
 
 set-resources:
-   # preprocessing
+    # preprocess
     extract_metadata_sbs:
         mem_mb: 2000
     combine_metadata_sbs:
@@ -24,10 +24,11 @@ set-resources:
         mem_mb: 2500
     convert_sbs:
         mem_mb: 2000
-    convert_ph:
+    convert_phenotype:
         mem_mb: 2000
     calculate_ic_sbs:
         mem_mb: 50000
+    # IC peak memory is about n_tiles x channels x height x width x 8 bytes per well; size this to your geometry.
     calculate_ic_phenotype:
         mem_mb: 500000
 
@@ -45,10 +46,8 @@ set-resources:
     apply_ic_field_sbs:
         mem_mb: 2500
     segment_sbs:
-        # slurm_partition: "'nvidia-2080ti-20'"
         mem_mb: 3500
         cpus_per_task: 4
-        # slurm_extra: "'--gres=gpu:1'"
     extract_bases:
         mem_mb: 2000
     call_reads:
@@ -75,17 +74,15 @@ set-resources:
     align_phenotype:
         mem_mb: 2000
     segment_phenotype:
-        # slurm_partition: "'nvidia-2080ti-20'"
         mem_mb: 3000
         cpus_per_task: 4
-        # slurm_extra: "'--gres=gpu:1'"
     identify_cytoplasm:
         mem_mb: 1000
     extract_phenotype_info:
         mem_mb: 1000
     combine_phenotype_info:
         mem_mb: 20000
-    extract_phenotype:
+    extract_phenotype_cp:
         mem_mb: 3000
     merge_phenotype:
         mem_mb: 300000
@@ -98,14 +95,12 @@ set-resources:
     fast_alignment:
         mem_mb: 20000
         cpus_per_task: 4
-    merge:
+    fast_merge:
         mem_mb: 20000
         cpus_per_task: 4
     format_merge:
         mem_mb: 20000
     eval_merge:
-        mem_mb: 20000
-    clean_merge:
         mem_mb: 20000
     deduplicate_merge:
         mem_mb: 20000
@@ -131,9 +126,6 @@ set-resources:
         mem_mb: 980000
         cpus_per_task: 4
     # montages
-    prepare_montage_data:
-        mem_mb: 100000
-        cpus_per_task: 8
     generate_montage:
         mem_mb: 10000
     initiate_montage:

@@ -1,0 +1,1049 @@
+import marimo
+
+__generated_with = "0.25.0"
+app = marimo.App()
+
+
+@app.cell
+def _():
+    import marimo as mo
+
+    return (mo,)
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    # Aggregate: filter, align and aggregate single-cell features per perturbation
+
+    This notebook tests the aggregate steps on two wells: cell classes, missing-value and intensity filtering, batch alignment, per-perturbation aggregation and the bootstrap test against controls.
+
+    **Reads:** the merged cell tables from `bash flow.sh merge`, the classifier settings from `4_classify.py` if you trained one, and optionally a table of per-well annotations.
+
+    **Writes:** the `aggregate` section of `config/config.yml`, `config/aggregate_combo.tsv` and `config/cell_data_metadata_cols.tsv`.
+
+    **Next:** run `bash flow.sh aggregate`, then open `6_cluster.py`.
+
+    Cells under a **Set parameters** heading hold the settings you choose for your screen; review each before running the module.
+    """)
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## Set parameters
+
+    ### Fixed parameters for aggregate module
+
+    - `CONFIG_FILE_PATH`: Path to a Brieflow config file used during processing. Absolute or relative to where workflows are run from.
+    """)
+    return
+
+
+@app.cell
+def params_paths():
+    CONFIG_FILE_PATH = "config/config.yml"
+    return (CONFIG_FILE_PATH,)
+
+
+@app.cell
+def _():
+    from pathlib import Path
+    from itertools import product
+    import random
+
+    import yaml
+    import pandas as pd
+    import matplotlib.pyplot as plt
+
+    from lib.shared.file_utils import get_filename, load_parquet_subset
+    from lib.aggregate.cell_data_utils import split_cell_data, channel_combo_subset
+    from lib.aggregate.cell_classification import CellClassifier
+    from lib.aggregate.montage_utils import create_cell_montage, add_filenames
+    from lib.aggregate.filter import (
+        query_filter,
+        perturbation_filter,
+        missing_values_filter,
+        intensity_filter,
+    )
+    from lib.aggregate.align import (
+        prepare_alignment_data,
+        pca_variance_plot,
+        embed_by_pca,
+        tvn_on_controls,
+    )
+    from lib.aggregate.aggregate import aggregate
+    from lib.aggregate.eval_aggregate import (
+        nas_summary,
+        summarize_cell_data,
+        plot_feature_distributions,
+    )
+    from lib.shared.configuration_utils import CONFIG_FILE_HEADER, convert_tuples_to_lists
+
+    random.seed(42)
+    return (
+        CONFIG_FILE_HEADER,
+        CellClassifier,
+        Path,
+        add_filenames,
+        aggregate,
+        channel_combo_subset,
+        convert_tuples_to_lists,
+        create_cell_montage,
+        embed_by_pca,
+        get_filename,
+        intensity_filter,
+        load_parquet_subset,
+        missing_values_filter,
+        nas_summary,
+        pca_variance_plot,
+        pd,
+        perturbation_filter,
+        plot_feature_distributions,
+        plt,
+        prepare_alignment_data,
+        product,
+        query_filter,
+        random,
+        split_cell_data,
+        summarize_cell_data,
+        tvn_on_controls,
+        yaml,
+    )
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## Set parameters
+
+    ### Testing on subset of data
+
+    - `TEST_PLATE`: Plate used for testing configuration
+    - `TEST_WELL_1`: First well identifier used for testing configuration
+    - `TEST_WELL_2`: Second well identifier used for testing configuration
+    """)
+    return
+
+
+@app.cell
+def params_test_wells():
+    TEST_PLATE = None
+    TEST_WELL_1 = None
+    TEST_WELL_2 = None
+    return TEST_PLATE, TEST_WELL_1, TEST_WELL_2
+
+
+@app.cell
+def _(
+    CONFIG_FILE_PATH,
+    Path,
+    TEST_PLATE,
+    TEST_WELL_1,
+    TEST_WELL_2,
+    get_filename,
+    load_parquet_subset,
+    pd,
+    yaml,
+):
+    # load config file and determine root path
+    with open(CONFIG_FILE_PATH, 'r') as _config_file:
+        config = yaml.safe_load(_config_file)
+    ROOT_FP = Path(config['all']['root_fp'])
+    merge_final_fp = ROOT_FP / 'merge' / 'parquets' / get_filename({'plate': TEST_PLATE, 'well': TEST_WELL_1}, 'merge_final', 'parquet')
+    # Load a 25,000-cell subset of each test well (takes about a minute)
+    cell_data = load_parquet_subset(merge_final_fp, n_rows=25000)
+    merge_final_fp_2 = ROOT_FP / 'merge' / 'parquets' / get_filename({'plate': TEST_PLATE, 'well': TEST_WELL_2}, 'merge_final', 'parquet')
+    cell_data_2 = load_parquet_subset(merge_final_fp_2, n_rows=25000)
+    cell_data = pd.concat([cell_data, cell_data_2], ignore_index=True)
+    cell_data
+    return ROOT_FP, cell_data, config
+
+
+@app.cell
+def _(cell_data):
+    for _col in cell_data.columns:
+        print(_col)
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## Set parameters
+
+    ### Cell Data Metadata
+
+    - `METADATA_COLS_FP`: Path to TSV to store metadata cols.
+    - `METADATA_COLS`: Loaded from config (set in notebook 4, classify). Modify if needed.
+    """)
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## Set parameters
+
+    ### Well annotations, split and group
+
+    - `WELL_ANNOTATIONS_FP`: TSV of per-well experimental variables (`plate`, `well`, then any annotation columns, e.g. `treatment`). Joined onto cell metadata so they can be split or grouped on. Only annotated wells enter the aggregate combos, so leaving a well out of the TSV excludes it. `None` to skip.
+    - `SPLIT_COL`: Column to split datasets on. Each value gets its own dataset and its own embedding space, plus `all`. `"class"` is the classifier output; set to an annotation column to split by it instead, and the split values are read from the annotation TSV.
+    - `GROUP_COLS`: Extra columns to aggregate within, so a point becomes perturbation x these. Keeps one shared embedding space. Ex `["treatment"]`.
+    - `BOOTSTRAP_CONTROL_SCOPE`: `"pooled"` draws the bootstrap null from all controls; `"within_group"` restricts it to controls sharing the point's group; `"reference_group"` restricts it to controls in `BOOTSTRAP_REFERENCE_GROUP` whatever the point's own group; `"within_perturbation"` draws it from the point's own perturbation in `BOOTSTRAP_REFERENCE_GROUP`, so every perturbation is its own control and `CONTROL_KEY` plays no part. Use `"within_group"` when groups have different baselines, or the null spans them and real hits are lost. Use `"reference_group"` when the group is a treatment acting on the perturbation itself, so the null has to be the untreated state. Use `"within_perturbation"` when perturbations are not knockouts, so each arm is scored against its own vehicle arm; the reference-group arms are that null and are not tested themselves, and perturbations with no reference arm are left out of the bootstrap.
+    - `BOOTSTRAP_REFERENCE_GROUP`: The `GROUP_COLS` value the null is pinned to — the untreated or vehicle group. Several `GROUP_COLS` join their values with `=`. Ignored by the other scopes.
+    """)
+    return
+
+
+@app.cell
+def params_metadata():
+    WELL_ANNOTATIONS_FP = None              # e.g., "config/well_annotations.tsv"
+    SPLIT_COL = 'class'                     # "class" (classifier) or an annotation column
+    GROUP_COLS = []                         # e.g., ["treatment"]
+    BOOTSTRAP_CONTROL_SCOPE = 'pooled'      # "pooled" | "within_group" | "reference_group" | "within_perturbation"
+    BOOTSTRAP_REFERENCE_GROUP = None        # the vehicle group; required by "reference_group" and "within_perturbation"
+    return (
+        BOOTSTRAP_CONTROL_SCOPE,
+        BOOTSTRAP_REFERENCE_GROUP,
+        GROUP_COLS,
+        SPLIT_COL,
+        WELL_ANNOTATIONS_FP,
+    )
+
+
+@app.cell
+def _(WELL_ANNOTATIONS_FP, config, pd):
+    # Load classification settings from config (set in notebook 4, classify)
+    from lib.phenotype.constants import DEFAULT_METADATA_COLS
+    if 'classify' in config:
+        METADATA_COLS_FP = config['classify']['metadata_cols_fp']
+        CLASSIFIER_PATH = config['classify']['classifier_path']
+        CONFIDENCE_THRESHOLDS = config['classify']['confidence_thresholds']
+        CLASS_TITLE = config['classify']['class_title']
+        CLASS_MAPPING = config['classify']['class_mapping']
+        METADATA_COLS = pd.read_csv(METADATA_COLS_FP, header=None, sep='\t')[0].tolist()
+        print(f'Loaded metadata columns from classify config: {METADATA_COLS_FP}')
+    else:
+        # Classify notebook skipped: no classifier, default metadata columns
+        METADATA_COLS_FP = 'config/cell_data_metadata_cols.tsv'
+        CLASSIFIER_PATH = None
+        CONFIDENCE_THRESHOLDS = None
+        CLASS_TITLE = None
+        CLASS_MAPPING = None
+        METADATA_COLS = DEFAULT_METADATA_COLS.copy()
+        pd.Series(METADATA_COLS).to_csv(METADATA_COLS_FP, index=False, header=False, sep='\t')
+        print(f'Using DEFAULT_METADATA_COLS (classify notebook was skipped)')
+        print(f'Saved to: {METADATA_COLS_FP}')
+    print(f'\nClassifier path: {CLASSIFIER_PATH}')
+    print(f'Class title: {CLASS_TITLE}')
+    print(f'Class mapping: {CLASS_MAPPING}')
+    print(f'Confidence thresholds: {CONFIDENCE_THRESHOLDS}')
+    # annotation columns are metadata for every downstream script that splits cell data
+    if WELL_ANNOTATIONS_FP is not None:
+        _ann_cols = [_c for _c in pd.read_csv(WELL_ANNOTATIONS_FP, sep='\t').columns if _c not in ('plate', 'well')]
+        _new_cols = [_c for _c in _ann_cols if _c not in METADATA_COLS]
+        if _new_cols:
+            METADATA_COLS = METADATA_COLS + _new_cols
+            pd.Series(METADATA_COLS).to_csv(METADATA_COLS_FP, index=False, header=False, sep='\t')
+            print(f'Added annotation columns to metadata: {_new_cols}')
+    print(f'\n{len(METADATA_COLS)} metadata columns:')
+    # Always show the metadata columns so user can verify
+    for _col in METADATA_COLS:
+        print(f'  - {_col}')
+    return (
+        CLASSIFIER_PATH,
+        CLASS_MAPPING,
+        CLASS_TITLE,
+        METADATA_COLS,
+        METADATA_COLS_FP,
+    )
+
+
+@app.cell
+def _(METADATA_COLS, WELL_ANNOTATIONS_FP, cell_data, split_cell_data):
+    # Split cell data into metadata and features
+    metadata, features = split_cell_data(cell_data, METADATA_COLS)
+
+    # join annotations as split_datasets does, so the cells below see what the pipeline will
+    if WELL_ANNOTATIONS_FP is not None:
+        from lib.aggregate.cell_data_utils import join_well_annotations
+
+        metadata = join_well_annotations(metadata, WELL_ANNOTATIONS_FP)
+    print(metadata.shape, features.shape)
+    return features, metadata
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## Set parameters
+
+    ### Split cells into classes
+
+    - `CLASSIFIER_PATH`: Path to pickled Python object that can take a cell data dataframe and output cell classes
+
+    ### Evaluate splitting
+
+    - `COLLAPSE_COLS`: Cell data columns to collapse on when creating a summary of cell counts. This will show the number of cells in each cell class for these particular columns. Ex: `["cell_barcode_0", "gene_symbol_0"]`.
+    - `TEST_MONTAGE_CHANNEL`: Channel to display in the notebook montage preview. Usually `DAPI`. Set to `None` to skip montage generation entirely. Note: montages are generated across **all** channels — this parameter only controls which channel is shown in the notebook for visual QC.
+    - `MONTAGE_NUM_CELLS`: Number of cells to include in each montage. Default `30`.
+    - `MONTAGE_CELL_SIZE`: Pixel size of each cell bounding box in the montage (zoom level).
+    - `MONTAGE_SHAPE`: Grid shape of the montage as `(rows, cols)`. Default `(3, 10)`.
+    - `GENERATE_MONTAGES`: Whether the aggregate pipeline writes montages. Default `True`; set `False` to skip them.
+
+    **Notes**:
+    - We generate cell classes for each of the classes listed in the classifier and an "all" class. So for a classifier that splits by mitotic or interphase the final classes will be `["mitotic", "interphase", "all"]`.
+    - You must import necessary packages for the classifier in this notebook and add them to `scripts/aggregate/split_datasets.py` as well. Ex `import numpy as np` if the classifier requires `numpy`.
+    """)
+    return
+
+
+@app.cell
+def params_split_classes():
+    TEST_MONTAGE_CHANNEL = 'DAPI'
+    COLLAPSE_COLS = ['cell_barcode_0', 'gene_symbol_0']               # e.g., ["sgRNA_0", "gene_symbol_0"]
+    MONTAGE_CELL_SIZE = 40           # e.g., 40 — zoom level (pixel size per cell bounding box)
+    GENERATE_MONTAGES = True           # write montages in the aggregate pipeline
+    return COLLAPSE_COLS, GENERATE_MONTAGES, MONTAGE_CELL_SIZE, TEST_MONTAGE_CHANNEL
+
+
+@app.cell
+def _():
+    # Library defaults
+    MONTAGE_NUM_CELLS = 30
+    MONTAGE_SHAPE = (3, 10)
+    return MONTAGE_NUM_CELLS, MONTAGE_SHAPE
+
+
+@app.cell
+def _(
+    CLASSIFIER_PATH,
+    CLASS_MAPPING,
+    CLASS_TITLE,
+    SPLIT_COL,
+    WELL_ANNOTATIONS_FP,
+    CellClassifier,
+    features,
+    metadata,
+    pd,
+):
+    classifier = CellClassifier.load(CLASSIFIER_PATH)
+
+    # Classify cells with safety check
+    if classifier is not None:
+        print("Applying cell classification...")
+        classified_metadata, classified_features = classifier.classify_cells(metadata, features)
+    
+        # Add standard 'class' and 'confidence' columns using the mapping
+        confidence_col = f"{CLASS_TITLE}_confidence"
+        if CLASS_MAPPING and "label_to_class" in CLASS_MAPPING:
+            label_to_class = CLASS_MAPPING["label_to_class"]
+            # Convert numeric IDs to string labels
+            classified_metadata["class"] = classified_metadata[CLASS_TITLE].map(
+                lambda x: label_to_class.get(x, label_to_class.get(str(x), str(x)))
+            )
+        else:
+            # No mapping available, use numeric values as strings
+            classified_metadata["class"] = classified_metadata[CLASS_TITLE].astype(str)
+    
+        # Add standard confidence column
+        classified_metadata["confidence"] = classified_metadata[confidence_col]
+    else:
+        print("No classifier specified - using all cells as single class")
+        classified_metadata, classified_features = metadata.copy(), features.copy()
+        classified_metadata["class"] = "all"
+        classified_metadata["confidence"] = 1.0
+
+    # Create config var for cell classes (SPLIT_COL drives the split; "class" is the classifier)
+    if SPLIT_COL != "class":
+        if WELL_ANNOTATIONS_FP is None:
+            raise ValueError(f"SPLIT_COL={SPLIT_COL!r} needs WELL_ANNOTATIONS_FP naming the table that holds it")
+        _annotations = pd.read_csv(WELL_ANNOTATIONS_FP, sep="\t", dtype=str)
+        if SPLIT_COL not in _annotations.columns:
+            raise ValueError(f"SPLIT_COL={SPLIT_COL!r} is not a column of {WELL_ANNOTATIONS_FP}")
+        # from the annotations, not the loaded cells: only the test wells are in memory here
+        CELL_CLASSES = sorted(_annotations[SPLIT_COL].dropna().unique())
+    elif "class" in classified_metadata.columns:
+        CELL_CLASSES = list(classified_metadata["class"].unique())
+    else:
+        CELL_CLASSES = []
+
+    # Show cell class counts and distribution
+    if CELL_CLASSES:
+        print("\nCell class counts:")
+        print(classified_metadata[SPLIT_COL].value_counts())
+
+        print("\nCell class confidences:")
+        classified_metadata["confidence"].hist()
+    else:
+        print("No cell classes available")
+    return CELL_CLASSES, classified_features, classified_metadata, classifier
+
+
+@app.cell
+def _(
+    CELL_CLASSES,
+    COLLAPSE_COLS,
+    MONTAGE_CELL_SIZE,
+    TEST_MONTAGE_CHANNEL,
+    MONTAGE_NUM_CELLS,
+    MONTAGE_SHAPE,
+    ROOT_FP,
+    SPLIT_COL,
+    add_filenames,
+    classified_metadata,
+    classifier,
+    config,
+    create_cell_montage,
+    mo,
+    plt,
+    summarize_cell_data,
+):
+    if SPLIT_COL != "class":
+        cell_classes = list(CELL_CLASSES) + ['all']
+    elif classifier is not None:
+        cell_classes = list(classified_metadata['class'].unique()) + ['all']
+    else:
+        cell_classes = list(classified_metadata['class'].unique())
+    if TEST_MONTAGE_CHANNEL is not None:
+        classified_metadata_copy = classified_metadata.copy(deep=True)
+        classified_metadata_copy = add_filenames(classified_metadata_copy, ROOT_FP, img_fmt=config['all'].get('image_format', 'tiff'))
+        _split_values = classified_metadata_copy[SPLIT_COL].astype(str)
+        # only the test wells are loaded, so skip groups with no cells in them
+        cell_class_dfs = {cell_class: classified_metadata_copy[_split_values == str(cell_class)] for cell_class in CELL_CLASSES}
+        cell_class_dfs = {cell_class: cell_df for cell_class, cell_df in cell_class_dfs.items() if len(cell_df) > 0}
+        title_templates = {True: 'Lowest Confidence {cell_class} Cells - {channel}', False: 'Highest Confidence {cell_class} Cells - {channel}'}
+        montages, titles = ([], [])
+        for cell_class, cell_df in cell_class_dfs.items():
+            for ascending in [True, False]:
+                montage = create_cell_montage(cell_data=cell_df, channels=config['phenotype']['channel_names'], num_cells=MONTAGE_NUM_CELLS, cell_size=MONTAGE_CELL_SIZE, shape=MONTAGE_SHAPE, selection_params={'method': 'sorted', 'sort_by': 'confidence', 'ascending': ascending})[TEST_MONTAGE_CHANNEL]
+                montages.append(montage)
+                titles.append(title_templates[ascending].format(cell_class=cell_class, channel=TEST_MONTAGE_CHANNEL))
+        num_rows = len(cell_class_dfs)
+        if num_rows > 0:
+            _fig, axes = plt.subplots(num_rows, 2, figsize=(10, 3 * num_rows), squeeze=False)
+            for ax, title, montage in zip(axes.flat, titles, montages):
+                ax.imshow(montage, cmap='gray')
+                ax.set_title(title, fontsize=14)
+                ax.axis('off')
+            print('Montages of cell classes:')
+            plt.tight_layout()
+            plt.show()
+        else:
+            print('No cells of any class in the test wells, skipping montage generation')
+    else:
+        print('TEST_MONTAGE_CHANNEL is None, skipping montage generation')
+    print('Split cell data summary:')
+    _summary_df = summarize_cell_data(classified_metadata, CELL_CLASSES, COLLAPSE_COLS, class_col=SPLIT_COL)
+    mo.ui.table(_summary_df)
+    return (cell_classes,)
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## Set parameters
+
+    ### Secondary object aggregation (optional)
+
+    If secondary object detection was enabled in the phenotype module, per-object features are available and `SECOND_OBJ_AGG_STRATEGY` controls how they fold into cell-level data before aggregation:
+
+    - `"none"`: No per-object features enter the aggregate pipeline.
+    - `"single"`: Populate features only for cells with exactly one secondary object (NaN otherwise).
+    - `"all"`: Numbered columns per object (`second_obj_area_1`, `second_obj_area_2`, ...).
+    - `"average"`: Mean of numeric features across a cell's secondary objects.
+
+    Cell-level summary columns (`has_second_obj`, `num_second_objs`, ...) are always available and can be used in `FILTER_QUERIES`.
+    """)
+    return
+
+
+@app.cell
+def params_secondary_objects():
+    SECOND_OBJ_AGG_STRATEGY = "none"   # "none" | "single" | "all" | "average"
+    return (SECOND_OBJ_AGG_STRATEGY,)
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## Set parameters
+
+    ### Aggregate by channel combos
+
+    - `CHANNEL_COMBOS`: Combinations of channels to aggregate by. This is a list of lists with channel names, ex `[["DAPI", "GFP", "WGA"], ["DAPI", "GFP"]]`.
+    - `AGGREGATE_COMBO_FP`: Location of aggregate combinations dataframe.
+    - `SPLIT_BY_COMPARTMENT`: Split aggregate and cluster outputs by compartment (`cell`, `nucleus`, `cytoplasm`, `second_obj`). When `False` (default) outputs keep the standard paths and use every compartment.
+    - `COMPARTMENT_COMBOS`: Compartment combinations to aggregate by when splitting, as a list of lists, ex `[["cell", "nucleus", "cytoplasm"], ["nucleus"]]`. Every channel combo is paired with every compartment combo.
+    - `TEST_CELL_CLASS`: Cell class to configure aggregate params with. Can be any of the cell classes or `all`.
+    - `TEST_CHANNEL_COMBO`: Channel combo to configure aggregate params with; must be one of the channel combos. Ex `["DAPI", "GFP"]`.
+    """)
+    return
+
+
+@app.cell
+def params_channel_combos():
+    CHANNEL_COMBOS = None              # e.g., [["DAPI", "GFP", "WGA"], ["DAPI", "GFP"]]
+    AGGREGATE_COMBO_FP = "config/aggregate_combo.tsv"
+    SPLIT_BY_COMPARTMENT = False
+    COMPARTMENT_COMBOS = None          # e.g., [["cell", "nucleus", "cytoplasm"], ["nucleus"]]
+    TEST_CELL_CLASS = 'all'
+    TEST_CHANNEL_COMBO = None
+    return (
+        AGGREGATE_COMBO_FP,
+        CHANNEL_COMBOS,
+        COMPARTMENT_COMBOS,
+        SPLIT_BY_COMPARTMENT,
+        TEST_CELL_CLASS,
+        TEST_CHANNEL_COMBO,
+    )
+
+
+@app.cell
+def _(
+    AGGREGATE_COMBO_FP,
+    CHANNEL_COMBOS,
+    COMPARTMENT_COMBOS,
+    Path,
+    SPLIT_BY_COMPARTMENT,
+    WELL_ANNOTATIONS_FP,
+    cell_classes,
+    config,
+    pd,
+    product,
+):
+    # determine cell classes and channel combos
+    channel_combos = ["_".join(combo) for combo in CHANNEL_COMBOS]
+
+    # Load merge wildcard combos
+    MERGE_COMBO_FP = Path(config["merge"]["merge_combo_fp"])
+    merge_wildcard_combos = pd.read_csv(MERGE_COMBO_FP, sep="\t")
+
+    # only annotated wells can be split or grouped; the pipeline raises on an unannotated one
+    if WELL_ANNOTATIONS_FP is not None:
+        _ann = pd.read_csv(WELL_ANNOTATIONS_FP, sep="\t", dtype=str)
+        _annotated = set(zip(_ann["plate"], _ann["well"]))
+        # compare as text, as join_well_annotations does, so plate 1 matches "1"
+        _keys = zip(merge_wildcard_combos["plate"].astype(str), merge_wildcard_combos["well"].astype(str))
+        _kept = pd.Series([_key in _annotated for _key in _keys], index=merge_wildcard_combos.index)
+        _excluded = merge_wildcard_combos.loc[~_kept, ["plate", "well"]].to_records(index=False).tolist()
+        print(f"Wells with annotations: {int(_kept.sum())} of {len(_kept)} merged wells")
+        if _excluded:
+            print(f"Excluded from the aggregate combos (no row in {WELL_ANNOTATIONS_FP}): {_excluded}")
+        if not _kept.any():
+            raise ValueError(f"No merged (plate, well) has a row in {WELL_ANNOTATIONS_FP}; check its plate and well format")
+        merge_wildcard_combos = merge_wildcard_combos[_kept]
+
+    # Generate aggregate wildcard combos
+    aggregate_wildcard_combos = pd.DataFrame(
+        product(
+            merge_wildcard_combos.itertuples(index=False, name=None),
+            cell_classes,
+            channel_combos,
+        ),
+        columns=["plate_well", "cell_class", "channel_combo"],
+    )
+    aggregate_wildcard_combos[["plate", "well"]] = pd.DataFrame(
+        aggregate_wildcard_combos["plate_well"].tolist(),
+        index=aggregate_wildcard_combos.index,
+    )
+    aggregate_wildcard_combos = aggregate_wildcard_combos.drop(columns="plate_well")
+
+    # Pair every channel combo with every compartment combo when splitting by compartment
+    if SPLIT_BY_COMPARTMENT:
+        compartment_combos = ["-".join(combo) for combo in COMPARTMENT_COMBOS]
+        aggregate_wildcard_combos = aggregate_wildcard_combos.merge(
+            pd.DataFrame({"compartment_combo": compartment_combos}), how="cross"
+        )
+
+    # Save aggregate wildcard combos
+    aggregate_wildcard_combos.to_csv(AGGREGATE_COMBO_FP, sep="\t", index=False)
+
+    print("Aggregate wildcard combos:")
+    aggregate_wildcard_combos
+    return
+
+
+@app.cell
+def _(
+    SPLIT_COL,
+    TEST_CELL_CLASS,
+    TEST_CHANNEL_COMBO,
+    channel_combo_subset,
+    classified_features,
+    classified_metadata,
+    config,
+    mo,
+):
+    # subset cell class
+    if TEST_CELL_CLASS != "all":
+        cell_class_mask = classified_metadata[SPLIT_COL].astype(str) == str(TEST_CELL_CLASS)
+        class_metadata = classified_metadata[cell_class_mask]
+        class_features = classified_features[cell_class_mask]
+    else:
+        class_metadata = classified_metadata
+        class_features = classified_features
+
+    # subset features
+    all_channels = config["phenotype"]["channel_names"]
+    class_features = channel_combo_subset(class_features, TEST_CHANNEL_COMBO, all_channels)
+
+    # copy metadata and features for later eval
+    dataset_metadata = class_metadata.copy()
+    dataset_features = class_features.copy()
+
+    # preview metadata and features
+    mo.output.append(mo.ui.table(class_metadata))
+    mo.output.append(mo.ui.table(class_features))
+    return class_features, class_metadata, dataset_features, dataset_metadata
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## Set parameters
+
+    ### Perturbation filtering
+
+    - `FILTER_QUERIES`: Queries to use for custom filtering; ex: `["mapped_single_gene == True", "cell_quality_score > 0.8"]`. Can be left as `None` for no filtering.
+    - `PERTURBATION_NAME_COL`: Name of column used to identify perturbations. This is the column that aggregation takes place on. Ex "gene_symbol_0".
+    """)
+    return
+
+
+@app.cell
+def params_perturbation_filter():
+    FILTER_QUERIES = None              # e.g., ["mapped_single_gene == True"]
+    PERTURBATION_NAME_COL = 'gene_symbol_0'       # e.g., "gene_symbol_0"
+    return FILTER_QUERIES, PERTURBATION_NAME_COL
+
+
+@app.cell
+def _(
+    FILTER_QUERIES,
+    PERTURBATION_NAME_COL,
+    class_features,
+    class_metadata,
+    metadata,
+    nas_summary,
+    perturbation_filter,
+    plt,
+    query_filter,
+):
+    qf_metadata, qf_features = query_filter(class_metadata, class_features, FILTER_QUERIES)
+    pf_metadata, pf_features = perturbation_filter(qf_metadata, qf_features, PERTURBATION_NAME_COL)
+    print(f'Unique populations: {metadata[PERTURBATION_NAME_COL].nunique()}')
+    _summary_df, _fig = nas_summary(pf_features)
+    print(_summary_df[_summary_df['percent_na'] > 0.1])
+    plt.show()
+    return pf_features, pf_metadata
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## Set parameters
+
+    ### Missing value filtering
+
+    - `DROP_COLS_THRESHOLD`: Threshold of NA values above which an entire column is dropped. Usually `0.1`
+    - `DROP_ROWS_THRESHOLD`: Threshold of NA values above which an entire row is dropped. Usually `0.01`
+    - `IMPUTE`: Whether or not to impute remaining missing values. Usually `True`
+
+    **Note**: All NAs must be dropped or imputed to perform feature alignment.
+    """)
+    return
+
+
+@app.cell
+def params_missing_values():
+    DROP_COLS_THRESHOLD = 0.1         # e.g., 0.1
+    DROP_ROWS_THRESHOLD = 0.01         # e.g., 0.01
+    IMPUTE = True                      # True | False
+    return DROP_COLS_THRESHOLD, DROP_ROWS_THRESHOLD, IMPUTE
+
+
+@app.cell
+def _(
+    DROP_COLS_THRESHOLD,
+    DROP_ROWS_THRESHOLD,
+    IMPUTE,
+    missing_values_filter,
+    pf_features,
+    pf_metadata,
+):
+    # Filter by missing values
+    mvf_metadata, mvf_features = missing_values_filter(
+        pf_metadata,
+        pf_features,
+        drop_cols_threshold=DROP_COLS_THRESHOLD,
+        drop_rows_threshold=DROP_ROWS_THRESHOLD,
+        impute=IMPUTE,
+    )
+
+    mvf_metadata.shape, mvf_features.shape
+    return mvf_features, mvf_metadata
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## Set parameters
+
+    ### Intensity filtering
+
+    - `CONTAMINATION`: Expected proportion of outliers in dataset. Usually `0.01`
+    """)
+    return
+
+
+@app.cell
+def params_intensity_filter():
+    CONTAMINATION = 0.01               # e.g., 0.01
+    return (CONTAMINATION,)
+
+
+@app.cell
+def _(CONTAMINATION, config, intensity_filter, mvf_features, mvf_metadata):
+    # Filter by intensity outliers
+    if_metadata, if_features = intensity_filter(
+        mvf_metadata,
+        mvf_features,
+        config["phenotype"]["channel_names"],
+        CONTAMINATION,
+    )
+
+    if_metadata.shape, if_features.shape
+    return if_features, if_metadata
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## Set parameters
+
+    ### Perturbation Score Filtering
+
+    One can optionally assign perturbation scores to each cell with perturbation scoring and filtering. During scoring, we train a Logistic Regression classifier on perturbed and control cell features. The result of this training and classification process is:
+    - `AUC Score` assigned per perturbation: this represents the classifier's ability to distinguish between perturbed and control cells -> higher AUC score, more clear effect on perturbation level
+    - `Perturbation Probability` assigned per cell: this represents the classifier's assigned probability of the cell being perturbed -> higher perturbation probability, more clear effect on cell level
+
+    Once perturbation scores are assigned, one can optionally filter with a probability or percentile threshold before aggregation. Control cells will not be filtered.
+
+    Configure perturbation score filtering with:
+    - `SKIP_PERTURBATION_SCORE`: Whether or not to skip perturbation scoring entirely. Usually `False`
+    - `PS_PROBABILITY_THRESHOLD`: Probability threshold above which to keep perturbed cells. Usually `0.75`
+    - `PS_PERCENTILE_THRESHOLD`: Percentile threshold above which to keep perturbed cells. Usually `0.75`
+
+    Leave `PS_PROBABILITY_THRESHOLD` and `PS_PERCENTILE_THRESHOLD` as `None` if no filtering is desired.
+
+    **Notes:**
+    - We don't test perturbation scoring within this notebook as it requires sampling many cells with the same perturbation across plates and wells
+    - Both types of threshold will remove cells, and probability threshold can potentially eliminate all cells in a perturbation
+    - Perturbation scoring can take hours per dataset
+    """)
+    return
+
+
+@app.cell
+def params_perturbation_score():
+    SKIP_PERTURBATION_SCORE = False
+    PS_PROBABILITY_THRESHOLD = None
+    PS_PERCENTILE_THRESHOLD = None
+    return PS_PERCENTILE_THRESHOLD, PS_PROBABILITY_THRESHOLD, SKIP_PERTURBATION_SCORE
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## Set parameters
+
+    ### Prepare alignment data
+
+    - `BATCH_COLS`: Which columns of metadata have batch-specific information. Usually `["plate", "well"]`.
+    - `CONTROL_KEY`: Name of perturbation in `PERTURBATION_NAME_COL` that indicates a control cell.
+    - `CONTROL_NAME_COL`: Column matched against `CONTROL_KEY` when it differs from `PERTURBATION_NAME_COL` (optional; `None` uses `PERTURBATION_NAME_COL`).
+    - `TVN_BATCH_CORRECTION`: Whether TVN centers, scales and CORAL-whitens each batch on that batch's own control cells (`True`, the default) or once on the pooled controls (`False`). Per-batch centering already happens upstream on every cell; the per-batch TVN half re-does it from control cells alone and estimates a full PC covariance from them, which needs on the order of ten control cells per PC in every batch. Set `False` when batches carry few controls, or when `CONTROL_KEY` names a treatment through `CONTROL_NAME_COL` so only some batches hold controls at all.
+    - `PERTURBATION_ID_COL`: Name of the column identifying a unique **construct** (sgRNA / barcode), ex `cell_barcode_0` or `sgRNA_0`. This sets the resolution of construct-level aggregation and the bootstrap null: each construct becomes its own row, so every non-targeting guide is treated as a separate control element. **This should essentially always be set.** If left as `None` it falls back to `PERTURBATION_NAME_COL`, which collapses constructs to gene level — all controls become a single construct and the bootstrap null loses construct-to-construct variance, making p-values under-dispersed.
+    """)
+    return
+
+
+@app.cell
+def params_alignment_data():
+    BATCH_COLS = ['plate', 'well']                  # e.g., ["plate", "well"]
+    CONTROL_KEY = None                 # e.g., "nontargeting"
+    PERTURBATION_ID_COL = "cell_barcode_0"   # or "sgRNA_0" — should essentially always be set
+    CONTROL_NAME_COL = None            # e.g., "gene_symbol_0" when PERTURBATION_NAME_COL is a construct column
+    TVN_BATCH_CORRECTION = True        # False: one global TVN on the pooled controls
+    return (
+        BATCH_COLS,
+        CONTROL_KEY,
+        CONTROL_NAME_COL,
+        PERTURBATION_ID_COL,
+        TVN_BATCH_CORRECTION,
+    )
+
+
+@app.cell
+def _(
+    BATCH_COLS,
+    CONTROL_KEY,
+    PERTURBATION_ID_COL,
+    PERTURBATION_NAME_COL,
+    if_features,
+    if_metadata,
+    pca_variance_plot,
+    plt,
+    prepare_alignment_data,
+):
+    pad_metadata, pad_features = prepare_alignment_data(if_metadata, if_features, BATCH_COLS, PERTURBATION_NAME_COL, CONTROL_KEY, PERTURBATION_ID_COL)
+    n_components, _fig = pca_variance_plot(pad_features, variance_threshold=0.99)
+    plt.show()
+    return pad_features, pad_metadata
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## Set parameters
+
+    ### Align and aggregate
+
+    - `VARIANCE_OR_NCOMP`: Variance or number of components to keep after PCA.
+    - `NUM_ALIGN_BATCHES`: Number of batches to use when aligning, usually `1`. Increase this if you are running out of memory while aligning; memory grows with the number of cells aligned in one batch.
+    - `AGG_METHOD`: Method used to aggregate features. Can be `mean` or `median`. Usually `median`.
+
+    While we use a simplified aggregate method in the notebook, the way this works during a normal run is:
+    1) Take a subset of 1,000,000 cells, or the entire dataset, whichever is smaller and compute a PCA transform with `VARIANCE_OR_NCOMP`.
+    2) Subset the entire dataset `NUM_BATCHES` number of times and align cells in this batch.
+    3) Aggregate across all aligned cell data.
+    """)
+    return
+
+
+@app.cell
+def params_align_aggregate():
+    VARIANCE_OR_NCOMP = 0.99           # e.g., 0.99 (variance retained) or integer n_components
+    NUM_ALIGN_BATCHES = 1           # e.g., 1
+    AGG_METHOD = 'median'                  # e.g., "median"
+    return AGG_METHOD, NUM_ALIGN_BATCHES, VARIANCE_OR_NCOMP
+
+
+@app.cell
+def _(
+    AGG_METHOD,
+    CONTROL_KEY,
+    CONTROL_NAME_COL,
+    PERTURBATION_NAME_COL,
+    TVN_BATCH_CORRECTION,
+    VARIANCE_OR_NCOMP,
+    aggregate,
+    embed_by_pca,
+    pad_features,
+    pad_metadata,
+    pd,
+    tvn_on_controls,
+):
+    pca_embeddings = embed_by_pca(
+        pad_features,
+        pad_metadata,
+        variance_or_ncomp=VARIANCE_OR_NCOMP,
+        batch_col="batch_values",
+    )
+
+    tvn_normalized = tvn_on_controls(
+        pca_embeddings,
+        pad_metadata,
+        PERTURBATION_NAME_COL,
+        CONTROL_KEY,
+        "batch_values" if TVN_BATCH_CORRECTION else None,
+        control_col=CONTROL_NAME_COL,
+    )
+
+    aggregated_embeddings, aggregated_metadata = aggregate(
+        tvn_normalized, pad_metadata, PERTURBATION_NAME_COL, AGG_METHOD
+    )
+
+    feature_columns = [f"PC_{i}" for i in range(tvn_normalized.shape[1])]
+
+    tvn_normalized_df = pd.DataFrame(
+        tvn_normalized, index=pad_metadata.index, columns=feature_columns
+    )
+    aligned_cell_data = pd.concat([pad_metadata, tvn_normalized_df], axis=1)
+
+    aggregated_embeddings_df = pd.DataFrame(
+        aggregated_embeddings, index=aggregated_metadata.index, columns=feature_columns
+    )
+    aggregated_cell_data = (
+        pd.concat([aggregated_metadata, aggregated_embeddings_df], axis=1)
+        .sort_values("cell_count", ascending=False)
+        .reset_index(drop=True)
+    )
+    return aggregated_cell_data, aligned_cell_data
+
+
+@app.cell
+def _(
+    aggregated_cell_data,
+    aligned_cell_data,
+    dataset_features,
+    dataset_metadata,
+    pd,
+    plot_feature_distributions,
+    plt,
+    random,
+):
+    original_feature_cols = [_col for _col in dataset_features.columns if 'cell_' in _col and _col.endswith('_mean')]
+    pc_cols = [_col for _col in aggregated_cell_data.columns if _col.startswith('PC_')]
+    aligned_feature_cols = random.sample(pc_cols, k=min(len(original_feature_cols), len(pc_cols)))
+    original_cell_data = pd.concat([dataset_metadata, dataset_features], axis=1)
+    original_cell_data
+    feature_distributions_fig = plot_feature_distributions(original_feature_cols, original_cell_data, aligned_feature_cols, aligned_cell_data)
+    plt.show()
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## Set parameters
+    ### Generate feature table & bootstrapping
+
+    Bootstrapping is a statistical resampling method used to determine if perturbations (gene knockdowns, drug treatments, etc.) cause statistically significant changes compared to controls. The method works by:
+    1. Taking your control population and repeatedly resampling it to create thousands of "null" distributions
+    2. Comparing each perturbation's effect size against these null distributions
+    3. Calculating p-values based on how often the null distributions produce effects as large as the real perturbation
+
+    - `FEATURE_NORMALIZATION`: Method for normalizing features before bootstrapping. Options: `"standard"` (standard scalar) or `"mad"` (median absolute deviation).
+    - `NUM_SIMS`: Number of bootstrap simulations to run for statistical testing. Ex: `100000`.
+    - `EXCLUSION_STRING`: String to exclude certain constructs from analysis (optional). Ex: `"nontargeting_noncutting_"` or `None`.
+    - `BOOTSTRAP_CELL_CLASS`: Cell class to run bootstrapping on. Ex: `"Interphase"` or `"all"`.
+    - `BOOTSTRAP_CHANNEL_COMBO`: Channel combination to run bootstrapping on. Ex: `"DAPI_GFP"`.
+    - `PSEUDOGENE_PATTERNS`: Dictionary defining how to group single-construct genes into pseudo-genes for more robust statistical testing. For each pattern category, specify:
+      - `pattern`: Regex pattern to match gene names
+      - `constructs_per_pseudogene`: Number of constructs to group together
+    - `BOOTSTRAP_EXTRA_FEATURES`: Extra feature tags to bootstrap over, **in addition** to the default set (optional). By default the bootstrap runs on a curated subset of **nucleus/cell** features: intensity (`*_mean`, `*_int`, `*_mass_displacement`, `*_mean_edge`, `*_std_edge`, `*_mean_frac_0`, `*_mean_frac_3`), shape (`*_area`, `*_solidity`, `*_form_factor`, `*_eccentricity`), and overlap (`*_manders*`, `*_correlation*`) (defined in `get_feature_table_cols`, `brieflow/workflow/lib/aggregate/cell_data_utils.py`). To test features outside this set (e.g. radial metrics), pass a list of substrings matching their column names — any feature whose name contains one of the tags is added. Ex: `["radial_cv", "frac_at_d"]` or `None`. For full manual control instead, set `bootstrap_features_fp` in the config to a file listing the exact features (one per line), which bypasses the default subset entirely. See `brieflow/workflow/lib/external/CP_EMULATOR_FEATURES.md` → *Bootstrap Feature Selection* for the full included/excluded breakdown.
+
+    **Note**: Without the combinations configured, bootstrapping will be skipped entirely. Bootstrap analysis can take hours to days depending on `NUM_SIMS` and dataset size.
+    """)
+    return
+
+
+@app.cell
+def params_bootstrap():
+    FEATURE_NORMALIZATION = 'mad'
+    NUM_SIMS = None
+    EXCLUSION_STRING = None
+    PSEUDOGENE_PATTERNS = None
+    BOOTSTRAP_EXTRA_FEATURES = None    # e.g., ["radial_cv", "frac_at_d"]
+    return (
+        BOOTSTRAP_EXTRA_FEATURES,
+        EXCLUSION_STRING,
+        FEATURE_NORMALIZATION,
+        NUM_SIMS,
+        PSEUDOGENE_PATTERNS,
+    )
+
+
+@app.cell
+def _(CHANNEL_COMBOS, CELL_CLASSES, COMPARTMENT_COMBOS, SPLIT_BY_COMPARTMENT):
+    # Bootstrap the largest channel combo, every cell class, and every compartment combo when splitting by compartment
+    BOOTSTRAP_CHANNEL_COMBO = (
+        "_".join(max(CHANNEL_COMBOS, key=len)) if CHANNEL_COMBOS else None
+    )
+    BOOTSTRAP_CELL_CLASS = list(CELL_CLASSES) if CELL_CLASSES else None
+    BOOTSTRAP_COMPARTMENT_COMBO = (
+        ["-".join(combo) for combo in COMPARTMENT_COMBOS]
+        if SPLIT_BY_COMPARTMENT and COMPARTMENT_COMBOS
+        else None
+    )
+    return BOOTSTRAP_CELL_CLASS, BOOTSTRAP_CHANNEL_COMBO, BOOTSTRAP_COMPARTMENT_COMBO
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## Write config
+    """)
+    return
+
+
+@app.cell
+def _(
+    AGGREGATE_COMBO_FP,
+    AGG_METHOD,
+    BATCH_COLS,
+    BOOTSTRAP_CELL_CLASS,
+    BOOTSTRAP_CHANNEL_COMBO,
+    BOOTSTRAP_COMPARTMENT_COMBO,
+    BOOTSTRAP_CONTROL_SCOPE,
+    BOOTSTRAP_EXTRA_FEATURES,
+    BOOTSTRAP_REFERENCE_GROUP,
+    COLLAPSE_COLS,
+    CONFIG_FILE_HEADER,
+    CONFIG_FILE_PATH,
+    CONTAMINATION,
+    CONTROL_KEY,
+    CONTROL_NAME_COL,
+    DROP_COLS_THRESHOLD,
+    DROP_ROWS_THRESHOLD,
+    EXCLUSION_STRING,
+    FEATURE_NORMALIZATION,
+    FILTER_QUERIES,
+    GENERATE_MONTAGES,
+    GROUP_COLS,
+    IMPUTE,
+    METADATA_COLS_FP,
+    MONTAGE_CELL_SIZE,
+    MONTAGE_NUM_CELLS,
+    MONTAGE_SHAPE,
+    NUM_ALIGN_BATCHES,
+    NUM_SIMS,
+    PERTURBATION_ID_COL,
+    PERTURBATION_NAME_COL,
+    PSEUDOGENE_PATTERNS,
+    PS_PERCENTILE_THRESHOLD,
+    PS_PROBABILITY_THRESHOLD,
+    SECOND_OBJ_AGG_STRATEGY,
+    SKIP_PERTURBATION_SCORE,
+    SPLIT_BY_COMPARTMENT,
+    SPLIT_COL,
+    TVN_BATCH_CORRECTION,
+    VARIANCE_OR_NCOMP,
+    WELL_ANNOTATIONS_FP,
+    config,
+    convert_tuples_to_lists,
+    product,
+    yaml,
+):
+    # Classifier settings stay in config["classify"], written by 4_classify.py
+    config['aggregate'] = {'metadata_cols_fp': METADATA_COLS_FP, 'collapse_cols': COLLAPSE_COLS, 'aggregate_combo_fp': AGGREGATE_COMBO_FP, 'split_by_compartment': SPLIT_BY_COMPARTMENT, 'second_obj_agg_strategy': SECOND_OBJ_AGG_STRATEGY, 'filter_queries': FILTER_QUERIES, 'perturbation_name_col': PERTURBATION_NAME_COL, 'drop_cols_threshold': DROP_COLS_THRESHOLD, 'drop_rows_threshold': DROP_ROWS_THRESHOLD, 'impute': IMPUTE, 'contamination': CONTAMINATION, 'batch_cols': BATCH_COLS, 'control_key': CONTROL_KEY, 'control_name_col': CONTROL_NAME_COL, 'tvn_batch_correction': TVN_BATCH_CORRECTION, 'perturbation_id_col': PERTURBATION_ID_COL, 'variance_or_ncomp': VARIANCE_OR_NCOMP, 'num_align_batches': NUM_ALIGN_BATCHES, 'agg_method': AGG_METHOD, 'skip_perturbation_score': SKIP_PERTURBATION_SCORE, 'ps_probability_threshold': PS_PROBABILITY_THRESHOLD, 'ps_percentile_threshold': PS_PERCENTILE_THRESHOLD, 'montage_num_cells': MONTAGE_NUM_CELLS, 'montage_cell_size': MONTAGE_CELL_SIZE, 'montage_shape': list(MONTAGE_SHAPE), 'generate_montages': GENERATE_MONTAGES, 'well_annotations_fp': WELL_ANNOTATIONS_FP, 'split_col': SPLIT_COL, 'group_cols': GROUP_COLS, 'bootstrap_control_scope': BOOTSTRAP_CONTROL_SCOPE, 'bootstrap_reference_group': BOOTSTRAP_REFERENCE_GROUP}
+    if BOOTSTRAP_CELL_CLASS and BOOTSTRAP_CHANNEL_COMBO:
+        cell_classes_list = BOOTSTRAP_CELL_CLASS if isinstance(BOOTSTRAP_CELL_CLASS, list) else [BOOTSTRAP_CELL_CLASS]
+        channel_combos_list = BOOTSTRAP_CHANNEL_COMBO if isinstance(BOOTSTRAP_CHANNEL_COMBO, list) else [BOOTSTRAP_CHANNEL_COMBO]
+        BOOTSTRAP_COMBINATIONS = [{'cell_class': cc, 'channel_combo': ch} for cc, ch in product(cell_classes_list, channel_combos_list)]
+        if SPLIT_BY_COMPARTMENT and BOOTSTRAP_COMPARTMENT_COMBO:
+            BOOTSTRAP_COMBINATIONS = [{**combo, 'compartment_combo': cp} for combo, cp in product(BOOTSTRAP_COMBINATIONS, BOOTSTRAP_COMPARTMENT_COMBO)]
+        config['aggregate'].update({'feature_normalization': FEATURE_NORMALIZATION, 'num_sims': NUM_SIMS, 'exclusion_string': EXCLUSION_STRING, 'bootstrap_combinations': BOOTSTRAP_COMBINATIONS, 'pseudogene_patterns': PSEUDOGENE_PATTERNS, 'bootstrap_extra_features': BOOTSTRAP_EXTRA_FEATURES})
+    safe_config = convert_tuples_to_lists(config)
+    with open(CONFIG_FILE_PATH, 'w') as _config_file:
+        _config_file.write(CONFIG_FILE_HEADER)
+        yaml.dump(safe_config, _config_file, default_flow_style=False, sort_keys=False)
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## Next
+
+    Run `bash flow.sh aggregate` (add `--backend slurm` on a cluster), then open `6_cluster.py`.
+    """)
+    return
+
+
+if __name__ == "__main__":
+    app.run()

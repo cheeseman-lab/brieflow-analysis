@@ -1,60 +1,151 @@
-# Screen Information
+# screen.yaml — description of the experimental setup, written by the person who ran the screen.
+# Fields marked REQUIRED must be filled before setup or a run can start; brieflow-auto stops and
+# lists any that are blank. Everything else is optional: leave it null if you do not know it.
+
+# =========================================================================
+# collection
+# =========================================================================
+collection:
+  title: null                                     # screen or paper title, used in the cluster-annotation context
+  publication_doi: null
+  screen_id: null                                 # short id for run records; null = the repository name without "-analysis"
+
+# =========================================================================
+# experiment (ontology-tagged for BIA archival)
+# =========================================================================
 experiment:
-  id: ""  # Experiment identifier
-  notebook_entries: ""  # Links or references to lab notebook entries
-  dates: 
-    start: ""
-    end: ""
+  screen_title: null                              # short slug; matches conda env brieflow_<id>
+  organism_ontology_term_id: "NCBITaxon:9606"     # NCBI taxid — drives SPECIES_ID (UniProt + CORUM/MSigDB/STRING benchmarks). human 9606 · mouse 10090 · rat 10116
+  organism: "Homo sapiens"
+  tissue_ontology_term_id: null                   # e.g. CVCL_0030 for HeLa
+  tissue: null                                    # e.g. "HeLa"
+  tissue_type: "cell line"
+  disease_ontology_term_id: "PATO:0000461"
+  disease: "normal"
+  development_stage_ontology_term_id: "na"
+  development_stage: "na"
+  assay_ontology_term_id: "EFO:0022605"
+  assay: "optical pooled screening"
+  pseudobulk: []
 
-# Cellular Conditions
+
+# =========================================================================
+# cellular
+# =========================================================================
 cellular:
-  cell_line: ""  # e.g., HeLa, HEK293, etc.
-  imaging_timepoint: ""  # When imaging occurred after treatment
-  treatment:
-    summary: ""  # Brief description of treatment
-    details: ""  # Detailed protocol or conditions
-  plates: ""  # Number of plates
-  wells_per_plate: ""  # Number of wells per plate
+  growth_conditions: null
+  plate_type: null
+  imaging_timepoint: null                         # e.g. "78 hours post-transfection"
+  seeding:
+    density_cells_cm2: null
+  induction:
+    duration: ""
+  well_annotations: null                          # table of the wells to analyze, beside this file: plate, well, one column per condition (e.g. "well_annotations.tsv"); only these wells are processed. null = every imaged well
+  split_by: null                                  # table column whose values each get their own aggregation and clustering (e.g. "experiment"); null = one dataset
+  group_by: null                                  # table column aggregated within, in one shared space: each perturbation x value is one point (e.g. "treatment"); null = none
+  reference_group: null                           # value of group_by that each perturbation is scored against within its own arm (e.g. "Ethanol" vehicle); null = scored against the negative controls
 
-# Sequencing by Synthesis (SBS)
-sbs:
-  cycles: ""  # Number of cycles
-  cycle_order: ""  # Order of cycles
-  background_channel: ""  # Suggested background channel
-  library_details:
-    number_of_genes: ""
-    guides_per_gene: ""
-    other_information: ""
+# =========================================================================
+# library
+# =========================================================================
+library:
+  vector: null
+  gene_selection: null
+  positive_controls: []
+  negative_controls: ["nontargeting"]             # gene names that mark control guides
+  type: null                                      # REQUIRED: simple (one barcode column) | multi (MAP + RECOMB barcodes)
+  detection_target: null                          # REQUIRED: DNA | RNA. DNA barcodes give nuclear spots and sort calls by peak; RNA (T7-amplified or mRNA) gives cytoplasmic spots and sorts by count
+  number_of_genes: null
+  raw_design_table_fp: null                       # REQUIRED: barcode/design table inside this repository (e.g. "config/barcode_library_design.tsv")
+  # --- simple mode (type: simple): one barcode column ---
+  barcode_col: null                               # REQUIRED for simple: name of the column in raw_design_table_fp that holds each guide's barcode sequence
+  # --- multi mode (type: multi): two barcode columns + per-region lengths + sequencing order ---
+  barcode_map_col: null                           # REQUIRED for multi: column of MAP-region barcode sequences (e.g. "iBAR_2")
+  barcode_recomb_col: null                        # REQUIRED for multi: column of RECOMB-region barcode sequences (e.g. "iBAR_1")
+  barcode_length_map: null                        # REQUIRED for multi: MAP-region length in cycles (e.g. 12)
+  barcode_length_recomb: null                     # REQUIRED for multi: RECOMB-region length in cycles (e.g. 2)
+  sequencing_order: null                          # REQUIRED for multi: "map_recomb" (MAP sequenced first) | "recomb_map"
+  skip_cycles: null                               # SBS cycle numbers dropped on every plate (e.g. [6] for a cycle that failed); null = none
+  gene_symbol_col: null                           # REQUIRED: name of the column in raw_design_table_fp that holds each guide's gene symbol
+  gene_id_col: null                               # name of the column in raw_design_table_fp that holds a gene identifier (e.g. Ensembl); null = none
 
-# Phenotype (PH) Steps
+# =========================================================================
+# iss (in-situ sequencing / SBS)
+# =========================================================================
+iss:
+  cycles: null                                    # REQUIRED: number of SBS cycles imaged
+  objective: null                                 # e.g. "10X 0.45 NA"; descriptive (pixel sizes are read from the image metadata)
+  chemistry: null                                 # REQUIRED: "four color" (one base per channel) | "combinatorial" (two-color: bases encoded by which dyes are on)
+  combinatorial:                                  # combinatorial chemistry only; leave code null for four color
+    code: null                                    # each base -> the dye channels that are ON for it (names must match iss.channels); [] = no dye
+    # Two-color example: channels keep their dye names and the code maps bases to dyes.
+    #   channels: DAPI, Dye1, Dye2, Dye3
+    #   code: { G: [], T: ["Dye1"], C: ["Dye1", "Dye2"], A: ["Dye2", "Dye3"] }
+  channels:                                       # REQUIRED: one entry per imaging channel, in file order. Four color: name base channels G/T/A/C. Combinatorial: use the dye names from the code
+    - { name: null, laser_wavelength_nm: null, exposure_time_ms: null }  # e.g. four color: DAPI, G, T, A, C
+    # ... add one entry per channel ...
+  binning: null                                   # 1 (none) | 2 (2x2); descriptive
+  cycle_order: null                               # descriptive: base order across the four sequencing channels
+  background_channel_nucleus:                     # channel and cycle used as the SBS nuclear background
+    channel: "DAPI"                               # descriptive: always the DAPI channel
+    cycle: null                                   # cycle whose DAPI image segments SBS nuclei (usually 1); null = asked at launch
+  background_channel_cell:                        # channel and cycle used as the SBS cytoplasmic background
+    channel: null                                 # a channel name from iss.channels used to segment SBS cells; null = asked at launch
+    cycle: null                                   # cycle of that channel; null = asked at launch
+  plate_overrides: null                           # per-plate SBS differences, e.g. { 1: { skip_cycles: [1] }, 2: { manual_background_cycle: 3 } }; null = none
+
+# =========================================================================
+# phenotype
+# =========================================================================
 phenotype:
-  background_channel_cell: ""  # For cell segmentation
-  background_channel_body: ""  # For body (e.g. parasite) segmentation
-  
-  # Rounds of staining/imaging (in order they were stained for each round)
-  # Add more rounds as needed
-  rounds:
-    - round_number: 1
-      stains:
-        - name: "DAPI"  # Name of stain/antibody
-          marker_of: "Nuclei"  # What it marks
-          channel: "DAPI"  # Channel used (e.g., DAPI, CY3)
-        - name: "ConA"
-          marker_of: "Cytoplasm"
-          channel: "AF750"
-    
-    - round_number: 2
-      stains:
-        - name: ""  # Name of stain/antibody
-          marker_of: ""  # What it marks
-          channel: ""  # Channel used (e.g., DAPI, CY3)
-        - name: ""
-          marker_of: ""
-          channel: ""
+  objective: null                                 # e.g. "20X 0.75 NA"
+  channels:                                       # one entry per phenotype channel
+    # biological_name is what features get named (e.g. DAPI_mean, GFP_mean).
+    # fluorophore_token is what appears in the raw filename (DAPI, GFP, A594, A750).
+    # Every channel needs a biological_name (REQUIRED); the other fields are optional.
+    - biological_name: null                       # e.g. "DAPI"  -> channels_metadata.name
+      marker_of: null                             # e.g. "Nuclei" -> biological_annotation.biological_target
+      description: null                           # free text used verbatim where marker_of would be, e.g. "membrane stain used to outline cells, not a readout of protein level"; every mozzarellm screen context containing this channel inherits it
+      marker: null                                # gene or protein the stain marks -> biological_annotation.marker
+      marker_type: null                           # "dye" | "antibody" | "endogenous_tag" -> biological_annotation.marker_type
+      fluorophore_token: null                     # the channel's name in the raw file names (e.g. "GFP")
+      laser_wavelength_nm: null
+      exposure_time_ms: null
+    # ... add one entry per channel ...
+  binning: null                                   # 1 (none) | 2 (2x2)
+  channels_imaged_together: null                  # true = every field was imaged in all channels before the stage moved (no channel alignment); false = channels imaged in separate passes, so they are aligned; null = asked
+  segment_cells: null                             # true = segment cells around each nucleus (cellpose cyto); false = nuclei-only feature extraction (skip cellpose cell mask)
+  background_channel_nucleus: "DAPI"              # biological_name of the nuclear-boundary marker (e.g. "DAPI")
+  background_channel_cell: null                   # biological_name of the cell-boundary marker (e.g. "WGA"); required only when segment_cells: true
+  foci_channel: null                              # biological_name of the foci/puncta marker (e.g. "gH2AX"); null = no foci pipeline. Drives FOCI_CHANNEL + routes the foci pipeline on/off.
+  second_obj_channel: null                        # biological_name of the secondary object marker (e.g. a pathogen or organelle stain); descriptive only: the notebooks do not read it (the brieflow-auto plugin uses it to prefill SECOND_OBJ_CHANNEL / SECOND_OBJ_DETECTION); secondary objects are switched on by SECOND_OBJ_DETECTION + SECOND_OBJ_CHANNEL in 2_phenotype.py.
 
-# Data Generated
+# =========================================================================
+# microscope
+# =========================================================================
+microscope:
+  system: null
+
+# =========================================================================
+# pipeline (where brieflow lives + which env runs it)
+# =========================================================================
+pipeline:
+  github: "cheeseman-lab/brieflow"
+  version: null                                   # branch or tag (e.g. "main" or a release tag)
+  conda_env: null                                 # REQUIRED: env that runs the pipeline, e.g. "brieflow_<screen>" (setup fills this when it builds the env)
+
+# =========================================================================
+# data (where the raw images are)
+# =========================================================================
 data:
-  storage_format: ""  # e.g., .nd2, .tiff
-  location: "/lab/.."  # Base path for data storage
-  
-  notes: ""  # Any additional notes about the data or file naming conventions
+  storage_format: null                            # nd2 | tiff | zarr
+  location: null                                  # base path (e.g. /data/ops/<screen>)
+  input_sbs_dir: null                             # REQUIRED: raw SBS images on this machine (plate_<N>/c<M>/ below it); setup fills this when it stages the data
+  input_phenotype_dir: null                       # REQUIRED: raw phenotype images on this machine (plate_<N>/round_<M>/ below it)
+
+# =========================================================================
+# additional_notes — free-text observations the fields above miss: imaging anomalies, why a cycle was skipped, QC caveats
+# =========================================================================
+additional_notes: |                               # free text; brieflow-auto reads it and confirms any setting it suggests with you
+  # e.g. "Cycle 1 looked misaligned relative to the other channels; it was
+  #       skipped and an additional cycle mapped accordingly."
