@@ -338,21 +338,25 @@ def _(
     PREPROCESS_FP = ROOT_FP / "preprocess"
     IMAGE_FORMAT = config["all"].get("image_format", "tiff")
     if IMAGE_FORMAT == "zarr":
-        sbs_test_image_paths = expand(
+        # One converted image per tile holds every cycle; read them in SBS_CYCLES order
+        sbs_test_image_path = (
             PREPROCESS_FP
             / "sbs"
-            / get_hcs_nested_path(
-                {
-                    "plate": TEST_PLATE,
-                    "row": split_well(TEST_WELL)[0],
-                    "col": split_well(TEST_WELL)[1],
-                    "tile": TEST_TILE,
-                    "cycle": "{cycle}",
-                },
-                "image",
-            ),
-            cycle=SBS_CYCLES,
+            / Path(
+                get_hcs_nested_path(
+                    {
+                        "plate": TEST_PLATE,
+                        "row": split_well(TEST_WELL)[0],
+                        "col": split_well(TEST_WELL)[1],
+                        "tile": TEST_TILE,
+                    },
+                    "image",
+                )
+            ).parent
         )
+        sbs_test_images = [
+            read_image(sbs_test_image_path, cycle=_cycle) for _cycle in SBS_CYCLES
+        ]
     else:
         sbs_test_image_paths = expand(
             PREPROCESS_FP
@@ -369,7 +373,7 @@ def _(
             ),
             cycle=SBS_CYCLES,
         )
-    sbs_test_images = [read_image(file_path) for file_path in sbs_test_image_paths]
+        sbs_test_images = [read_image(file_path) for file_path in sbs_test_image_paths]
     print("Aligning test images...")
     aligned = align_cycles(
         sbs_test_images,
