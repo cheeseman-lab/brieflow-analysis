@@ -2,35 +2,27 @@
 # Set slurm_partition and slurm_account for your cluster; left unset, sbatch uses the cluster default partition and snakemake guesses the account.
 # Job logs go to slurm/slurm_output/rule via flow.sh --slurm-logdir; the executor rejects --output in slurm_extra.
 # flow.sh uses `jobs` below as the concurrent-job limit unless --jobs is given.
+# Quote a numeric partition ("20"): a group job adds up every integer resource of its jobs.
 
 default-resources:
-    # slurm_partition: <partition>
+    # slurm_partition: "<partition>"
     # slurm_account: <account>
     mem_mb: 3000
-    tasks: 1
     cpus_per_task: 1
     runtime: "1d"
 jobs: 150
 
+# Each preprocess Slurm job runs this many convert or metadata jobs in turn; fewer suits small screens.
+group-components:
+    - preprocess_sbs=50
+    - preprocess_phenotype=50
+
 set-resources:
-    # preprocess
-    extract_metadata_sbs:
-        mem_mb: 2000
+    # preprocess: convert, extract_metadata and calculate_ic size their own memory in brieflow
     combine_metadata_sbs:
         mem_mb: 2500
-    extract_metadata_phenotype:
-        mem_mb: 2000
     combine_metadata_phenotype:
         mem_mb: 2500
-    convert_sbs:
-        mem_mb: 2000
-    convert_phenotype:
-        mem_mb: 2000
-    calculate_ic_sbs:
-        mem_mb: 50000
-    # IC peak memory is about n_tiles x channels x height x width x 8 bytes per well; size this to your geometry.
-    calculate_ic_phenotype:
-        mem_mb: 500000
 
     # sbs
     align_sbs:
