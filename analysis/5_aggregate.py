@@ -409,7 +409,7 @@ def _(
         cell_classes = list(classified_metadata['class'].unique())
     if TEST_MONTAGE_CHANNEL is not None:
         classified_metadata_copy = classified_metadata.copy(deep=True)
-        classified_metadata_copy = add_filenames(classified_metadata_copy, ROOT_FP, img_fmt=config['all'].get('image_format', 'tiff'))
+        classified_metadata_copy = add_filenames(classified_metadata_copy, ROOT_FP, img_fmt=config['all'].get('image_format', 'zarr'))
         _split_values = classified_metadata_copy[SPLIT_COL].astype(str)
         # only the test wells are loaded, so skip groups with no cells in them
         cell_class_dfs = {cell_class: classified_metadata_copy[_split_values == str(cell_class)] for cell_class in CELL_CLASSES}
