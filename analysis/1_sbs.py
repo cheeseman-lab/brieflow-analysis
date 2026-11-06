@@ -336,7 +336,7 @@ def _(
     print("Loading test images...")
     ROOT_FP = Path(config["all"]["root_fp"])
     PREPROCESS_FP = ROOT_FP / "preprocess"
-    IMAGE_FORMAT = config["all"].get("image_format", "tiff")
+    IMAGE_FORMAT = config["all"].get("image_format", "zarr")
     if IMAGE_FORMAT == "zarr":
         sbs_test_image_paths = expand(
             PREPROCESS_FP

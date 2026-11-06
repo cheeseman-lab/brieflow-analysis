@@ -118,7 +118,7 @@ def _(CONFIG_FILE_PATH, Path, yaml):
     ROOT_FP = Path(config["all"]["root_fp"])
     PERTURBATION_NAME_COL = config["aggregate"]["perturbation_name_col"]
     CONTROL_KEY = config["aggregate"]["control_key"]
-    IMAGE_FORMAT = config["all"].get("image_format", "tiff")
+    IMAGE_FORMAT = config["all"].get("image_format", "zarr")
     SPLIT_BY_COMPARTMENT = config["aggregate"].get("split_by_compartment", False)
     print(f"Root path: {ROOT_FP}")
     print(f"Perturbation name column: {PERTURBATION_NAME_COL}")
