@@ -1026,6 +1026,7 @@ def _(
     TRAINING_OBJECT_TYPES,
     class_id,
     class_labels,
+    config,
     data,
     exclude_markers,
     feature_markers,
@@ -1055,6 +1056,7 @@ def _(
             training_channels=TRAINING_CHANNELS,
             training_object_types=TRAINING_OBJECT_TYPES,
             verbose=True,
+            transparent_figures=config["all"].get("transparent_figures", False),
         )
         multiclass_df = _pipeline_result["metrics_df"]
         last_training_run_dir = _pipeline_result["dirs"]["run"]
