@@ -170,7 +170,7 @@ def _(
     print('Loading test image...')
     ROOT_FP = Path(config['all']['root_fp'])
     PREPROCESS_FP = ROOT_FP / 'preprocess'
-    IMAGE_FORMAT = config['all'].get('image_format', 'tiff')
+    IMAGE_FORMAT = config['all'].get('image_format', 'zarr')
     # Zarr images and IC fields sit under preprocess/<phenotype|ic_fields/phenotype>/<plate>/<row>/<col>/
     _row, _col = split_well(TEST_WELL)
     if IMAGE_FORMAT == 'zarr':
