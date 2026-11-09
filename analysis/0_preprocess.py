@@ -926,6 +926,8 @@ def _(
 
         # Processing parameters
         "sample_fraction": SAMPLE_FRACTION,
+        # Fold metadata extraction into convert and finalize each modality on its own
+        "fewer_jobs": True,
 
         # OME-Zarr channels_metadata (written to plate-root zarr.json)
         "sbs_channels_metadata": SBS_CHANNELS_METADATA,
