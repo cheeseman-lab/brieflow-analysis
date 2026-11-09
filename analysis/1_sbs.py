@@ -1289,6 +1289,8 @@ def _(mo):
 
     - `DYE_SCALE`: Multiplier per dye channel, applied before the ON/OFF fractions are computed. A dye that images dimmer than the others never reaches the ON threshold in a two-dye base, so that base is called as the one-dye base instead, with no error raised. The tell is a one-sided substitution spectrum: most single-base errors are one two-dye base called as the matching one-dye base, with the dim dye's fraction sitting just under the ON threshold. Set the factor that brings the dim dye's brightness up to the others, e.g. `{"Alexa 488": 1.5}`, and confirm it against a decoy library before keeping it.
     - `BRIGHTNESS_REGIONS`: Inclusive 1-based cycle ranges over which the blank state's brightness reference is taken. A cycle is called blank when it is dim relative to that reference; taken across all cycles, a barcode whose regions are imaged at different brightness has its dim region called blank too often. Set this to the barcode's regions, normally `[[MAP_START, MAP_END], [RECOMB_START, RECOMB_END]]` as defined below. Cycles outside every listed region keep the all-cycle reference.
+
+    `AMBIGUOUS_CALL` sets what combinatorial `frac` calls a cycle whose dye state is equally near two or more bases, for example all dyes ON in a code where two bases share all but one dye. `"N"` (default) calls it `N`, a no-call that `N_WILDCARD` and `RECOMB_MAX_N` below can resolve. `"nearest"` calls the first tied base in `COMBINATORIAL_CODE` order, so every tied cycle is called as that one base. Check the choice in the tied dye state plot below.
     """)
     return
 
@@ -1302,7 +1304,9 @@ def params_read_calling():
     COMBINATORIAL_CODE = None  # combinatorial only, e.g. {"A": ["Red"], "C": ["Green"], "G": ["Red", "Green"], "T": []}
     DYE_SCALE = None  # combinatorial frac only, e.g. {"Alexa 488": 1.5}
     BRIGHTNESS_REGIONS = None  # combinatorial frac only, e.g. [[1, 7], [8, 12]]
+    AMBIGUOUS_CALL = "N"  # combinatorial frac only: "N" | "nearest"
     return (
+        AMBIGUOUS_CALL,
         BRIGHTNESS_REGIONS,
         CALL_READS_METHOD,
         CHEMISTRY,
@@ -1313,12 +1317,14 @@ def params_read_calling():
 
 
 @app.cell
-def _(BRIGHTNESS_REGIONS, COMBINATORIAL_CODE, DYE_SCALE):
+def _(AMBIGUOUS_CALL, BRIGHTNESS_REGIONS, COMBINATORIAL_CODE, DYE_SCALE):
     COMBINATORIAL = {"code": COMBINATORIAL_CODE}
     if DYE_SCALE:
         COMBINATORIAL["dye_scale"] = DYE_SCALE
     if BRIGHTNESS_REGIONS:
         COMBINATORIAL["brightness_regions"] = BRIGHTNESS_REGIONS
+    if AMBIGUOUS_CALL:
+        COMBINATORIAL["ambiguous_call"] = AMBIGUOUS_CALL
     return (COMBINATORIAL,)
 
 
@@ -1361,7 +1367,68 @@ def _(
         combinatorial=COMBINATORIAL if CHEMISTRY == "combinatorial" else None,
         codebook=codebook,
     )
-    return (df_reads,)
+    return (
+        df_bases,
+        df_reads,
+    )
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ### Check tied dye states
+
+    Combinatorial `frac` only. Each bar is one cycle's called-base mix over the cell-associated reads: on the left, ties go to the nearest base in code order; on the right, they follow `AMBIGUOUS_CALL`. If one base's share drops by about the `N` share, tied cycles were being called as that base: keep `AMBIGUOUS_CALL = "N"`. A near-zero `N` share means the setting changes nothing here.
+    """)
+    return
+
+
+@app.cell
+def _(
+    CALL_READS_METHOD,
+    CHEMISTRY,
+    COMBINATORIAL,
+    call_reads,
+    df_bases,
+    df_reads,
+    pd,
+    peaks,
+    plt,
+):
+    if CHEMISTRY == "combinatorial" and CALL_READS_METHOD == "frac":
+        _views = {
+            "nearest": call_reads(
+                df_bases,
+                peaks_data=peaks,
+                method="frac",
+                chemistry=CHEMISTRY,
+                combinatorial={**COMBINATORIAL, "ambiguous_call": "nearest"},
+            ),
+            f"AMBIGUOUS_CALL = {COMBINATORIAL.get('ambiguous_call')!r}": df_reads,
+        }
+        _bases = sorted(COMBINATORIAL["code"]) + ["N"]
+        _fig, _axes = plt.subplots(1, 2, figsize=(12, 4), sharey=True)
+        for _ax, (_title, _reads) in zip(_axes, _views.items()):
+            _calls = pd.DataFrame(
+                [list(_b) for _b in _reads.loc[_reads["cell"] > 0, "barcode"]]
+            )
+            _shares = (
+                _calls.apply(lambda _c: _c.value_counts(normalize=True))
+                .reindex(_bases)
+                .fillna(0)
+                .T
+            )
+            _shares.index = _shares.index + 1
+            _shares.plot.bar(stacked=True, ax=_ax, width=0.85, legend=False)
+            _ax.set_title(_title)
+            _ax.set_xlabel("Cycle")
+            _ax.set_ylabel("Share of calls")
+        _axes[1].legend(title="Base", bbox_to_anchor=(1.01, 1), loc="upper left")
+        plt.tight_layout()
+        plt.show()
+    else:
+        print("Tied dye state check applies to combinatorial frac only.")
+    return
 
 
 @app.cell(hide_code=True)
@@ -1445,6 +1512,10 @@ def _(mo):
     **Recombination Quality Filtering (Multi-mode only):**
     - `RECOMB_FILTER_COL`: Quality column in the reads data to use for filtering recombination calls. Set to `"Q_recomb"` to filter based on the minimum quality score across recombination cycles (computed by `prep_multi_reads`). Set to `None` to disable quality filtering.
     - `RECOMB_Q_THRESH`: Quality score threshold for accepting recombination barcode calls. Reads with `RECOMB_FILTER_COL` below this threshold will have their recombination status set to undetermined. Default is 0.1.
+    - `RECOMB_MAX_N`: Number of `N` cycles allowed in the recombination barcode. Up to this many are skipped when it is compared with the expected one; with more, the recombination status is left undetermined. Default is 2.
+
+    **No-call (`N`) cycles:**
+    - `N_WILDCARD`: A barcode with up to this many `N` cycles is resolved to the one library barcode that agrees at every other cycle; it stays unmapped when no barcode or several barcodes agree. Default is 1; `0` turns this off.
 
     **Note**: The output will include `no_recomb_0` and `no_recomb_1` columns indicating whether each cell's barcodes show recombination (True = no recombination detected, barcodes match library expectations).
 
@@ -1498,15 +1569,19 @@ def params_cell_calling():
     BARCODE_INFO_COLS = None  # optional additional barcode info cols
     RECOMB_FILTER_COL = "Q_recomb"  # multi mode: quality col for recomb filtering
     RECOMB_Q_THRESH = 0.1  # multi mode: quality threshold for recomb calls
+    RECOMB_MAX_N = 2  # multi mode: N cycles skipped in the recomb check
+    N_WILDCARD = 1  # N cycles resolved against the library; 0 turns off
     return (
         BARCODE_INFO_COLS,
         ERROR_CORRECT,
         MAP_END,
         MAP_START,
         MAX_DISTANCE,
+        N_WILDCARD,
         Q_MIN,
         RECOMB_END,
         RECOMB_FILTER_COL,
+        RECOMB_MAX_N,
         RECOMB_Q_THRESH,
         RECOMB_START,
         SORT_CALLS,
@@ -1574,12 +1649,14 @@ def _(
     MAP_START,
     MAX_DISTANCE,
     N_BARCODES,
+    N_WILDCARD,
     PREFIX_COL,
     PREFIX_MAP,
     PREFIX_RECOMB,
     Q_MIN,
     RECOMB_END,
     RECOMB_FILTER_COL,
+    RECOMB_MAX_N,
     RECOMB_Q_THRESH,
     RECOMB_START,
     SORT_CALLS,
@@ -1608,6 +1685,7 @@ def _(
             sort_calls=SORT_CALLS,
             max_distance=MAX_DISTANCE,
             n_barcodes=N_BARCODES,
+            n_wildcard=N_WILDCARD,
         )
     elif BARCODE_TYPE == "multi":
         # call_cells runs prep_multi_reads itself when map_start/map_end are set, so it takes the raw df_reads
@@ -1624,11 +1702,13 @@ def _(
             prefix_recomb=PREFIX_RECOMB,
             recomb_filter_col=RECOMB_FILTER_COL,
             recomb_q_thresh=RECOMB_Q_THRESH,
+            recomb_max_n=RECOMB_MAX_N,
             error_correct=ERROR_CORRECT,
             sort_calls=SORT_CALLS,
             max_distance=MAX_DISTANCE,
             n_barcodes=N_BARCODES,
             barcode_info_cols=BARCODE_INFO_COLS,
+            n_wildcard=N_WILDCARD,
         )
     print(f"Called {len(df_cells)} cells using {BARCODE_TYPE} mode")
     mo.output.append(mo.ui.table(df_cells))
@@ -1727,6 +1807,7 @@ def _(
     MAX_DISTANCE,
     MAX_FILTER_WIDTH,
     N_BARCODES,
+    N_WILDCARD,
     NUCLEI_CELLPROB_THRESHOLD,
     NUCLEI_DIAMETER,
     NUCLEI_FLOW_THRESHOLD,
@@ -1740,6 +1821,7 @@ def _(
     Q_MIN,
     RECOMB_END,
     RECOMB_FILTER_COL,
+    RECOMB_MAX_N,
     RECOMB_Q_THRESH,
     RECOMB_START,
     RECONCILE,
@@ -1792,6 +1874,7 @@ def _(
         "error_correct": ERROR_CORRECT,
         "sort_calls": SORT_CALLS,
         "n_barcodes": N_BARCODES,
+        "n_wildcard": N_WILDCARD,
         "barcode_type": BARCODE_TYPE,
     }
     if CHEMISTRY == "combinatorial":
@@ -1809,6 +1892,7 @@ def _(
                 "recomb_start": RECOMB_START,
                 "recomb_end": RECOMB_END,
                 "prefix_recomb": PREFIX_RECOMB,
+                "recomb_max_n": RECOMB_MAX_N,
             }
         )
         if RECOMB_FILTER_COL is not None:
