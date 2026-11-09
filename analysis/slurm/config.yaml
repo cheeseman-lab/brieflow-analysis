@@ -24,30 +24,41 @@ set-resources:
     combine_metadata_phenotype:
         mem_mb: 2500
 
-    # sbs
+    # sbs: a tile's grouped steps run one after another, so a group asks for the sum of their runtimes
     align_sbs:
         mem_mb: 2500
+        runtime: "4h"
     log_filter:
         mem_mb: 2500
+        runtime: "4h"
     compute_standard_deviation:
         mem_mb: 2500
+        runtime: "4h"
     find_peaks:
         mem_mb: 2000
+        runtime: "4h"
     max_filter:
         mem_mb: 2000
+        runtime: "4h"
     apply_ic_field_sbs:
         mem_mb: 2500
+        runtime: "4h"
     segment_sbs:
-        mem_mb: 3500
+        mem_mb: 5000
         cpus_per_task: 4
+        runtime: "4h"
     extract_bases:
         mem_mb: 2000
+        runtime: "4h"
     call_reads:
         mem_mb: 1500
+        runtime: "4h"
     call_cells:
         mem_mb: 1500
+        runtime: "4h"
     extract_sbs_info:
         mem_mb: 2000
+        runtime: "4h"
     combine_reads:
         mem_mb: 20000
     combine_cells:
@@ -63,15 +74,20 @@ set-resources:
     # phenotype
     apply_ic_field_phenotype:
         mem_mb: 2000
+        runtime: "4h"
     align_phenotype:
         mem_mb: 2000
+        runtime: "4h"
     segment_phenotype:
-        mem_mb: 3000
+        mem_mb: 6000
         cpus_per_task: 4
+        runtime: "4h"
     identify_cytoplasm:
         mem_mb: 1000
+        runtime: "4h"
     extract_phenotype_info:
         mem_mb: 1000
+        runtime: "4h"
     combine_phenotype_info:
         mem_mb: 20000
     extract_phenotype_cp:

@@ -310,8 +310,8 @@ build_snakemake_cmd() {
             cmd+=" --slurm-array-limit=${SLURM_ARRAY_LIMIT}"
         fi
         cmd+=" --slurm-jobname-prefix=brieflow"
-        # The executor runs a group's jobs one at a time, so --cores 1 sizes each preprocess group as serial work
-        if [[ "$target" == "all_preprocess" ]]; then
+        # The executor runs a group's jobs one at a time, so --cores 1 sizes each group as serial work
+        if [[ " all_preprocess all_sbs all_phenotype " == *" $target "* ]]; then
             cmd+=" --cores 1"
         fi
         cmd+=" --slurm-logdir=slurm/slurm_output/rule"
