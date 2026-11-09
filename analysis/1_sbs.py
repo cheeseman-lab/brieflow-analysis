@@ -229,6 +229,9 @@ def _(mo):
       - `WINDOW`: A centered subset of data is used for alignment if greater than one. Defaults to `2`
           - Higher values use more of the image for alignment registration.
           - Set to `1` to use the full image.
+      - `USE_ALIGN_WITHIN_CYCLE`: Register the base channels of each cycle to the first base channel before aligning cycles. Defaults to `True`
+          - Set to `False` when the channels of a cycle are already registered and the aligned base channels show large black bands (a large spurious shift), for example from haze on one channel or a very dim channel with few spots.
+          - Leave it on otherwise: some screens rely on it to register base channels whose position changes from cycle to cycle.
       - `SKIP_CYCLES`: Optional. List of cycle numbers (values of the `cycle` column, as listed in `SBS_CYCLES`) to skip during alignment. Defaults to `None`
           - Use this to exclude problematic cycles that would interfere with alignment
           - Example: `[1]` to skip cycle 1, `[1, 6]` to skip cycles 1 and 6
@@ -276,6 +279,7 @@ def params_alignment():
     ALIGNMENT_METHOD = None
     UPSAMPLE_FACTOR = 2  # library default
     WINDOW = 2  # library default
+    USE_ALIGN_WITHIN_CYCLE = True
     SKIP_CYCLES = None
     MANUAL_BACKGROUND_CYCLE = None
     MANUAL_CHANNEL_MAPPING = None
@@ -285,6 +289,7 @@ def params_alignment():
         MANUAL_CHANNEL_MAPPING,
         SKIP_CYCLES,
         UPSAMPLE_FACTOR,
+        USE_ALIGN_WITHIN_CYCLE,
         WINDOW,
     )
 
@@ -304,6 +309,7 @@ def _(
     TEST_TILE,
     TEST_WELL,
     UPSAMPLE_FACTOR,
+    USE_ALIGN_WITHIN_CYCLE,
     WINDOW,
     align_cycles,
     create_micropanel,
@@ -380,6 +386,7 @@ def _(
         skip_cycles=SKIP_CYCLES_INDICES,
         manual_background_cycle=MANUAL_BACKGROUND_CYCLE_INDEX,
         manual_channel_mapping=MANUAL_CHANNEL_MAPPING,
+        use_align_within_cycle=USE_ALIGN_WITHIN_CYCLE,
         verbose=True,
     )
     print("Example aligned image for first cycle:")
@@ -1839,6 +1846,7 @@ def _(
     THRESHOLD_DAPI,
     THRESHOLD_READS,
     UPSAMPLE_FACTOR,
+    USE_ALIGN_WITHIN_CYCLE,
     WINDOW,
     config,
     convert_tuples_to_lists,
@@ -1852,6 +1860,7 @@ def _(
         "skip_cycles_indices": SKIP_CYCLES_INDICES,
         "manual_background_cycle_index": MANUAL_BACKGROUND_CYCLE_INDEX,
         "manual_channel_mapping": MANUAL_CHANNEL_MAPPING,
+        "use_align_within_cycle": USE_ALIGN_WITHIN_CYCLE,
         "extra_channel_indices": EXTRA_CHANNEL_INDICES,
         "max_filter_width": MAX_FILTER_WIDTH,
         "spot_detection_method": SPOT_DETECTION_METHOD,
