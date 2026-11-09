@@ -62,30 +62,6 @@ SLURM_ARRAY_LIMIT=10
 LATENCY_WAIT=5
 MAX_STATUS_CHECKS=""
 
-# Rule groups per module (for slurm batching)
-SBS_GROUPS=(
-    "align_sbs=sbs_tile_group"
-    "log_filter=sbs_tile_group"
-    "max_filter=sbs_tile_group"
-    "compute_standard_deviation=sbs_tile_group"
-    "find_peaks=sbs_tile_group"
-    "apply_ic_field_sbs=sbs_tile_group"
-    "segment_sbs=sbs_tile_group"
-    "extract_sbs_info=sbs_tile_group"
-    "extract_bases=sbs_tile_group"
-    "call_reads=sbs_tile_group"
-    "call_cells=sbs_tile_group"
-)
-
-PHENOTYPE_GROUPS=(
-    "apply_ic_field_phenotype=phenotype_tile_group"
-    "align_phenotype=phenotype_tile_group"
-    "segment_phenotype=phenotype_tile_group"
-    "extract_phenotype_info=phenotype_tile_group"
-    "identify_cytoplasm=phenotype_tile_group"
-    "extract_phenotype=phenotype_tile_group"
-)
-
 # Modules that support sequential plate processing
 PLATE_SEQUENTIAL_MODULES="preprocess sbs phenotype"
 
@@ -381,19 +357,6 @@ build_snakemake_cmd() {
     echo "$cmd"
 }
 
-get_groups_flag() {
-    # Always emit both groups so tile rules re-run by a later module stay grouped (the argument is unused)
-    local _module_unused="$1"
-    local groups_flag="--groups"
-    for g in "${SBS_GROUPS[@]}"; do
-        groups_flag+=" ${g}"
-    done
-    for g in "${PHENOTYPE_GROUPS[@]}"; do
-        groups_flag+=" ${g}"
-    done
-    echo "$groups_flag"
-}
-
 # ---------------------------------------------------------------------------
 # Module runners
 # ---------------------------------------------------------------------------
@@ -429,15 +392,6 @@ run_snakemake_module() {
         local cmd
         cmd=$(build_snakemake_cmd "$target" "$ONLY_PLATE")
 
-        # Add groups for slurm
-        if [[ "$BACKEND" == "slurm" ]]; then
-            local groups
-            groups=$(get_groups_flag "$module")
-            if [[ -n "$groups" ]]; then
-                cmd+=" ${groups}"
-            fi
-        fi
-
         eval "$cmd"
     elif [[ "$use_plates" == true ]]; then
         # Determine plate count
@@ -462,15 +416,6 @@ run_snakemake_module() {
             local cmd
             cmd=$(build_snakemake_cmd "$target" "$plate")
 
-            # Add groups for slurm
-            if [[ "$BACKEND" == "slurm" ]]; then
-                local groups
-                groups=$(get_groups_flag "$module")
-                if [[ -n "$groups" ]]; then
-                    cmd+=" ${groups}"
-                fi
-            fi
-
             eval "$cmd"
             local exit_code=$?
 
@@ -491,15 +436,6 @@ run_snakemake_module() {
     else
         local cmd
         cmd=$(build_snakemake_cmd "$target")
-
-        # Add groups for slurm
-        if [[ "$BACKEND" == "slurm" ]]; then
-            local groups
-            groups=$(get_groups_flag "$module")
-            if [[ -n "$groups" ]]; then
-                cmd+=" ${groups}"
-            fi
-        fi
 
         eval "$cmd"
     fi

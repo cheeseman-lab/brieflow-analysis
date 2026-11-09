@@ -2,60 +2,107 @@
 # Set slurm_partition and slurm_account for your cluster; left unset, sbatch uses the cluster default partition and snakemake guesses the account.
 # Job logs go to slurm/slurm_output/rule via flow.sh --slurm-logdir; the executor rejects --output in slurm_extra.
 # flow.sh uses `jobs` below as the concurrent-job limit unless --jobs is given.
+# A group job adds up its jobs' integer resources, so quote a numeric partition ("20") and leave tasks unset.
 
 default-resources:
-    # slurm_partition: <partition>
+    # slurm_partition: "<partition>"
     # slurm_account: <account>
     mem_mb: 3000
-    tasks: 1
     cpus_per_task: 1
     runtime: "1d"
 jobs: 150
 
+# A group's jobs run one after another in one Slurm job; cores: 1 makes Snakemake size each group
+# as that serial work (largest job's CPUs and memory, summed runtime). On Slurm it does not limit
+# how many jobs are submitted.
+cores: 1
+
+# One Slurm job per tile for SBS and phenotype; 50 preprocess convert or metadata jobs per Slurm job.
+groups:
+    - convert_sbs=preprocess_sbs
+    - extract_metadata_sbs=preprocess_sbs
+    - convert_phenotype=preprocess_phenotype
+    - extract_metadata_phenotype=preprocess_phenotype
+    - align_sbs=sbs_tile_group
+    - log_filter=sbs_tile_group
+    - max_filter=sbs_tile_group
+    - compute_standard_deviation=sbs_tile_group
+    - find_peaks=sbs_tile_group
+    - apply_ic_field_sbs=sbs_tile_group
+    - segment_sbs=sbs_tile_group
+    - extract_sbs_info=sbs_tile_group
+    - extract_bases=sbs_tile_group
+    - call_reads=sbs_tile_group
+    - call_cells=sbs_tile_group
+    - apply_ic_field_phenotype=phenotype_tile_group
+    - align_phenotype=phenotype_tile_group
+    - segment_phenotype=phenotype_tile_group
+    - extract_phenotype_info=phenotype_tile_group
+    - identify_cytoplasm=phenotype_tile_group
+    - extract_phenotype_cp=phenotype_tile_group
+group-components:
+    - preprocess_sbs=50
+    - preprocess_phenotype=50
+
 set-resources:
-    # preprocess
+    # preprocess: grouped jobs ask for the sum of their runtimes
     extract_metadata_sbs:
-        mem_mb: 2000
+        mem_mb: 1000
+        runtime: "20m"
     combine_metadata_sbs:
         mem_mb: 2500
     extract_metadata_phenotype:
-        mem_mb: 2000
+        mem_mb: 1000
+        runtime: "20m"
     combine_metadata_phenotype:
         mem_mb: 2500
     convert_sbs:
-        mem_mb: 2000
+        mem_mb: 1000
+        runtime: "20m"
     convert_phenotype:
-        mem_mb: 2000
+        mem_mb: 1000
+        runtime: "20m"
     calculate_ic_sbs:
         mem_mb: 50000
     # IC peak memory is about n_tiles x channels x height x width x 8 bytes per well; size this to your geometry.
     calculate_ic_phenotype:
         mem_mb: 500000
 
-    # sbs
+    # sbs: a tile group asks for the sum of its steps' runtimes
     align_sbs:
         mem_mb: 2500
+        runtime: "4h"
     log_filter:
         mem_mb: 2500
+        runtime: "4h"
     compute_standard_deviation:
         mem_mb: 2500
+        runtime: "4h"
     find_peaks:
         mem_mb: 2000
+        runtime: "4h"
     max_filter:
         mem_mb: 2000
+        runtime: "4h"
     apply_ic_field_sbs:
         mem_mb: 2500
+        runtime: "4h"
     segment_sbs:
-        mem_mb: 3500
+        mem_mb: 5000
         cpus_per_task: 4
+        runtime: "4h"
     extract_bases:
         mem_mb: 2000
+        runtime: "4h"
     call_reads:
         mem_mb: 1500
+        runtime: "4h"
     call_cells:
         mem_mb: 1500
+        runtime: "4h"
     extract_sbs_info:
         mem_mb: 2000
+        runtime: "4h"
     combine_reads:
         mem_mb: 20000
     combine_cells:
@@ -71,19 +118,25 @@ set-resources:
     # phenotype
     apply_ic_field_phenotype:
         mem_mb: 2000
+        runtime: "4h"
     align_phenotype:
         mem_mb: 2000
+        runtime: "4h"
     segment_phenotype:
-        mem_mb: 3000
+        mem_mb: 6000
         cpus_per_task: 4
+        runtime: "4h"
     identify_cytoplasm:
         mem_mb: 1000
+        runtime: "4h"
     extract_phenotype_info:
         mem_mb: 1000
+        runtime: "4h"
     combine_phenotype_info:
         mem_mb: 20000
     extract_phenotype_cp:
         mem_mb: 3000
+        runtime: "4h"
     merge_phenotype:
         mem_mb: 300000
     eval_segmentation_phenotype:
