@@ -182,7 +182,7 @@ def params_test_metadata():
 def _(Path, TEST_PLATE, TEST_WELL, config, get_tile_dimensions):
     # Read the tile size of each modality from its processed images
     ROOT_FP = Path(config["all"]["root_fp"])
-    IMAGE_FORMAT = config["all"].get("image_format", "tiff")
+    IMAGE_FORMAT = config["all"].get("image_format", "zarr")
     PHENOTYPE_DIMENSIONS = get_tile_dimensions(ROOT_FP, "phenotype", IMAGE_FORMAT, TEST_PLATE, TEST_WELL)
     SBS_DIMENSIONS = get_tile_dimensions(ROOT_FP, "sbs", IMAGE_FORMAT, TEST_PLATE, TEST_WELL)
     print(f"Phenotype image dimensions: {PHENOTYPE_DIMENSIONS}")
@@ -633,7 +633,7 @@ def _(
             TEST_WELL,
             _ph_tile,
             _sbs_site,
-            config["all"].get("image_format", "tiff"),
+            config["all"].get("image_format", "zarr"),
             config.get("phenotype", {}).get("channel_names") or [],
             config.get("sbs", {}).get("channel_names") or [],
         )
@@ -772,7 +772,7 @@ def _(
         'sbs': {t for _m, _a, _b in _overlaps if _m == 'sbs' for t in (_a, _b)} | {_s for _p, _s in _in_sbs},
     }
     _labels, _images = overlay_image_paths(
-        image_path_templates(ROOT_FP, config['all'].get('image_format', 'tiff')), _tiles, TEST_PLATE, TEST_WELL
+        image_path_templates(ROOT_FP, config['all'].get('image_format', 'zarr')), _tiles, TEST_PLATE, TEST_WELL
     )
     _dapi = {_m: config.get(_m, {}).get('dapi_index') or 0 for _m in ('phenotype', 'sbs')}
     _overlap_records, _overlap_fig = plot_tile_overlaps(positions_placement, _overlaps, _labels, _images, _dapi)

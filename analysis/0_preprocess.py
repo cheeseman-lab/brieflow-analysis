@@ -86,6 +86,7 @@ def _(mo):
       - Use `"zarr"` for OME-Zarr outputs (writes `*.zarr/` directories + `zarr.json` metadata).
       - Use `"tiff"` for legacy TIFF-based outputs.
     - `ZARR_MAX_LEVELS`: Resolution levels written for each converted raw image in `"zarr"` mode. `1` writes no pyramid; more levels make large tiles quick to browse in napari and cost disk (5 levels added ~16% on the small test). Pixels at full resolution never change.
+    - `TRANSPARENT_FIGURES`: Save the pipeline's QC and cluster plots (PNGs in each `eval/` directory, `cluster/` and the classifier outputs) with a transparent background, e.g. for import into Illustrator. `False` saves them on white.
 
     *Note: Paths can be absolute or relative to where workflows are run from.*
     """)
@@ -98,7 +99,14 @@ def params_paths():
     ROOT_FP = "brieflow_output/"
     IMAGE_FORMAT = "zarr"              # "zarr" | "tiff"
     ZARR_MAX_LEVELS = 1                # 1 = no pyramid
-    return CONFIG_FILE_PATH, IMAGE_FORMAT, ROOT_FP, ZARR_MAX_LEVELS
+    TRANSPARENT_FIGURES = False        # True = transparent plot backgrounds
+    return (
+        CONFIG_FILE_PATH,
+        IMAGE_FORMAT,
+        ROOT_FP,
+        TRANSPARENT_FIGURES,
+        ZARR_MAX_LEVELS,
+    )
 
 
 @app.cell
@@ -874,6 +882,7 @@ def _(
     PHENOTYPE_N_Z_PLANES,
     PHENOTYPE_ROUND_ORDER,
     PHENOTYPE_SAMPLES_DF_FP,
+    Path,
     ROOT_FP,
     SAMPLE_FRACTION,
     SBS_CHANNEL_ORDER,
@@ -885,18 +894,27 @@ def _(
     SBS_METADATA_SAMPLES_DF_FP,
     SBS_N_Z_PLANES,
     SBS_SAMPLES_DF_FP,
+    TRANSPARENT_FIGURES,
     ZARR_MAX_LEVELS,
     convert_tuples_to_lists,
     yaml,
 ):
+    # Keep keys added by hand to the all section of an existing config
+    existing_all = {}
+    if Path(CONFIG_FILE_PATH).exists():
+        with open(CONFIG_FILE_PATH) as existing_file:
+            existing_all = (yaml.safe_load(existing_file) or {}).get("all") or {}
+
     # Create empty config variable
     config = {}
 
     # Add all section
     config["all"] = {
+        **existing_all,
         "root_fp": ROOT_FP,
         "image_format": IMAGE_FORMAT,
         "zarr_max_levels": ZARR_MAX_LEVELS,
+        "transparent_figures": TRANSPARENT_FIGURES,
     }
 
     # Add preprocess section

@@ -62,30 +62,6 @@ SLURM_ARRAY_LIMIT=10
 LATENCY_WAIT=5
 MAX_STATUS_CHECKS=""
 
-# Rule groups per module (for slurm batching)
-SBS_GROUPS=(
-    "align_sbs=sbs_tile_group"
-    "log_filter=sbs_tile_group"
-    "max_filter=sbs_tile_group"
-    "compute_standard_deviation=sbs_tile_group"
-    "find_peaks=sbs_tile_group"
-    "apply_ic_field_sbs=sbs_tile_group"
-    "segment_sbs=sbs_tile_group"
-    "extract_sbs_info=sbs_tile_group"
-    "extract_bases=sbs_tile_group"
-    "call_reads=sbs_tile_group"
-    "call_cells=sbs_tile_group"
-)
-
-PHENOTYPE_GROUPS=(
-    "apply_ic_field_phenotype=phenotype_tile_group"
-    "align_phenotype=phenotype_tile_group"
-    "segment_phenotype=phenotype_tile_group"
-    "extract_phenotype_info=phenotype_tile_group"
-    "identify_cytoplasm=phenotype_tile_group"
-    "extract_phenotype=phenotype_tile_group"
-)
-
 # Modules that support sequential plate processing
 PLATE_SEQUENTIAL_MODULES="preprocess sbs phenotype"
 
@@ -295,6 +271,20 @@ check_unlock() {
 # ---------------------------------------------------------------------------
 # Snakemake invocation builder
 # ---------------------------------------------------------------------------
+profile_set_resources() {
+    # rule:resource=value entries of a Slurm profile's set-resources, for the command line
+    python - "$1/config.yaml" <<'PY'
+import sys
+import yaml
+
+with open(sys.argv[1]) as fh:
+    profile = yaml.safe_load(fh) or {}
+for rule, resources in (profile.get("set-resources") or {}).items():
+    for key, value in (resources or {}).items():
+        print(f"{rule}:{key}={value}", end=" ")
+PY
+}
+
 build_snakemake_cmd() {
     local target="$1"
     local plate_filter="${2:-}"
@@ -346,8 +336,13 @@ build_snakemake_cmd() {
     # Re-run jobs left incomplete by a killed job instead of refusing to build the DAG
     cmd+=" --rerun-incomplete"
     # Resolved --set-resources go before --until so snakemake parses them as set-resources entries
+    # --set-resources on the command line replaces the profile's set-resources, so on Slurm repeat them first
     if [ -n "$RESOLVED_SET_RESOURCES" ]; then
-        cmd+=" --set-resources ${RESOLVED_SET_RESOURCES}"
+        local profile_set_resources=""
+        if [[ "$BACKEND" == "slurm" ]]; then
+            profile_set_resources=$(profile_set_resources "${SLURM_PROFILE}")
+        fi
+        cmd+=" --set-resources ${profile_set_resources} ${RESOLVED_SET_RESOURCES}"
     fi
     # mtime triggers miss an edited rule script, so --forcerun reruns the listed rules
     if [[ -n "$FORCERUN" ]]; then
@@ -379,19 +374,6 @@ build_snakemake_cmd() {
     fi
 
     echo "$cmd"
-}
-
-get_groups_flag() {
-    # Always emit both groups so tile rules re-run by a later module stay grouped (the argument is unused)
-    local _module_unused="$1"
-    local groups_flag="--groups"
-    for g in "${SBS_GROUPS[@]}"; do
-        groups_flag+=" ${g}"
-    done
-    for g in "${PHENOTYPE_GROUPS[@]}"; do
-        groups_flag+=" ${g}"
-    done
-    echo "$groups_flag"
 }
 
 # ---------------------------------------------------------------------------
@@ -429,15 +411,6 @@ run_snakemake_module() {
         local cmd
         cmd=$(build_snakemake_cmd "$target" "$ONLY_PLATE")
 
-        # Add groups for slurm
-        if [[ "$BACKEND" == "slurm" ]]; then
-            local groups
-            groups=$(get_groups_flag "$module")
-            if [[ -n "$groups" ]]; then
-                cmd+=" ${groups}"
-            fi
-        fi
-
         eval "$cmd"
     elif [[ "$use_plates" == true ]]; then
         # Determine plate count
@@ -462,15 +435,6 @@ run_snakemake_module() {
             local cmd
             cmd=$(build_snakemake_cmd "$target" "$plate")
 
-            # Add groups for slurm
-            if [[ "$BACKEND" == "slurm" ]]; then
-                local groups
-                groups=$(get_groups_flag "$module")
-                if [[ -n "$groups" ]]; then
-                    cmd+=" ${groups}"
-                fi
-            fi
-
             eval "$cmd"
             local exit_code=$?
 
@@ -491,15 +455,6 @@ run_snakemake_module() {
     else
         local cmd
         cmd=$(build_snakemake_cmd "$target")
-
-        # Add groups for slurm
-        if [[ "$BACKEND" == "slurm" ]]; then
-            local groups
-            groups=$(get_groups_flag "$module")
-            if [[ -n "$groups" ]]; then
-                cmd+=" ${groups}"
-            fi
-        fi
 
         eval "$cmd"
     fi

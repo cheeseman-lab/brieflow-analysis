@@ -229,6 +229,9 @@ def _(mo):
       - `WINDOW`: A centered subset of data is used for alignment if greater than one. Defaults to `2`
           - Higher values use more of the image for alignment registration.
           - Set to `1` to use the full image.
+      - `USE_ALIGN_WITHIN_CYCLE`: Register the base channels of each cycle to the first base channel before aligning cycles. Defaults to `True`
+          - Set to `False` when the channels of a cycle are already registered and the aligned base channels show large black bands (a large spurious shift), for example from haze on one channel or a very dim channel with few spots.
+          - Leave it on otherwise: some screens rely on it to register base channels whose position changes from cycle to cycle.
       - `SKIP_CYCLES`: Optional. List of cycle numbers (values of the `cycle` column, as listed in `SBS_CYCLES`) to skip during alignment. Defaults to `None`
           - Use this to exclude problematic cycles that would interfere with alignment
           - Example: `[1]` to skip cycle 1, `[1, 6]` to skip cycles 1 and 6
@@ -276,6 +279,7 @@ def params_alignment():
     ALIGNMENT_METHOD = None
     UPSAMPLE_FACTOR = 2  # library default
     WINDOW = 2  # library default
+    USE_ALIGN_WITHIN_CYCLE = True
     SKIP_CYCLES = None
     MANUAL_BACKGROUND_CYCLE = None
     MANUAL_CHANNEL_MAPPING = None
@@ -285,6 +289,7 @@ def params_alignment():
         MANUAL_CHANNEL_MAPPING,
         SKIP_CYCLES,
         UPSAMPLE_FACTOR,
+        USE_ALIGN_WITHIN_CYCLE,
         WINDOW,
     )
 
@@ -304,6 +309,7 @@ def _(
     TEST_TILE,
     TEST_WELL,
     UPSAMPLE_FACTOR,
+    USE_ALIGN_WITHIN_CYCLE,
     WINDOW,
     align_cycles,
     create_micropanel,
@@ -336,7 +342,7 @@ def _(
     print("Loading test images...")
     ROOT_FP = Path(config["all"]["root_fp"])
     PREPROCESS_FP = ROOT_FP / "preprocess"
-    IMAGE_FORMAT = config["all"].get("image_format", "tiff")
+    IMAGE_FORMAT = config["all"].get("image_format", "zarr")
     if IMAGE_FORMAT == "zarr":
         sbs_test_image_paths = expand(
             PREPROCESS_FP
@@ -380,6 +386,7 @@ def _(
         skip_cycles=SKIP_CYCLES_INDICES,
         manual_background_cycle=MANUAL_BACKGROUND_CYCLE_INDEX,
         manual_channel_mapping=MANUAL_CHANNEL_MAPPING,
+        use_align_within_cycle=USE_ALIGN_WITHIN_CYCLE,
         verbose=True,
     )
     print("Example aligned image for first cycle:")
@@ -804,14 +811,14 @@ def _(mo):
     - `SEGMENT_CELLS`: Whether to segment cells, or only segment nuclei. If spots are contained in nuclei, there is no need to segment cell bodies. This may speed up analysis.
 
     #### Cellpose Parameters (if using "cellpose")
-    - `CELLPOSE_MODEL`: CellPose model to use. Options: "cyto3" (default), "cyto2", "cyto", "nuclei", or "cpsam" (requires Cellpose 4.x).
+    - `CELLPOSE_MODEL`: CellPose model to use. Options: "cyto3" (default), "cyto2", "cyto", "nuclei", or "cpsam" (Cellpose 4; brieflow installs Cellpose 3 and 4 and picks the version from the model).
       - When `SEGMENT_CELLS = True`: The "nuclei" model is always used for nuclei segmentation, and `CELLPOSE_MODEL` is used for cell segmentation.
       - When `SEGMENT_CELLS = False`: `CELLPOSE_MODEL` is used directly for nuclei segmentation. The default "cyto3" works well, but you can set to "nuclei" if preferred.
       - For CPSAM: The "cpsam" model is used for both nuclei and cells regardless of `SEGMENT_CELLS`.
     - `CELL_FLOW_THRESHOLD` & `NUCLEI_FLOW_THRESHOLD`: Flow threshold for Cellpose segmentation. Default is 0.4.
     - `CELL_CELLPROB_THRESHOLD` & `NUCLEI_CELLPROB_THRESHOLD`: Cell probability threshold for Cellpose. Default is 0.
     - `HELPER_INDEX`: (Optional) Index of additional channel to help with CPSAM segmentation. Only used with `cellpose_model="cpsam"`. Default is None.
-    - Note: For Cellpose 3.x models (cyto3, cyto2), nuclei and cell diameters will be estimated automatically. For CPSAM (Cellpose 4.x), diameters can be left as None and will be estimated from initial segmentation results.
+    - Note: For Cellpose 3.x models (cyto3, cyto2), nuclei and cell diameters will be estimated automatically. For cpsam, diameters can be left as None and will be estimated from initial segmentation results.
 
     #### StarDist Parameters (if using "stardist")
     - `STARDIST_MODEL`: StarDist model type. Default is "2D_versatile_fluo".
@@ -876,14 +883,9 @@ def params_segmentation():
 
 @app.cell
 def _(CELLPOSE_MODEL, CYTO_INDEX, DAPI_INDEX, SEGMENTATION_METHOD, corrected_image):
-    # Cellpose 4.x, cpsam and custom model paths have no size model: derive diameters from the masks
-    from lib.shared.segment_cellpose import CELLPOSE_4X as _CELLPOSE_4X
-
+    # cpsam and custom model paths have no size model: derive diameters from the masks
     diameters_from_masks = SEGMENTATION_METHOD == "cellpose" and (
-        _CELLPOSE_4X
-        or CELLPOSE_MODEL == "cpsam"
-        or "/" in CELLPOSE_MODEL
-        or "\\" in CELLPOSE_MODEL
+        CELLPOSE_MODEL == "cpsam" or "/" in CELLPOSE_MODEL or "\\" in CELLPOSE_MODEL
     )
 
     # Estimate diameters (derivation; cellpose with a size model only)
@@ -1289,6 +1291,8 @@ def _(mo):
 
     - `DYE_SCALE`: Multiplier per dye channel, applied before the ON/OFF fractions are computed. A dye that images dimmer than the others never reaches the ON threshold in a two-dye base, so that base is called as the one-dye base instead, with no error raised. The tell is a one-sided substitution spectrum: most single-base errors are one two-dye base called as the matching one-dye base, with the dim dye's fraction sitting just under the ON threshold. Set the factor that brings the dim dye's brightness up to the others, e.g. `{"Alexa 488": 1.5}`, and confirm it against a decoy library before keeping it.
     - `BRIGHTNESS_REGIONS`: Inclusive 1-based cycle ranges over which the blank state's brightness reference is taken. A cycle is called blank when it is dim relative to that reference; taken across all cycles, a barcode whose regions are imaged at different brightness has its dim region called blank too often. Set this to the barcode's regions, normally `[[MAP_START, MAP_END], [RECOMB_START, RECOMB_END]]` as defined below. Cycles outside every listed region keep the all-cycle reference.
+
+    `AMBIGUOUS_CALL` sets what combinatorial `frac` calls a cycle whose dye state is equally near two or more bases, for example all dyes ON in a code where two bases share all but one dye. `"N"` (default) calls it `N`, a no-call that `N_WILDCARD` and `RECOMB_MAX_N` below can resolve. `"nearest"` calls the first tied base in `COMBINATORIAL_CODE` order, so every tied cycle is called as that one base. Check the choice in the tied dye state plot below.
     """)
     return
 
@@ -1302,7 +1306,9 @@ def params_read_calling():
     COMBINATORIAL_CODE = None  # combinatorial only, e.g. {"A": ["Red"], "C": ["Green"], "G": ["Red", "Green"], "T": []}
     DYE_SCALE = None  # combinatorial frac only, e.g. {"Alexa 488": 1.5}
     BRIGHTNESS_REGIONS = None  # combinatorial frac only, e.g. [[1, 7], [8, 12]]
+    AMBIGUOUS_CALL = "N"  # combinatorial frac only: "N" | "nearest"
     return (
+        AMBIGUOUS_CALL,
         BRIGHTNESS_REGIONS,
         CALL_READS_METHOD,
         CHEMISTRY,
@@ -1313,12 +1319,14 @@ def params_read_calling():
 
 
 @app.cell
-def _(BRIGHTNESS_REGIONS, COMBINATORIAL_CODE, DYE_SCALE):
+def _(AMBIGUOUS_CALL, BRIGHTNESS_REGIONS, COMBINATORIAL_CODE, DYE_SCALE):
     COMBINATORIAL = {"code": COMBINATORIAL_CODE}
     if DYE_SCALE:
         COMBINATORIAL["dye_scale"] = DYE_SCALE
     if BRIGHTNESS_REGIONS:
         COMBINATORIAL["brightness_regions"] = BRIGHTNESS_REGIONS
+    if AMBIGUOUS_CALL:
+        COMBINATORIAL["ambiguous_call"] = AMBIGUOUS_CALL
     return (COMBINATORIAL,)
 
 
@@ -1361,7 +1369,68 @@ def _(
         combinatorial=COMBINATORIAL if CHEMISTRY == "combinatorial" else None,
         codebook=codebook,
     )
-    return (df_reads,)
+    return (
+        df_bases,
+        df_reads,
+    )
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ### Check tied dye states
+
+    Combinatorial `frac` only. Each bar is one cycle's called-base mix over the cell-associated reads: on the left, ties go to the nearest base in code order; on the right, they follow `AMBIGUOUS_CALL`. If one base's share drops by about the `N` share, tied cycles were being called as that base: keep `AMBIGUOUS_CALL = "N"`. A near-zero `N` share means the setting changes nothing here.
+    """)
+    return
+
+
+@app.cell
+def _(
+    CALL_READS_METHOD,
+    CHEMISTRY,
+    COMBINATORIAL,
+    call_reads,
+    df_bases,
+    df_reads,
+    pd,
+    peaks,
+    plt,
+):
+    if CHEMISTRY == "combinatorial" and CALL_READS_METHOD == "frac":
+        _views = {
+            "nearest": call_reads(
+                df_bases,
+                peaks_data=peaks,
+                method="frac",
+                chemistry=CHEMISTRY,
+                combinatorial={**COMBINATORIAL, "ambiguous_call": "nearest"},
+            ),
+            f"AMBIGUOUS_CALL = {COMBINATORIAL.get('ambiguous_call')!r}": df_reads,
+        }
+        _bases = sorted(COMBINATORIAL["code"]) + ["N"]
+        _fig, _axes = plt.subplots(1, 2, figsize=(12, 4), sharey=True)
+        for _ax, (_title, _reads) in zip(_axes, _views.items()):
+            _calls = pd.DataFrame(
+                [list(_b) for _b in _reads.loc[_reads["cell"] > 0, "barcode"]]
+            )
+            _shares = (
+                _calls.apply(lambda _c: _c.value_counts(normalize=True))
+                .reindex(_bases)
+                .fillna(0)
+                .T
+            )
+            _shares.index = _shares.index + 1
+            _shares.plot.bar(stacked=True, ax=_ax, width=0.85, legend=False)
+            _ax.set_title(_title)
+            _ax.set_xlabel("Cycle")
+            _ax.set_ylabel("Share of calls")
+        _axes[1].legend(title="Base", bbox_to_anchor=(1.01, 1), loc="upper left")
+        plt.tight_layout()
+        plt.show()
+    else:
+        print("Tied dye state check applies to combinatorial frac only.")
+    return
 
 
 @app.cell(hide_code=True)
@@ -1445,6 +1514,10 @@ def _(mo):
     **Recombination Quality Filtering (Multi-mode only):**
     - `RECOMB_FILTER_COL`: Quality column in the reads data to use for filtering recombination calls. Set to `"Q_recomb"` to filter based on the minimum quality score across recombination cycles (computed by `prep_multi_reads`). Set to `None` to disable quality filtering.
     - `RECOMB_Q_THRESH`: Quality score threshold for accepting recombination barcode calls. Reads with `RECOMB_FILTER_COL` below this threshold will have their recombination status set to undetermined. Default is 0.1.
+    - `RECOMB_MAX_N`: Number of `N` cycles allowed in the recombination barcode. Up to this many are skipped when it is compared with the expected one; with more, the recombination status is left undetermined. Default is 2.
+
+    **No-call (`N`) cycles:**
+    - `N_WILDCARD`: A barcode with up to this many `N` cycles is resolved to the one library barcode that agrees at every other cycle; it stays unmapped when no barcode or several barcodes agree. Default is 1; `0` turns this off.
 
     **Note**: The output will include `no_recomb_0` and `no_recomb_1` columns indicating whether each cell's barcodes show recombination (True = no recombination detected, barcodes match library expectations).
 
@@ -1498,15 +1571,19 @@ def params_cell_calling():
     BARCODE_INFO_COLS = None  # optional additional barcode info cols
     RECOMB_FILTER_COL = "Q_recomb"  # multi mode: quality col for recomb filtering
     RECOMB_Q_THRESH = 0.1  # multi mode: quality threshold for recomb calls
+    RECOMB_MAX_N = 2  # multi mode: N cycles skipped in the recomb check
+    N_WILDCARD = 1  # N cycles resolved against the library; 0 turns off
     return (
         BARCODE_INFO_COLS,
         ERROR_CORRECT,
         MAP_END,
         MAP_START,
         MAX_DISTANCE,
+        N_WILDCARD,
         Q_MIN,
         RECOMB_END,
         RECOMB_FILTER_COL,
+        RECOMB_MAX_N,
         RECOMB_Q_THRESH,
         RECOMB_START,
         SORT_CALLS,
@@ -1574,12 +1651,14 @@ def _(
     MAP_START,
     MAX_DISTANCE,
     N_BARCODES,
+    N_WILDCARD,
     PREFIX_COL,
     PREFIX_MAP,
     PREFIX_RECOMB,
     Q_MIN,
     RECOMB_END,
     RECOMB_FILTER_COL,
+    RECOMB_MAX_N,
     RECOMB_Q_THRESH,
     RECOMB_START,
     SORT_CALLS,
@@ -1608,6 +1687,7 @@ def _(
             sort_calls=SORT_CALLS,
             max_distance=MAX_DISTANCE,
             n_barcodes=N_BARCODES,
+            n_wildcard=N_WILDCARD,
         )
     elif BARCODE_TYPE == "multi":
         # call_cells runs prep_multi_reads itself when map_start/map_end are set, so it takes the raw df_reads
@@ -1624,11 +1704,13 @@ def _(
             prefix_recomb=PREFIX_RECOMB,
             recomb_filter_col=RECOMB_FILTER_COL,
             recomb_q_thresh=RECOMB_Q_THRESH,
+            recomb_max_n=RECOMB_MAX_N,
             error_correct=ERROR_CORRECT,
             sort_calls=SORT_CALLS,
             max_distance=MAX_DISTANCE,
             n_barcodes=N_BARCODES,
             barcode_info_cols=BARCODE_INFO_COLS,
+            n_wildcard=N_WILDCARD,
         )
     print(f"Called {len(df_cells)} cells using {BARCODE_TYPE} mode")
     mo.output.append(mo.ui.table(df_cells))
@@ -1727,6 +1809,7 @@ def _(
     MAX_DISTANCE,
     MAX_FILTER_WIDTH,
     N_BARCODES,
+    N_WILDCARD,
     NUCLEI_CELLPROB_THRESHOLD,
     NUCLEI_DIAMETER,
     NUCLEI_FLOW_THRESHOLD,
@@ -1740,6 +1823,7 @@ def _(
     Q_MIN,
     RECOMB_END,
     RECOMB_FILTER_COL,
+    RECOMB_MAX_N,
     RECOMB_Q_THRESH,
     RECOMB_START,
     RECONCILE,
@@ -1757,6 +1841,7 @@ def _(
     THRESHOLD_DAPI,
     THRESHOLD_READS,
     UPSAMPLE_FACTOR,
+    USE_ALIGN_WITHIN_CYCLE,
     WINDOW,
     config,
     convert_tuples_to_lists,
@@ -1770,6 +1855,7 @@ def _(
         "skip_cycles_indices": SKIP_CYCLES_INDICES,
         "manual_background_cycle_index": MANUAL_BACKGROUND_CYCLE_INDEX,
         "manual_channel_mapping": MANUAL_CHANNEL_MAPPING,
+        "use_align_within_cycle": USE_ALIGN_WITHIN_CYCLE,
         "extra_channel_indices": EXTRA_CHANNEL_INDICES,
         "max_filter_width": MAX_FILTER_WIDTH,
         "spot_detection_method": SPOT_DETECTION_METHOD,
@@ -1792,6 +1878,7 @@ def _(
         "error_correct": ERROR_CORRECT,
         "sort_calls": SORT_CALLS,
         "n_barcodes": N_BARCODES,
+        "n_wildcard": N_WILDCARD,
         "barcode_type": BARCODE_TYPE,
     }
     if CHEMISTRY == "combinatorial":
@@ -1809,6 +1896,7 @@ def _(
                 "recomb_start": RECOMB_START,
                 "recomb_end": RECOMB_END,
                 "prefix_recomb": PREFIX_RECOMB,
+                "recomb_max_n": RECOMB_MAX_N,
             }
         )
         if RECOMB_FILTER_COL is not None:
