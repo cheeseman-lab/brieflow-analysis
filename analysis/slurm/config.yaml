@@ -17,12 +17,15 @@ jobs: 150
 # how many jobs are submitted.
 cores: 1
 
-# One Slurm job per tile for SBS and phenotype; 50 preprocess convert or metadata jobs per Slurm job.
+# One Slurm job per tile for SBS and phenotype.
+# Opt-in: uncomment the four preprocess lines and group-components to run 50 convert or metadata
+# jobs per Slurm job. That cuts submissions about 50x, but a failing or out-of-memory job fails its
+# whole group (completed members' outputs are removed and rerun), and a retry asks for the same memory.
 groups:
-    - convert_sbs=preprocess_sbs
-    - extract_metadata_sbs=preprocess_sbs
-    - convert_phenotype=preprocess_phenotype
-    - extract_metadata_phenotype=preprocess_phenotype
+    # - convert_sbs=preprocess_sbs
+    # - extract_metadata_sbs=preprocess_sbs
+    # - convert_phenotype=preprocess_phenotype
+    # - extract_metadata_phenotype=preprocess_phenotype
     - align_sbs=sbs_tile_group
     - log_filter=sbs_tile_group
     - max_filter=sbs_tile_group
@@ -40,9 +43,9 @@ groups:
     - extract_phenotype_info=phenotype_tile_group
     - identify_cytoplasm=phenotype_tile_group
     - extract_phenotype_cp=phenotype_tile_group
-group-components:
-    - preprocess_sbs=50
-    - preprocess_phenotype=50
+# group-components:
+#     - preprocess_sbs=50
+#     - preprocess_phenotype=50
 
 set-resources:
     # preprocess: grouped jobs ask for the sum of their runtimes
@@ -88,7 +91,7 @@ set-resources:
         mem_mb: 2500
         runtime: "4h"
     segment_sbs:
-        mem_mb: 5000
+        mem_mb: 8000
         cpus_per_task: 4
         runtime: "4h"
     extract_bases:
