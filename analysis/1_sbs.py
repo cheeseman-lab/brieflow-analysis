@@ -811,14 +811,14 @@ def _(mo):
     - `SEGMENT_CELLS`: Whether to segment cells, or only segment nuclei. If spots are contained in nuclei, there is no need to segment cell bodies. This may speed up analysis.
 
     #### Cellpose Parameters (if using "cellpose")
-    - `CELLPOSE_MODEL`: CellPose model to use. Options: "cyto3" (default), "cyto2", "cyto", "nuclei", or "cpsam" (requires Cellpose 4.x).
+    - `CELLPOSE_MODEL`: CellPose model to use. Options: "cyto3" (default), "cyto2", "cyto", "nuclei", or "cpsam" (Cellpose 4; brieflow installs Cellpose 3 and 4 and picks the version from the model).
       - When `SEGMENT_CELLS = True`: The "nuclei" model is always used for nuclei segmentation, and `CELLPOSE_MODEL` is used for cell segmentation.
       - When `SEGMENT_CELLS = False`: `CELLPOSE_MODEL` is used directly for nuclei segmentation. The default "cyto3" works well, but you can set to "nuclei" if preferred.
       - For CPSAM: The "cpsam" model is used for both nuclei and cells regardless of `SEGMENT_CELLS`.
     - `CELL_FLOW_THRESHOLD` & `NUCLEI_FLOW_THRESHOLD`: Flow threshold for Cellpose segmentation. Default is 0.4.
     - `CELL_CELLPROB_THRESHOLD` & `NUCLEI_CELLPROB_THRESHOLD`: Cell probability threshold for Cellpose. Default is 0.
     - `HELPER_INDEX`: (Optional) Index of additional channel to help with CPSAM segmentation. Only used with `cellpose_model="cpsam"`. Default is None.
-    - Note: For Cellpose 3.x models (cyto3, cyto2), nuclei and cell diameters will be estimated automatically. For CPSAM (Cellpose 4.x), diameters can be left as None and will be estimated from initial segmentation results.
+    - Note: For Cellpose 3.x models (cyto3, cyto2), nuclei and cell diameters will be estimated automatically. For cpsam, diameters can be left as None and will be estimated from initial segmentation results.
 
     #### StarDist Parameters (if using "stardist")
     - `STARDIST_MODEL`: StarDist model type. Default is "2D_versatile_fluo".
@@ -883,14 +883,9 @@ def params_segmentation():
 
 @app.cell
 def _(CELLPOSE_MODEL, CYTO_INDEX, DAPI_INDEX, SEGMENTATION_METHOD, corrected_image):
-    # Cellpose 4.x, cpsam and custom model paths have no size model: derive diameters from the masks
-    from lib.shared.segment_cellpose import CELLPOSE_4X as _CELLPOSE_4X
-
+    # cpsam and custom model paths have no size model: derive diameters from the masks
     diameters_from_masks = SEGMENTATION_METHOD == "cellpose" and (
-        _CELLPOSE_4X
-        or CELLPOSE_MODEL == "cpsam"
-        or "/" in CELLPOSE_MODEL
-        or "\\" in CELLPOSE_MODEL
+        CELLPOSE_MODEL == "cpsam" or "/" in CELLPOSE_MODEL or "\\" in CELLPOSE_MODEL
     )
 
     # Estimate diameters (derivation; cellpose with a size model only)

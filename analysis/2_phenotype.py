@@ -399,12 +399,12 @@ def _(mo):
     - `SEGMENTATION_METHOD`: Choose from "cellpose" or "stardist" for cell segmentation.
 
     #### Cellpose Parameters (if using "cellpose")
-    - `CELLPOSE_MODEL`: CellPose model to use. Options: "cyto3" (default), "cyto2", "cyto", "nuclei", or "cpsam" (requires Cellpose 4.x).
+    - `CELLPOSE_MODEL`: CellPose model to use. Options: "cyto3" (default), "cyto2", "cyto", "nuclei", or "cpsam" (Cellpose 4; brieflow installs Cellpose 3 and 4 and picks the version from the model).
       - Note: When `SEGMENT_CELLS=False`, you can still use "cyto3" instead of "nuclei" if the nuclei model produces poor results.
     - `CELL_FLOW_THRESHOLD` & `NUCLEI_FLOW_THRESHOLD`: Flow threshold for Cellpose segmentation. Default is 0.4.
     - `CELL_CELLPROB_THRESHOLD` & `NUCLEI_CELLPROB_THRESHOLD`: Cell probability threshold for Cellpose. Default is 0.
     - `HELPER_INDEX`: (Optional) Index of additional channel to help with CPSAM segmentation. Only used with `cellpose_model="cpsam"`. Default is None.
-    - Note: For Cellpose 3.x models (cyto3, cyto2), nuclei and cell diameters will be estimated automatically. For CPSAM (Cellpose 4.x), diameters can be left as None and will be estimated from initial segmentation results.
+    - Note: For Cellpose 3.x models (cyto3, cyto2), nuclei and cell diameters will be estimated automatically. For cpsam, diameters can be left as None and will be estimated from initial segmentation results.
 
     #### StarDist Parameters (if using "stardist")
     - `STARDIST_MODEL`: StarDist model type. Default is "2D_versatile_fluo".
@@ -463,9 +463,8 @@ def _(CELLPOSE_MODEL, CYTO_CHANNEL, SEGMENTATION_METHOD, aligned_image, channel_
     DAPI_INDEX = channel_names.index("DAPI")
     CYTO_INDEX = channel_names.index(CYTO_CHANNEL)
 
-    # Cellpose 4.x, cpsam and custom model paths have no size model: derive diameters from the masks
-    from lib.shared.segment_cellpose import CELLPOSE_4X as _CELLPOSE_4X
-    diameters_from_masks = SEGMENTATION_METHOD == "cellpose" and (_CELLPOSE_4X or CELLPOSE_MODEL == "cpsam" or "/" in CELLPOSE_MODEL or "\\" in CELLPOSE_MODEL)
+    # cpsam and custom model paths have no size model: derive diameters from the masks
+    diameters_from_masks = SEGMENTATION_METHOD == "cellpose" and (CELLPOSE_MODEL == "cpsam" or "/" in CELLPOSE_MODEL or "\\" in CELLPOSE_MODEL)
 
     # Estimate diameters (derivation; cellpose with a size model only)
     if SEGMENTATION_METHOD == "cellpose" and not diameters_from_masks:
@@ -856,11 +855,10 @@ def _(
         and SECOND_OBJ_DIAMETER is None
     ):
         from lib.phenotype.segment_secondary_object import estimate_second_obj_diameter
-        from lib.shared.segment_cellpose import CELLPOSE_4X
 
-        # Cellpose 4.x, cpsam and custom model paths have no automatic diameter estimate
+        # cpsam and custom model paths have no automatic diameter estimate
         _no_size_model = SECOND_OBJ_CELLPOSE_MODEL == "cpsam" or "/" in SECOND_OBJ_CELLPOSE_MODEL or "\\" in SECOND_OBJ_CELLPOSE_MODEL
-        _estimation_method = "manual" if CELLPOSE_4X or _no_size_model else "cellpose"
+        _estimation_method = "manual" if _no_size_model else "cellpose"
         print(f"Estimating secondary object diameter in {SECOND_OBJ_CHANNEL}...")
         SECOND_OBJ_DIAMETER = estimate_second_obj_diameter(
             aligned_image,
