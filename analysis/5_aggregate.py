@@ -475,7 +475,7 @@ def _(mo):
 
     - `CHANNEL_COMBOS`: Combinations of channels to aggregate by. This is a list of lists with channel names, ex `[["DAPI", "GFP", "WGA"], ["DAPI", "GFP"]]`.
     - `AGGREGATE_COMBO_FP`: Location of aggregate combinations dataframe.
-    - `SPLIT_BY_COMPARTMENT`: Split aggregate and cluster outputs by compartment (`cell`, `nucleus`, `cytoplasm`, `second_obj`). When `False` (default) outputs keep the standard paths and use every compartment.
+    - `SPLIT_BY_COMPARTMENT`: Split aggregate and cluster outputs by compartment (`cell`, `nucleus`, `cytoplasm`, `second_obj`, or each name in `SECOND_OBJS` from `2_phenotype.py`). When `False` (default) outputs keep the standard paths and use every compartment.
     - `COMPARTMENT_COMBOS`: Compartment combinations to aggregate by when splitting, as a list of lists, ex `[["cell", "nucleus", "cytoplasm"], ["nucleus"]]`. Every channel combo is paired with every compartment combo.
     - `TEST_CELL_CLASS`: Cell class to configure aggregate params with. Can be any of the cell classes or `all`.
     - `TEST_CHANNEL_COMBO`: Channel combo to configure aggregate params with; must be one of the channel combos. Ex `["DAPI", "GFP"]`.

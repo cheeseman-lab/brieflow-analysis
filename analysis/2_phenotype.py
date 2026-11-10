@@ -760,6 +760,11 @@ def _(mo):
     - `SUPPRESS_LOCAL_MAXIMA`: Minimum spacing between seeds in pixels (decrease if objects merge, increase if they over-split).
     - `MAXIMA_REDUCTION_FACTOR`: H-minima suppression of weak seeds (0-1), `None` to disable.
     - `USE_SHAPE_REFINEMENT` / `PROPORTION_THRESHOLD`: Reject watershed splits whose boundary is long relative to the perimeter.
+
+    **Several named objects** (`SECOND_OBJS`)
+    - `SECOND_OBJS`: `{name: {"channel": ..., <config key>: value}}`, one entry per object; each entry takes its channel and overrides any lowercase config key above (e.g. `"threshold_method"`, `"second_obj_max_size"`). Leave `{}` for a single object from the settings above.
+    - Names are lowercase snake_case (e.g. `"granule"`); every column of an object starts with `<name>_`, and each name is its own compartment for `SPLIT_BY_COMPARTMENT` in `5_aggregate.py`.
+    - Parents are cells, or nuclei when `SEGMENT_CELLS = False`. The preview below shows one tab per object.
     """)
     return
 
@@ -802,6 +807,9 @@ def params_secondary_objects():
     USE_SHAPE_REFINEMENT = False
     PROPORTION_THRESHOLD = 0.4
     RETURN_INTERMEDIATE_OUTPUTS = False  # show the threshold mask in the preview below
+
+    # Named secondary objects; each overrides the settings above (empty = one object from the settings above)
+    SECOND_OBJS = {}  # e.g., {"granule": {"channel": "G3BP1", "threshold_method": "otsu_three_peak_mid_bg"}}
     return (
         DECLUMP_METHOD,
         DECLUMP_MODE,
@@ -813,6 +821,7 @@ def params_secondary_objects():
         OVERLAP_THRESHOLD,
         PROPORTION_THRESHOLD,
         RETURN_INTERMEDIATE_OUTPUTS,
+        SECOND_OBJS,
         SECOND_OBJ_CELLPOSE_MODEL,
         SECOND_OBJ_CELLPROB_THRESHOLD,
         SECOND_OBJ_CHANNEL,
@@ -846,7 +855,9 @@ def _(
     channel_names,
 ):
     SECOND_OBJ_CHANNEL_INDEX = (
-        channel_names.index(SECOND_OBJ_CHANNEL) if SECOND_OBJ_DETECTION else None
+        channel_names.index(SECOND_OBJ_CHANNEL)
+        if SECOND_OBJ_DETECTION and SECOND_OBJ_CHANNEL is not None
+        else None
     )
     SECOND_OBJ_DIAMETER = SECOND_OBJ_DIAMETER_INPUT
     if (
@@ -876,6 +887,53 @@ def _(
     DECLUMP_METHOD,
     DECLUMP_MODE,
     FILL_HOLES,
+    MAXIMA_REDUCTION_FACTOR,
+    MAX_OBJECTS_PER_CELL,
+    MAX_TOTAL_OBJECTS,
+    OPENING_DISK_RADIUS,
+    OVERLAP_THRESHOLD,
+    PROPORTION_THRESHOLD,
+    SECOND_OBJS,
+    SECOND_OBJ_CELLPOSE_MODEL,
+    SECOND_OBJ_CELLPROB_THRESHOLD,
+    SECOND_OBJ_CHANNEL_INDEX,
+    SECOND_OBJ_DETECTION,
+    SECOND_OBJ_DIAMETER,
+    SECOND_OBJ_FLOW_THRESHOLD,
+    SECOND_OBJ_MAX_SIZE,
+    SECOND_OBJ_METHOD,
+    SECOND_OBJ_MIN_SIZE,
+    SECOND_OBJ_NMS_THRESHOLD,
+    SECOND_OBJ_PROB_THRESHOLD,
+    SECOND_OBJ_STARDIST_MODEL,
+    SIZE_FILTER_METHOD,
+    SUPPRESS_LOCAL_MAXIMA,
+    THRESHOLD_METHOD,
+    THRESHOLD_SMOOTHING_SCALE,
+    USE_MORPHOLOGICAL_OPENING,
+    USE_SHAPE_REFINEMENT,
+    channel_names,
+):
+    # Secondary-object config keys; SECOND_OBJS entries override them per named object
+    second_obj_config = {'second_obj_detection': False}
+    if SECOND_OBJ_DETECTION:
+        second_obj_config = {'second_obj_detection': SECOND_OBJ_DETECTION, 'second_obj_channel_index': SECOND_OBJ_CHANNEL_INDEX, 'second_obj_method': SECOND_OBJ_METHOD, 'use_ml_segmentation': SECOND_OBJ_METHOD in ['cellpose', 'stardist'], 'second_obj_min_size': SECOND_OBJ_MIN_SIZE, 'second_obj_max_size': SECOND_OBJ_MAX_SIZE, 'size_filter_method': SIZE_FILTER_METHOD, 'max_objects_per_cell': MAX_OBJECTS_PER_CELL, 'overlap_threshold': OVERLAP_THRESHOLD, 'max_total_objects': MAX_TOTAL_OBJECTS}
+        if SECOND_OBJ_METHOD == 'cellpose':
+            second_obj_config.update({'second_obj_cellpose_model': SECOND_OBJ_CELLPOSE_MODEL, 'second_obj_diameter': SECOND_OBJ_DIAMETER, 'second_obj_flow_threshold': SECOND_OBJ_FLOW_THRESHOLD, 'second_obj_cellprob_threshold': SECOND_OBJ_CELLPROB_THRESHOLD})
+        elif SECOND_OBJ_METHOD == 'stardist':
+            second_obj_config.update({'second_obj_stardist_model': SECOND_OBJ_STARDIST_MODEL, 'second_obj_prob_threshold': SECOND_OBJ_PROB_THRESHOLD, 'second_obj_nms_threshold': SECOND_OBJ_NMS_THRESHOLD})
+        elif SECOND_OBJ_METHOD == 'threshold':
+            second_obj_config.update({'threshold_smoothing_scale': THRESHOLD_SMOOTHING_SCALE, 'threshold_method': THRESHOLD_METHOD, 'use_morphological_opening': USE_MORPHOLOGICAL_OPENING, 'opening_disk_radius': OPENING_DISK_RADIUS, 'fill_holes': FILL_HOLES, 'declump_method': DECLUMP_METHOD, 'declump_mode': DECLUMP_MODE, 'suppress_local_maxima': SUPPRESS_LOCAL_MAXIMA, 'maxima_reduction_factor': MAXIMA_REDUCTION_FACTOR, 'use_shape_refinement': USE_SHAPE_REFINEMENT, 'proportion_threshold': PROPORTION_THRESHOLD})
+        if SECOND_OBJS:
+            second_obj_config['second_objs'] = {_name: {'second_obj_channel_index': channel_names.index(_spec['channel']), **{_k: _v for _k, _v in _spec.items() if _k != 'channel'}} for _name, _spec in SECOND_OBJS.items()}
+    return (second_obj_config,)
+
+
+@app.cell
+def _(
+    DECLUMP_METHOD,
+    DECLUMP_MODE,
+    FILL_HOLES,
     GPU,
     MAXIMA_REDUCTION_FACTOR,
     MAX_OBJECTS_PER_CELL,
@@ -884,6 +942,7 @@ def _(
     OVERLAP_THRESHOLD,
     PROPORTION_THRESHOLD,
     RETURN_INTERMEDIATE_OUTPUTS,
+    SECOND_OBJS,
     SECOND_OBJ_CELLPOSE_MODEL,
     SECOND_OBJ_CELLPROB_THRESHOLD,
     SECOND_OBJ_CHANNEL,
@@ -914,7 +973,7 @@ def _(
     # Segment secondary objects on the test image
     second_obj_masks = None
     cell_second_obj_table = None
-    if SECOND_OBJ_DETECTION:
+    if SECOND_OBJ_DETECTION and not SECOND_OBJS:
         from skimage import measure
         from lib.phenotype.segment_secondary_object import (
             segment_second_objs,
@@ -1009,14 +1068,62 @@ def _(
             channel_cmaps=channel_cmaps,
         )
         plt.show()
-    else:
+    elif not SECOND_OBJ_DETECTION:
         print("SECOND_OBJ_DETECTION is False, skipping secondary object segmentation")
     return cell_second_obj_table, second_obj_masks
 
 
 @app.cell
 def _(
+    GPU,
+    SECOND_OBJS,
+    SECOND_OBJ_DETECTION,
+    aligned_image,
+    cells,
+    channel_names,
+    cytoplasms,
+    mo,
+    nuclei,
+    second_obj_config,
+):
+    # Preview each named secondary object in its own tab; parents are cells, or nuclei when cells are not segmented
+    _panels = {}
+    if SECOND_OBJ_DETECTION and SECOND_OBJS:
+        from skimage.measure import regionprops as _regionprops
+        from lib.shared.rule_utils import get_second_obj_params as _get_params
+        from lib.phenotype.segment_secondary_object import (
+            segment_second_objs_from_config as _segment,
+            create_second_obj_standard_visualization as _visualize,
+        )
+
+        _nuclei_centroids = {
+            _region.label: _region.centroid for _region in _regionprops(nuclei)
+        }
+        for _name, _params in _get_params(second_obj_config).items():
+            _masks, _table, _ = _segment(
+                image=aligned_image,
+                cell_masks=cells if cells is not None else nuclei,
+                cytoplasm_masks=cytoplasms,
+                second_obj_params={**_params, "gpu": GPU},
+                nuclei_centroids=_nuclei_centroids,
+            )
+            _summary = _table["cell_summary"]
+            _channel_index = _params["second_obj_channel_index"]
+            _panel = _visualize(
+                aligned_image, _channel_index, channel_names[_channel_index], _masks
+            )
+            _panels[_name] = mo.vstack([
+                mo.md(f"`{_name}` in {_summary['has_second_obj'].sum()} of {len(_summary)} parents"),
+                _panel.fig,
+            ])
+    mo.ui.tabs(_panels) if _panels else None
+    return
+
+
+@app.cell
+def _(
     FOCI_CHANNEL_INDEX,
+    SECOND_OBJS,
     SECOND_OBJ_DETECTION,
     WILDCARDS,
     aligned_image,
@@ -1025,7 +1132,7 @@ def _(
     second_obj_masks,
 ):
     # Extract secondary object features on the test image
-    if SECOND_OBJ_DETECTION:
+    if SECOND_OBJ_DETECTION and not SECOND_OBJS:
         from lib.phenotype.extract_phenotype_second_objs import extract_phenotype_second_objs
 
         second_obj_phenotype = extract_phenotype_second_objs(
@@ -1080,55 +1187,29 @@ def _(
     CUSTOM_FEATURE_DEFINITIONS,
     CYTO_INDEX,
     DAPI_INDEX,
-    DECLUMP_METHOD,
-    DECLUMP_MODE,
-    FILL_HOLES,
     FOCI_CHANNEL_INDEX,
     GPU,
     HELPER_INDEX,
-    MAXIMA_REDUCTION_FACTOR,
-    MAX_OBJECTS_PER_CELL,
-    MAX_TOTAL_OBJECTS,
     NUCLEI_CELLPROB_THRESHOLD,
     NUCLEI_DIAMETER,
     NUCLEI_FLOW_THRESHOLD,
     NUCLEI_NMS_THRESHOLD,
     NUCLEI_PROB_THRESHOLD,
-    OPENING_DISK_RADIUS,
-    OVERLAP_THRESHOLD,
     PIPELINE_GPU,
-    PROPORTION_THRESHOLD,
     RECONCILE,
     REMOVE_CHANNEL,
     RIDER_INDEXES,
-    SECOND_OBJ_CELLPOSE_MODEL,
-    SECOND_OBJ_CELLPROB_THRESHOLD,
-    SECOND_OBJ_CHANNEL_INDEX,
-    SECOND_OBJ_DETECTION,
-    SECOND_OBJ_DIAMETER,
-    SECOND_OBJ_FLOW_THRESHOLD,
-    SECOND_OBJ_MAX_SIZE,
-    SECOND_OBJ_METHOD,
-    SECOND_OBJ_MIN_SIZE,
-    SECOND_OBJ_NMS_THRESHOLD,
-    SECOND_OBJ_PROB_THRESHOLD,
-    SECOND_OBJ_STARDIST_MODEL,
     SEGMENTATION_METHOD,
     SEGMENT_CELLS,
-    SIZE_FILTER_METHOD,
     SOURCE_INDEX,
     STARDIST_MODEL,
-    SUPPRESS_LOCAL_MAXIMA,
     TARGET_INDEX,
-    THRESHOLD_METHOD,
-    THRESHOLD_SMOOTHING_SCALE,
     UPSAMPLE_FACTOR,
-    USE_MORPHOLOGICAL_OPENING,
-    USE_SHAPE_REFINEMENT,
     WINDOW,
     channel_names,
     config,
     convert_tuples_to_lists,
+    second_obj_config,
     yaml,
 ):
     config['phenotype'] = {'foci_channel_index': FOCI_CHANNEL_INDEX, 'channel_names': channel_names, 'align': ALIGN, 'dapi_index': DAPI_INDEX, 'cyto_index': CYTO_INDEX, 'segmentation_method': SEGMENTATION_METHOD, 'reconcile': RECONCILE, 'gpu': GPU if PIPELINE_GPU is None else PIPELINE_GPU, 'segment_cells': SEGMENT_CELLS, 'cp_method': CP_METHOD}
@@ -1145,16 +1226,7 @@ def _(
         config['phenotype']['remove_channel'] = REMOVE_CHANNEL
         config['phenotype']['upsample_factor'] = UPSAMPLE_FACTOR
         config['phenotype']['window'] = WINDOW
-    if SECOND_OBJ_DETECTION:
-        config['phenotype'].update({'second_obj_detection': SECOND_OBJ_DETECTION, 'second_obj_channel_index': SECOND_OBJ_CHANNEL_INDEX, 'second_obj_method': SECOND_OBJ_METHOD, 'use_ml_segmentation': SECOND_OBJ_METHOD in ['cellpose', 'stardist'], 'second_obj_min_size': SECOND_OBJ_MIN_SIZE, 'second_obj_max_size': SECOND_OBJ_MAX_SIZE, 'size_filter_method': SIZE_FILTER_METHOD, 'max_objects_per_cell': MAX_OBJECTS_PER_CELL, 'overlap_threshold': OVERLAP_THRESHOLD, 'max_total_objects': MAX_TOTAL_OBJECTS})
-        if SECOND_OBJ_METHOD == 'cellpose':
-            config['phenotype'].update({'second_obj_cellpose_model': SECOND_OBJ_CELLPOSE_MODEL, 'second_obj_diameter': SECOND_OBJ_DIAMETER, 'second_obj_flow_threshold': SECOND_OBJ_FLOW_THRESHOLD, 'second_obj_cellprob_threshold': SECOND_OBJ_CELLPROB_THRESHOLD})
-        elif SECOND_OBJ_METHOD == 'stardist':
-            config['phenotype'].update({'second_obj_stardist_model': SECOND_OBJ_STARDIST_MODEL, 'second_obj_prob_threshold': SECOND_OBJ_PROB_THRESHOLD, 'second_obj_nms_threshold': SECOND_OBJ_NMS_THRESHOLD})
-        elif SECOND_OBJ_METHOD == 'threshold':
-            config['phenotype'].update({'threshold_smoothing_scale': THRESHOLD_SMOOTHING_SCALE, 'threshold_method': THRESHOLD_METHOD, 'use_morphological_opening': USE_MORPHOLOGICAL_OPENING, 'opening_disk_radius': OPENING_DISK_RADIUS, 'fill_holes': FILL_HOLES, 'declump_method': DECLUMP_METHOD, 'declump_mode': DECLUMP_MODE, 'suppress_local_maxima': SUPPRESS_LOCAL_MAXIMA, 'maxima_reduction_factor': MAXIMA_REDUCTION_FACTOR, 'use_shape_refinement': USE_SHAPE_REFINEMENT, 'proportion_threshold': PROPORTION_THRESHOLD})
-    else:
-        config['phenotype']['second_obj_detection'] = False
+    config['phenotype'].update(second_obj_config)
     if CUSTOM_CHANNEL_OFFSETS:
         config['phenotype']['custom_channel_offsets'] = CUSTOM_CHANNEL_OFFSETS_INDEXED
     if CUSTOM_FEATURE_DEFINITIONS:
