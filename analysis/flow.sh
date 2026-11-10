@@ -271,6 +271,20 @@ check_unlock() {
 # ---------------------------------------------------------------------------
 # Snakemake invocation builder
 # ---------------------------------------------------------------------------
+profile_set_resources() {
+    # rule:resource=value entries of a Slurm profile's set-resources, for the command line
+    python - "$1/config.yaml" <<'PY'
+import sys
+import yaml
+
+with open(sys.argv[1]) as fh:
+    profile = yaml.safe_load(fh) or {}
+for rule, resources in (profile.get("set-resources") or {}).items():
+    for key, value in (resources or {}).items():
+        print(f"{rule}:{key}={value}", end=" ")
+PY
+}
+
 build_snakemake_cmd() {
     local target="$1"
     local plate_filter="${2:-}"
@@ -322,8 +336,13 @@ build_snakemake_cmd() {
     # Re-run jobs left incomplete by a killed job instead of refusing to build the DAG
     cmd+=" --rerun-incomplete"
     # Resolved --set-resources go before --until so snakemake parses them as set-resources entries
+    # --set-resources on the command line replaces the profile's set-resources, so on Slurm repeat them first
     if [ -n "$RESOLVED_SET_RESOURCES" ]; then
-        cmd+=" --set-resources ${RESOLVED_SET_RESOURCES}"
+        local profile_set_resources=""
+        if [[ "$BACKEND" == "slurm" ]]; then
+            profile_set_resources=$(profile_set_resources "${SLURM_PROFILE}")
+        fi
+        cmd+=" --set-resources ${profile_set_resources} ${RESOLVED_SET_RESOURCES}"
     fi
     # mtime triggers miss an edited rule script, so --forcerun reruns the listed rules
     if [[ -n "$FORCERUN" ]]; then
