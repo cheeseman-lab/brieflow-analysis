@@ -991,7 +991,7 @@ def _(
         _common = dict(
             image=aligned_image,
             second_obj_channel_index=SECOND_OBJ_CHANNEL_INDEX,
-            cell_masks=cells,
+            cell_masks=cells if cells is not None else nuclei,
             cytoplasm_masks=cytoplasms,
             second_obj_min_size=SECOND_OBJ_MIN_SIZE,
             second_obj_max_size=SECOND_OBJ_MAX_SIZE,
@@ -1062,7 +1062,7 @@ def _(
         create_second_obj_boundary_visualization(
             aligned_image,
             SECOND_OBJ_CHANNEL_INDEX,
-            cell_masks=cells,
+            cell_masks=cells if cells is not None else nuclei,
             second_obj_masks=second_obj_masks,
             channel_names=channel_names,
             channel_cmaps=channel_cmaps,
