@@ -767,7 +767,7 @@ def _(mo):
     - Parents are cells, or nuclei when `SEGMENT_CELLS = False`. The preview below shows one tab per object.
     - `"second_obj_mode": "count"` counts spots per cell (`"foci_radius"`, `"foci_threshold"`) instead of measuring each one, for puncta and centrosomes.
     - `"threshold_method": "cell_median_mad"` with `"threshold_k"` (default 5) cuts at the in-cell median plus k robust standard deviations, which holds up when a perturbation removes the objects.
-    - `"from": {"overlap": [a, b]}` or `{"parent_minus": [a, b]}` builds an object from objects listed before it (no `"channel"`), e.g. nucleoplasm minus foci as a baseline.
+    - `"from"` builds an object from objects listed before it (no `"channel"`): `{"overlap": [a, b]}` where they overlap, `{"touching": [a, b]}` the whole `a` objects that overlap or border a `b`, or `{"parent_minus": [a, b]}` each parent without them, e.g. nucleoplasm minus foci as a baseline.
     """)
     return
 
@@ -1107,7 +1107,7 @@ def _(
         }
         _all_masks = {}
         for _name, _params in _get_params(second_obj_config).items():
-            # derived objects (from: overlap / parent_minus) are built from earlier objects
+            # derived objects (from: overlap / touching / parent_minus) are built from earlier objects
             _masks, _table, _ = _segment(
                 image=aligned_image,
                 cell_masks=cells if cells is not None else nuclei,
