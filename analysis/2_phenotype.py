@@ -765,6 +765,9 @@ def _(mo):
     - `SECOND_OBJS`: `{name: {"channel": ..., <config key>: value}}`, one entry per object; each entry takes its channel and overrides any lowercase config key above (e.g. `"threshold_method"`, `"second_obj_max_size"`). Leave `{}` for a single object from the settings above.
     - Names are lowercase snake_case (e.g. `"granule"`); every column of an object starts with `<name>_`, and each name is its own compartment for `SPLIT_BY_COMPARTMENT` in `5_aggregate.py`.
     - Parents are cells, or nuclei when `SEGMENT_CELLS = False`. The preview below shows one tab per object.
+    - `"second_obj_mode": "count"` counts spots per cell (`"foci_radius"`, `"foci_threshold"`) instead of measuring each one, for puncta and centrosomes.
+    - `"threshold_method": "cell_median_mad"` with `"threshold_k"` (default 5) cuts at the in-cell median plus k robust standard deviations, which holds up when a perturbation removes the objects.
+    - `"from": {"overlap": [a, b]}` or `{"parent_minus": [a, b]}` builds an object from objects listed before it (no `"channel"`), e.g. nucleoplasm minus foci as a baseline.
     """)
     return
 
@@ -925,7 +928,7 @@ def _(
         elif SECOND_OBJ_METHOD == 'threshold':
             second_obj_config.update({'threshold_smoothing_scale': THRESHOLD_SMOOTHING_SCALE, 'threshold_method': THRESHOLD_METHOD, 'use_morphological_opening': USE_MORPHOLOGICAL_OPENING, 'opening_disk_radius': OPENING_DISK_RADIUS, 'fill_holes': FILL_HOLES, 'declump_method': DECLUMP_METHOD, 'declump_mode': DECLUMP_MODE, 'suppress_local_maxima': SUPPRESS_LOCAL_MAXIMA, 'maxima_reduction_factor': MAXIMA_REDUCTION_FACTOR, 'use_shape_refinement': USE_SHAPE_REFINEMENT, 'proportion_threshold': PROPORTION_THRESHOLD})
         if SECOND_OBJS:
-            second_obj_config['second_objs'] = {_name: {'second_obj_channel_index': channel_names.index(_spec['channel']), **{_k: _v for _k, _v in _spec.items() if _k != 'channel'}} for _name, _spec in SECOND_OBJS.items()}
+            second_obj_config['second_objs'] = {_name: {**({'second_obj_channel_index': channel_names.index(_spec['channel'])} if 'channel' in _spec else {}), **{_k: _v for _k, _v in _spec.items() if _k != 'channel'}} for _name, _spec in SECOND_OBJS.items()}
     return (second_obj_config,)
 
 
@@ -1090,7 +1093,10 @@ def _(
     _panels = {}
     if SECOND_OBJ_DETECTION and SECOND_OBJS:
         from skimage.measure import regionprops as _regionprops
-        from lib.shared.rule_utils import get_second_obj_params as _get_params
+        from lib.shared.rule_utils import (
+            derived_second_obj_sources as _sources,
+            get_second_obj_params as _get_params,
+        )
         from lib.phenotype.segment_secondary_object import (
             segment_second_objs_from_config as _segment,
             create_second_obj_standard_visualization as _visualize,
@@ -1099,21 +1105,30 @@ def _(
         _nuclei_centroids = {
             _region.label: _region.centroid for _region in _regionprops(nuclei)
         }
+        _all_masks = {}
         for _name, _params in _get_params(second_obj_config).items():
+            # derived objects (from: overlap / parent_minus) are built from earlier objects
             _masks, _table, _ = _segment(
                 image=aligned_image,
                 cell_masks=cells if cells is not None else nuclei,
                 cytoplasm_masks=cytoplasms,
                 second_obj_params={**_params, "gpu": GPU},
                 nuclei_centroids=_nuclei_centroids,
+                source_masks=[_all_masks[_s] for _s in _sources(_params)],
             )
+            _all_masks[_name] = _masks
             _summary = _table["cell_summary"]
+            _found = (
+                (_summary["second_obj_count"] > 0).sum()
+                if "second_obj_count" in _summary
+                else _summary["has_second_obj"].sum()
+            )
             _channel_index = _params["second_obj_channel_index"]
             _panel = _visualize(
                 aligned_image, _channel_index, channel_names[_channel_index], _masks
             )
             _panels[_name] = mo.vstack([
-                mo.md(f"`{_name}` in {_summary['has_second_obj'].sum()} of {len(_summary)} parents"),
+                mo.md(f"`{_name}` in {_found} of {len(_summary)} parents"),
                 _panel.fig,
             ])
     mo.ui.tabs(_panels) if _panels else None
