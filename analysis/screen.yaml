@@ -119,6 +119,8 @@ phenotype:
   background_channel_cell: null                   # biological_name of the cell-boundary marker (e.g. "WGA"); required only when segment_cells: true
   foci_channel: null                              # biological_name of the foci/puncta marker (e.g. "gH2AX"); null = no foci pipeline. Drives FOCI_CHANNEL + routes the foci pipeline on/off.
   second_obj_channel: null                        # biological_name of the secondary object marker (e.g. a pathogen or organelle stain); descriptive only: the notebooks do not read it (the brieflow-auto plugin uses it to prefill SECOND_OBJ_CHANNEL / SECOND_OBJ_DETECTION); secondary objects are switched on by SECOND_OBJ_DETECTION + SECOND_OBJ_CHANNEL in 2_phenotype.py.
+  second_objs: null                               # named secondary objects, e.g. {granule: {channel: "G3BP1", threshold_method: otsu_three_peak_mid_bg}}; descriptive only: the notebooks do not read it (the brieflow-auto plugin uses it to prefill SECOND_OBJS in 2_phenotype.py); null = one object.
+  segmentation_overrides: null                    # path to a block of phenotype config.yml keys exported by goudacell (tuned segmentation settings, a fine-tuned model path); descriptive only: the notebooks do not read it (the brieflow-auto plugin applies it to the matching 2_phenotype.py variables); null = none.
 
 # =========================================================================
 # microscope
